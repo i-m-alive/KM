@@ -1,0 +1,21 @@
+# Python
+backend/venv/
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.egg-info/
+
+# Env files
+backend/.env
+frontend/.env
+
+# Local run outputs
+backend/outputs/*
+!backend/outputs/.gitkeep
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store

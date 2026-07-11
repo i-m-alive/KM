@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: naviknow
+      POSTGRES_PASSWORD: naviknow
+      POSTGRES_DB: naviknow
+    ports:
+      # Host port 5433 (not 5432) - avoids clashing with any Postgres already
+      # running natively on this machine. The container still listens on 5432 internally.
+      - "5433:5432"
+    volumes:
+      - naviknow_pgdata:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U naviknow -d naviknow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  naviknow_pgdata:
