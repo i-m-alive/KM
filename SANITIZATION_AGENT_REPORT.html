@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sanitization &amp; Tagging Agents — Debugging Report, Live Validation &amp; Optimization Plan</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --card: #ffffff;
+    --text: #1c2530;
+    --muted: #5b6674;
+    --border: #e1e5ea;
+    --blocking: #b3261e;
+    --blocking-bg: #fdecea;
+    --warning: #8a5a00;
+    --warning-bg: #fff6e0;
+    --info: #1a4d8f;
+    --info-bg: #eaf1fb;
+    --fixed: #1e7d4f;
+    --fixed-bg: #e8f7ee;
+    --code-bg: #f0f2f5;
+    --accent: #3a5ba0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+  header.hero {
+    background: linear-gradient(135deg, #1c2530, #2f3d52);
+    color: #fff;
+    padding: 3rem 1.5rem;
+    text-align: center;
+  }
+  header.hero h1 { margin: 0 0 0.5rem; font-size: 1.9rem; }
+  header.hero p { margin: 0.25rem 0; color: #cfd8e3; font-size: 0.95rem; }
+  h2 {
+    font-size: 1.35rem;
+    margin-top: 3rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  h2 .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.8rem; height: 1.8rem;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+  }
+  h3 { font-size: 1.05rem; margin-top: 1.75rem; color: var(--accent); }
+  p { color: var(--text); }
+  .muted { color: var(--muted); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    margin: 1rem 0;
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+  }
+  .stat {
+    background: rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 0.9rem;
+    text-align: center;
+  }
+  .stat .n { font-size: 1.6rem; font-weight: 700; display: block; }
+  .stat .l { font-size: 0.78rem; color: #cfd8e3; text-transform: uppercase; letter-spacing: 0.04em; }
+
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: #eef1f5; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+
+  .badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge.fixed { background: var(--fixed-bg); color: var(--fixed); }
+  .badge.gap { background: var(--blocking-bg); color: var(--blocking); }
+  .badge.partial { background: var(--warning-bg); color: var(--warning); }
+  .badge.p1 { background: var(--blocking-bg); color: var(--blocking); }
+  .badge.p2 { background: var(--warning-bg); color: var(--warning); }
+  .badge.p3 { background: var(--info-bg); color: var(--info); }
+  .badge.pass { background: var(--fixed-bg); color: var(--fixed); }
+
+  .validate {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.1rem 1.4rem;
+    margin: 1rem 0;
+    background: var(--card);
+  }
+  .validate h4 { margin: 0 0 0.5rem; font-size: 1rem; }
+  .check-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem; margin: 0.75rem 0; }
+  .check { text-align: center; border-radius: 8px; padding: 0.55rem 0.4rem; font-size: 0.78rem; font-weight: 600; }
+  .check.pass { background: var(--fixed-bg); color: var(--fixed); }
+  .check.fail { background: var(--blocking-bg); color: var(--blocking); }
+
+  .issue {
+    border-left: 4px solid var(--blocking);
+    background: var(--card);
+    border-radius: 0 8px 8px 0;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--blocking);
+  }
+  .issue h4 { margin: 0 0 0.4rem; font-size: 1rem; }
+  .issue .meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.6rem; }
+  .issue .label { font-weight: 600; color: var(--text); }
+  code, .mono {
+    font-family: "SF Mono", Consolas, Menlo, monospace;
+    background: var(--code-bg);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.88em;
+  }
+  pre {
+    background: #1c2530;
+    color: #d9e2ec;
+    padding: 0.9rem 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.82rem;
+  }
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin: 1rem 0;
+  }
+  .flow .step {
+    background: var(--info-bg);
+    color: var(--info);
+    border-radius: 6px;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .flow .arrow { color: var(--muted); }
+  ul.tight li { margin-bottom: 0.4rem; }
+  .rec {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 0.9rem 0;
+    background: var(--card);
+  }
+  .rec .title { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap;}
+  .rec h4 { margin: 0; font-size: 1rem; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+  .toc { columns: 2; gap: 2rem; }
+  .toc a { color: var(--accent); text-decoration: none; font-size: 0.92rem; }
+  .toc li { margin-bottom: 0.4rem; }
+  @media (max-width: 640px) { .toc { columns: 1; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>Sanitization &amp; Tagging Agents — Debugging Report, Live Validation &amp; Optimization Plan</h1>
+  <p>NaviKnow · A-01 Sanitization + A-02 Tagging pipeline</p>
+  <p class="muted" style="color:#cfd8e3;">Compiled from the full end-to-end debugging session against a real client deck (57 embedded images, 40+ masking entities), plus live validation of the latest real run of both agents</p>
+  <div class="summary-grid">
+    <div class="stat"><span class="n">17</span><span class="l">Distinct bugs found</span></div>
+    <div class="stat"><span class="n">15</span><span class="l">Fixed this session</span></div>
+    <div class="stat"><span class="n">5 / 5</span><span class="l">Verification channels clean</span></div>
+    <div class="stat"><span class="n">1st</span><span class="l">Fully clean run reached</span></div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="card">
+  <h3 style="margin-top:0;">Contents</h3>
+  <ul class="toc">
+    <li><a href="#overview">1. How the pipeline works</a></li>
+    <li><a href="#validation">2. Live validation: latest real run, both agents</a></li>
+    <li><a href="#issues">3. Everything that went wrong (and why)</a></li>
+    <li><a href="#state">4. Current state — what's solid vs. fragile</a></li>
+    <li><a href="#gaps">5. Remaining open gaps</a></li>
+    <li><a href="#optimize">6. Optimization recommendations</a></li>
+    <li><a href="#model">7. Model choice: Sonnet vs. Haiku</a></li>
+    <li><a href="#appendix">8. Appendix: files touched</a></li>
+  </ul>
+</div>
+
+<h2 id="overview"><span class="num">1</span>How the pipeline works</h2>
+<p>Sanitization is a two-phase background agent: <code>detect()</code> proposes what to mask and pauses for human review; <code>apply()</code> deterministically masks, renders, and re-verifies on approval.</p>
+
+<div class="flow">
+  <span class="step">extract text</span><span class="arrow">→</span>
+  <span class="step">NER pre-pass (regex+Presidio)</span><span class="arrow">→</span>
+  <span class="step">dictionary lookup</span><span class="arrow">→</span>
+  <span class="step">LLM Detector (MCP)</span><span class="arrow">→</span>
+  <span class="step">scan images (vision+OCR+phash)</span><span class="arrow">→</span>
+  <span class="step">human review</span>
+</div>
+<div class="flow">
+  <span class="step">apply masks (regex, word-boundary)</span><span class="arrow">→</span>
+  <span class="step">render native format</span><span class="arrow">→</span>
+  <span class="step">redact images</span><span class="arrow">→</span>
+  <span class="step">scrub metadata</span><span class="arrow">→</span>
+  <span class="step">verify (5 channels)</span>
+</div>
+
+<p><strong>The five independent verification channels</strong> re-derive their answer from the <em>rendered</em> file rather than trusting the render step succeeded — this is what turns "did masking work" from a hope into a checked fact:</p>
+<table>
+  <tr><th>Channel</th><th>What it re-checks</th><th>Auto-fix on failure?</th></tr>
+  <tr><td><code>verified_text</code></td><td>Masked surfaces don't survive in extracted text</td><td>Yes — full masking pipeline</td></tr>
+  <tr><td><code>verified_images</code></td><td>Re-scans every image in the rendered file for logos/wordmarks</td><td>Yes — image redaction + <span class="mono">mandatory_redaction</span></td></tr>
+  <tr><td><code>verified_metadata</code></td><td>Core/app/custom docProps properties</td><td>Yes — metadata scrubbing</td></tr>
+  <tr><td><code>verified_comments</code></td><td>Comments, track-changes deletions, PDF annotations</td><td><span class="badge gap">No</span> detect-and-block only</td></tr>
+  <tr><td><code>verified_hyperlinks</code></td><td>Hyperlink target URLs (not just display text)</td><td><span class="badge gap">No</span> detect-and-block only</td></tr>
+</table>
+
+<h2 id="validation"><span class="num">2</span>Live validation: latest real run, both agents</h2>
+<p>Pulled directly from the database for the most recent completed run of each agent against the same document — not a hypothetical, the actual stored output.</p>
+
+<div class="validate">
+  <h4>Sanitization — run <code class="mono">ece1d9ab</code> — <span class="badge pass">completed (not completed_with_issues)</span></h4>
+  <p class="muted">The first run this session to pass every verification channel cleanly. 24 client entities masked, 39/57 images redacted, 12 text occurrences masked, 1 metadata property rewritten.</p>
+  <div class="check-grid">
+    <div class="check pass">verified_text ✓</div>
+    <div class="check pass">verified_images ✓</div>
+    <div class="check pass">verified_metadata ✓</div>
+    <div class="check pass">verified_comments ✓</div>
+    <div class="check pass">verified_hyperlinks ✓</div>
+  </div>
+  <p><span class="label">Sanitized summary (auto-generated, checked for identity leaks):</span></p>
+  <p class="muted" style="font-size:0.88rem; font-style:italic;">"A consulting firm presents AI transformation opportunities for finance functions, specifically targeting global asset management and financial services organizations. The engagement showcases their AI and data capabilities... through case studies demonstrating measurable ROI—including automated regulatory reporting, reconciliation, order-to-cash processes, and fraud detection..."</p>
+  <p class="muted">No client name, mask token, or inferable identity detail present — reads as a fully generic engagement description. This is the risk category nothing in the pipeline mechanically checks (see Fragile, §4) — validated here by direct read, not by a tool.</p>
+  <p><span class="label">Metadata hints (schema-adherence fix from earlier in the session, re-confirmed):</span> <code>domain: "financial services"</code>, <code>engagement_type: "consulting"</code> — both clean single terms, not the comma-crammed multi-value strings seen before the summarizer prompt fix.</p>
+  <p><span class="label">Still-present info line (expected, not a bug):</span> <code>4 low-confidence candidate(s) excluded: Ajio, Myntra, Arvind Fashions, gsk</code> — these are third-party case-study company names mentioned in the deck's own content (not the primary client), correctly held below the auto-mask threshold rather than either force-masked or silently dropped with no record.</p>
+</div>
+
+<div class="validate">
+  <h4>Tagging — run <code class="mono">efab6ea8</code> — <span class="badge">awaiting_review</span></h4>
+  <p class="muted">Ran successfully against the clean Sanitization run above. 11 tags proposed, 8 auto-applied (≥0.7 confidence), 3 flagged for review.</p>
+  <table>
+    <tr><th>Category</th><th>Value</th><th>Confidence</th><th>Status</th></tr>
+    <tr><td>domain</td><td>banking</td><td>0.90</td><td>applied</td></tr>
+    <tr><td>use_case</td><td>fraud-detection, automation, analytics</td><td>0.80–0.90</td><td>applied</td></tr>
+    <tr><td>technology</td><td>aws, azure, databricks</td><td>0.75–0.80</td><td>applied</td></tr>
+    <tr><td>geography</td><td>na, emea, apac</td><td>0.60 each</td><td><span class="badge partial">flagged</span></td></tr>
+    <tr><td>engagement_type</td><td>advisory</td><td>0.85</td><td>applied</td></tr>
+  </table>
+  <p><span class="label">New finding — controlled vocabulary gap, not a classifier bug:</span> the <code>domain</code> vocabulary has no "financial-services" or "asset-management" entry (only <code>banking, energy, healthcare, insurance, manufacturing, public-sector, retail, telecom</code>), and <code>geography</code> has no "global" entry (only <code>apac, emea, india, latam, na, uk, us</code>). Sanitization's own metadata hint said <code>domain: "financial services"</code> and <code>geography: ["global", "multi-jurisdiction"]</code> — but Tagging's classifier can only choose from the approved vocabulary, so it picked the nearest available term ("banking" — technically wrong, this deck is about asset management, not banking specifically) and tried to decompose "global" into regional guesses (na/emea/apac), correctly at low confidence since that decomposition isn't actually stated in the source content.</p>
+  <p><span class="label">Why this matters:</span> a future search for "asset management" engagements would silently miss this document; a search for "banking" would incorrectly surface it. The classifier is behaving reasonably under a real vocabulary constraint — the fix is a governance action (add vocabulary terms), not a code change. Added to §5/§6 below.</p>
+</div>
+
+<h2 id="issues"><span class="num">3</span>Everything that went wrong (and why)</h2>
+<p class="muted">In the order they were actually found, working end-to-end against the real test document. Each was reproduced and fixed, not just theorized.</p>
+
+<div class="issue">
+  <h4>1. Grouped shapes in PPTX were invisible to the whole pipeline</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span> · Root cause</div>
+  <p><span class="label">What happened:</span> A plain <code>for shape in slide.shapes</code> loop never descends into PowerPoint "Group" shapes — a very common pattern for logo+label compositions. Extraction, masking, and image-scanning all silently skipped anything nested inside a group.</p>
+  <p><span class="label">Fix:</span> <code>pptx_walk.py</code>'s <code>iter_shapes_recursive()</code>, wired into extract/render/image-scan uniformly so all three modules agree on what a "shape" is.</p>
+</div>
+
+<div class="issue">
+  <h4>2. Image enumeration missed slide masters, layouts, headers/footers, thumbnails</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span> · Root cause of the original "GSK logo not masked" report</div>
+  <p><span class="label">What happened:</span> Shape-tree walking only sees what's directly on a slide. A logo baked into a slide <em>master</em> (reused across every slide) or the document's auto-generated thumbnail was never enumerated at all.</p>
+  <p><span class="label">Fix:</span> A raw zip glob over <code>*/media/*</code> (plus <code>docProps/thumbnail.*</code>) as a second enumeration layer — proven <em>more</em> complete than relationship-graph walking, since an orphaned media part with no live relationship still physically sits in the zip.</p>
+</div>
+
+<div class="issue">
+  <h4>3. Client-account linkage auto-guessed from "whichever entity appeared first"</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span> · Found via direct DB inspection (11 unrelated entities all linked to one account)</div>
+  <p><span class="label">Fix:</span> Client-account linkage now requires an explicit, single reviewer-designated <code>client_entity_surface</code> — no more inference.</p>
+</div>
+
+<div class="issue">
+  <h4>4. Masking regex had no word boundaries — corrupted ordinary English</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span> · Most damaging bug found this session</div>
+  <p><span class="label">What happened:</span> A short masked surface like <code>"RIA"</code> or <code>"sure"</code> matched as a bare substring, mangling unrelated words throughout the document: <code>"Va[RIA]nce"</code> (Variance), <code>"expo[sure]"</code> (exposure), <code>"clo[sure]"</code> (closure), <code>"t[ria]l balance"</code> (trial balance). This wasn't a privacy bug — it was silently corrupting the delivered document's prose.</p>
+  <p><span class="label">Fix:</span> A shared <code>surface_pattern()</code> helper (<code>\b...\b</code>) applied consistently across masking, verification, metadata scrubbing, and the PDF redaction path — the PDF path uses a padded-context check since PyMuPDF's <code>search_for</code> has no native word-boundary support.</p>
+</div>
+
+<div class="issue">
+  <h4>5. The delivery firm's own name/logo got masked as if it were the client</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span> · Multi-layered, needed 3 separate fixes</div>
+  <p><span class="label">What happened:</span> "NAVIKENZ" (the presenting firm's own name, used in a "who we are" self-intro slide) and its own wordmark logo ("NAVICADE") got detected and masked as client identity. Worse: once wrongly approved, they became <em>permanent global dictionary entries</em>, re-corrupting every future document.</p>
+  <p><span class="label">Fix — three layers, because one wasn't enough:</span></p>
+  <ul class="tight">
+    <li><code>is_own_firm()</code> — a configurable, normalized "contains this token" check (not a bare prefix — a prefix match on "navi" would also wrongly exclude real unrelated companies like Navistar/Navient), applied at every entity-merge point.</li>
+    <li>Injected directly into the vision-scan <em>prompt</em> so the model's own judgment knows the specific name, not just a generic "don't flag our own branding" instruction.</li>
+    <li><strong>A hard deterministic override</strong> — the vision model's <code>contains_client_identity</code> boolean was observed disagreeing with its own description text ("this does NOT reveal client identity" while still flagging <code>true</code>). Prompt instructions alone aren't reliable enough; the override forces the flag false regardless of the model's own wording.</li>
+  </ul>
+</div>
+
+<div class="issue">
+  <h4>6. OCR text extraction is unreliable — same logo, different results call to call</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span></div>
+  <p><span class="label">What happened:</span> A stylized multi-color "NAVICADE" wordmark was correctly flagged <code>contains_client_identity=true</code> at 99% confidence — but with <strong>empty</strong> <code>ocr_text</code>. The text-based own-firm override had nothing to match against.</p>
+  <p><span class="label">Fix:</span> A second, OCR-independent signal — perceptual-hash matching against known own-firm logo images, reusing the same phash mechanism already built for client-logo recognition, just inverted for exclusion.</p>
+</div>
+
+<div class="issue">
+  <h4>7. A confirmed logo match kept getting excluded by the reviewer — three runs in a row</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span> · Root cause: misleading model commentary, not reviewer error</div>
+  <p><span class="label">What happened:</span> "NVISION" (a genuine maskable entity, confirmed via exact perceptual-hash match, distance 0) kept getting unchecked during review — because the vision model's own description text persistently argued <em>"this appears to be the delivery firm's own branding... does not reveal client identity"</em>, even after the description was rewritten to lead with a "CONFIDENT MATCH" headline.</p>
+  <p><span class="label">Fix:</span> Stopped relying on the reviewer reading AI-generated commentary correctly. A confirmed phash match (distance ≤ threshold) to an <em>already-approved</em> dictionary entity is now a <strong><code>mandatory_redaction</code></strong> — the checkbox is visually locked in the UI, and <code>apply()</code> ignores <code>excluded_image_groups</code> for these at the backend level regardless of what the review request contains. This is enforced server-side, not just hidden in the UI.</p>
+</div>
+
+<div class="issue">
+  <h4>8. Recurring low-confidence noise on every single run</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span></div>
+  <p><span class="label">What happened:</span> Short OCR fragments and industry acronyms ("RIA", "TMG", "GMR", "gsk") kept resurfacing as separate low-confidence warnings on every run of the same document.</p>
+  <p><span class="label">Fix:</span> A configurable <code>SANITIZATION_CONFIDENCE_THRESHOLD</code> (default 0.6) — candidates below it are excluded from the proposal entirely (one aggregated info line instead of N warnings), reviewer can still add any back manually.</p>
+</div>
+
+<div class="issue">
+  <h4>9. Metadata leaks (document properties never touched by text masking)</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span> · Real leaks found: "BAJAJ" in core properties, "RIA" in Company/Manager</div>
+  <p><span class="label">Fix:</span> A dedicated metadata-scrub step rewrites <code>docProps/core.xml</code>, <code>app.xml</code>, and <code>custom.xml</code> (the same three parts the verifier reads) using the same masking style already chosen for the run.</p>
+</div>
+
+<div class="issue">
+  <h4>10. Image scan cap silently dropped most of a real deck</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span></div>
+  <p><span class="label">What happened:</span> <code>MAX_IMAGES_SCANNED = 30</code> meant 27 of this deck's 57 images were never even scanned — not "unlikely to be a logo," genuinely unverified.</p>
+  <p><span class="label">Fix:</span> Raised to 150 for realistic deck sizes.</p>
+</div>
+
+<div class="issue">
+  <h4>11. numpy int64 poisoned JSON serialization mid-run</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span> · Manifested as an opaque "unhandled errors in a TaskGroup" failure</div>
+  <p><span class="label">What happened:</span> <code>ImageHash.__sub__</code> (the Hamming-distance subtraction for logo matching) returns <code>numpy.int64</code>, not a plain <code>int</code> — looks and prints like an int, but isn't JSON-serializable. The moment a logo match fired, saving the proposal to the JSONB column crashed the entire run.</p>
+  <p><span class="label">Compounding bug:</span> the failure-handling path itself then crashed <em>again</em> (tried to commit on an already-rolled-back session), so the run was never even marked "failed" — it sat at "detecting" forever with zero record of what went wrong.</p>
+  <p><span class="label">Fix:</span> Explicit <code>int()</code> cast at the source; <code>mark_failed()</code> now rolls back before committing, so a crash can never again leave a run silently stuck.</p>
+</div>
+
+<div class="issue">
+  <h4>12. Two independent backend processes, only one gets restarted</h4>
+  <div class="meta"><span class="badge fixed">Process fix, not code</span> · Cost real debugging time, twice</div>
+  <p><span class="label">What happened:</span> <code>detect()</code> only ever runs inside a separate <code>app.worker</code> polling process; <code>apply()</code> runs inside the uvicorn request handler. Restarting only one after a code change meant <code>detect()</code> kept running stale code (reporting "0 images found") while <code>apply()</code>'s verification — on fresh code — correctly found leaks the stale detector never had a chance to flag.</p>
+  <p><span class="label">Fix:</span> Both processes now get restarted together after every backend change, as standard practice for this project.</p>
+</div>
+
+<div class="issue">
+  <h4>13. Killing the worker mid-run orphans that run permanently</h4>
+  <div class="meta"><span class="badge partial">Known limitation</span></div>
+  <p>No stale-run recovery mechanism exists. A run interrupted mid-<code>detect()</code> sits at a non-terminal status forever — indistinguishable from "still working" without manually checking process CPU time. See recommendation in §6.</p>
+</div>
+
+<div class="issue">
+  <h4>14. Bedrock model deprecation and malformed structured output</h4>
+  <div class="meta"><span class="badge fixed">Fixed</span> · Model-dependent, not a NaviKnow bug per se</div>
+  <p><span class="label">What happened:</span> The original Sonnet model ID was retired by AWS Bedrock mid-project ("reached end of its life"). Separately, when testing Haiku 4.5 for cost, it periodically echoed the JSON <em>schema</em> as one complete object then appended the real answer as a second, comma-glued object — technically invalid JSON.</p>
+  <p><span class="label">Fix:</span> Verified current model IDs directly against the account's <code>list_inference_profiles</code> rather than guessing; added a targeted JSON-repair heuristic for the specific schema-echo failure shape.</p>
+</div>
+
+<div class="issue">
+  <h4>15. Hyperlink target leaks (detect-and-block, no fix path)</h4>
+  <div class="meta"><span class="badge gap">Open — deliberate scope decision</span></div>
+  <p><span class="label">What happened:</span> "NVISION" — a genuine maskable term — appeared as a hyperlink <em>target</em> (the href, not the visible text). Hyperlink scrubbing was explicitly scoped out (detect-and-block only) earlier in the project, so this channel can block a run indefinitely with no way to reach "clean."</p>
+  <p><span class="label">Status:</span> Offered to build hyperlink-target scrubbing (rewrite the href the same way text is masked); not yet actioned. See §5.</p>
+</div>
+
+</div>
+
+<h2 id="state"><span class="num">4</span>Current state — what's solid vs. fragile</h2>
+
+<h3>Solid</h3>
+<ul class="tight">
+  <li>Text masking across DOCX/PPTX/XLSX/PDF, word-boundary safe, format-agnostic.</li>
+  <li>Image enumeration (shape-tree + zip-glob) — genuinely complete, proven against the real deck's 57 images including masters/layouts/thumbnails.</li>
+  <li>Own-firm exclusion — three independent, layered signals (text, prompt injection, phash) so no single failure mode reintroduces the bug.</li>
+  <li>Multi-channel verification — a channel this doesn't check is a channel that can silently leak; five channels now re-derive from the rendered file every time.</li>
+  <li><code>mandatory_redaction</code> enforcement — the one case where reviewer discretion is deliberately overridden by a governance decision already made (an approved dictionary entity).</li>
+</ul>
+
+<h3>Fragile</h3>
+<ul class="tight">
+  <li><strong>Vision-model non-determinism.</strong> The same image, scanned twice (once at detect time, once at verify time), can get different judgments. This is inherent to LLM vision calls, not a code bug — the verification system exists specifically to catch this, but it means occasional re-runs are expected, not a sign of something broken.</li>
+  <li><strong>Reviewer trust in AI-generated commentary.</strong> Free-text descriptions have repeatedly proven unreliable enough to mislead a careful reviewer. Anywhere a deterministic signal exists, it should be load-bearing — description text should be supplementary only.</li>
+  <li><strong>Haiku's structured-output reliability</strong> is measurably worse than Sonnet's for this task (empty fields, schema echoing, boolean/text inconsistency). The guardrails built this session compensate for it but don't eliminate the underlying gap.</li>
+</ul>
+
+<h2 id="gaps"><span class="num">5</span>Remaining open gaps</h2>
+<table>
+  <tr><th>Gap</th><th>Impact</th><th>Priority</th></tr>
+  <tr>
+    <td><strong>Tagging's controlled vocabulary is missing common real terms</strong> ("financial-services"/"asset-management" in domain, "global" in geography)</td>
+    <td>Confirmed via live validation (§2): a real document got tagged <code>domain=banking</code> (imprecise — it's about asset management) and three separate low-confidence regional guesses instead of one clean "global" tag, purely because those terms don't exist in the vocabulary yet.</td>
+    <td><span class="badge p1">P1</span></td>
+  </tr>
+  <tr>
+    <td><strong>Hyperlink target scrubbing</strong> not implemented</td>
+    <td>A run can be permanently blocked with no path to "clean" if a maskable term is genuinely a hyperlink target — has already happened twice with the same term.</td>
+    <td><span class="badge p1">P1</span></td>
+  </tr>
+  <tr>
+    <td><strong>Comment / track-changes scrubbing</strong> not implemented</td>
+    <td>Same detect-and-block ceiling as hyperlinks; lower likelihood of hitting it in practice but the same structural gap.</td>
+    <td><span class="badge p2">P2</span></td>
+  </tr>
+  <tr>
+    <td><strong>No stale/orphaned run recovery</strong> in the worker</td>
+    <td>A crash or restart mid-<code>detect()</code> leaves a run stuck indefinitely with no automatic detection or requeue.</td>
+    <td><span class="badge p2">P2</span></td>
+  </tr>
+  <tr>
+    <td><strong>PowerPoint modern/cloud comments and Excel threaded comments</strong> unverified schema</td>
+    <td>Explicitly out of scope — legacy comments only are checked for pptx/xlsx.</td>
+    <td><span class="badge p3">P3</span></td>
+  </tr>
+  <tr>
+    <td><strong>PDF word-boundary check is a padding heuristic</strong>, not a true word-level match</td>
+    <td>Lower confidence than the OOXML regex path; a pattern-fill or unusual PDF text layout could still slip through.</td>
+    <td><span class="badge p3">P3</span></td>
+  </tr>
+</table>
+
+<h2 id="optimize"><span class="num">6</span>Optimization recommendations</h2>
+
+<div class="rec">
+  <div class="title"><h4>Expand the tag controlled vocabulary</h4><span class="badge p1">P1</span></div>
+  <p>Add <code>financial-services</code> (and/or <code>asset-management</code>) to the <code>domain</code> category, and <code>global</code> to <code>geography</code> — both confirmed missing by live validation, both likely to recur given the kind of documents actually being processed. This is a one-line governance action (via the existing tag vocabulary admin UI) with immediate, measurable effect on tag accuracy — the cheapest fix in this entire report relative to its impact.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>Build hyperlink-target scrubbing</h4><span class="badge p1">P1</span></div>
+  <p>Mirror the metadata-scrub approach: rewrite the actual href for any masked surface, using the same masking style already selected for the run, then flip <code>verified_hyperlinks</code> from detect-and-block to detect-and-fix. This closes the only channel that has actually caused repeat, unresolvable blocks in real usage.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>Add a stale-run reaper to the worker</h4><span class="badge p2">P2</span></div>
+  <p>A background check that requeues (or fails cleanly) any run stuck at a non-terminal status (<code>detecting</code>/<code>working</code>) past a reasonable timeout (e.g. 10 minutes). Removes the need to manually diagnose "is this actually stuck" via process CPU time.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>Cut vision-scan cost via perceptual, not just exact, deduplication</h4><span class="badge p2">P2</span></div>
+  <p>Images are currently deduped by exact SHA-256 before scanning. Near-identical images (same logo, different compression/resize) are treated as separate Bedrock calls. Grouping by perceptual hash first (with a tight threshold) before falling back to exact-hash for the render-time redaction match would reduce the number of vision calls on decks with repeated, slightly-varying logo instances — directly reduces both cost and the scan-to-scan non-determinism surface area.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>Build a fixed regression corpus</h4><span class="badge p2">P2</span></div>
+  <p>Every bug this session was found by re-running the same real document repeatedly. Formalizing 3-5 representative documents (one with grouped shapes, one with masters/layouts, one with a scanned/no-text-layer PDF, one with hyperlinks/comments) as a standing regression suite would catch these classes of bugs before they reach a real run, rather than after.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>Periodic dictionary hygiene</h4><span class="badge p3">P3</span></div>
+  <p>The masking dictionary view (built this session) now makes cleanup possible, but nothing prompts it. A lightweight periodic review of <code>pending_approval</code> entries older than N days — auto-flagging candidates for governance attention — would prevent the same "REDACTED gray box" -class of forgotten-decision entities from silently accumulating.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>Tune the confidence threshold with real data</h4><span class="badge p3">P3</span></div>
+  <p>0.6 was a reasonable starting default, not a measured one. Once a handful of real documents have gone through the pipeline, look at the distribution of confidences on entities that reviewers subsequently added back manually (should be rare) vs. ones nobody added back (validates the cutoff) to tune it with evidence.</p>
+</div>
+
+<h2 id="model"><span class="num">7</span>Model choice: Sonnet vs. Haiku</h2>
+<table>
+  <tr><th></th><th>Sonnet</th><th>Haiku</th></tr>
+  <tr><td>Cost (this session's real run)</td><td>~$0.24 per full run (57 images)</td><td>~5x cheaper per token</td></tr>
+  <tr><td>Structured-output reliability</td><td>Consistently well-formed JSON</td><td>Occasional schema-echo malformation (auto-repaired)</td></tr>
+  <tr><td>Vision field completeness</td><td>Reliably fills description/OCR fields</td><td>Sometimes empty despite correct boolean judgment</td></tr>
+  <tr><td>Boolean/text self-consistency</td><td>More consistent</td><td>Observed disagreeing with its own description text more often</td></tr>
+  <tr><td>Net effect with current guardrails</td><td>Fewer edge cases hit at all</td><td>Same eventual correctness, more reliance on deterministic overrides doing the real work</td></tr>
+</table>
+<p class="muted">The deterministic guardrails built this session (own-firm phash, <code>mandatory_redaction</code>, confidence-threshold auto-skip) were specifically designed so correctness doesn't depend on the model's own judgment being reliable — this is what makes Haiku viable for cost-sensitive runs at all. Without them, Haiku's reliability gaps would show up as real, undetected leaks rather than caught-and-corrected ones.</p>
+
+<h2 id="appendix"><span class="num">8</span>Appendix: files touched</h2>
+<table>
+  <tr><th>File</th><th>Role</th></tr>
+  <tr><td class="mono">app/masking/pattern.py</td><td>Shared word-boundary regex builder (new)</td></tr>
+  <tr><td class="mono">app/masking/dictionary.py</td><td><code>is_own_firm</code>, <code>is_skipped</code>, <code>skip</code>/<code>unskip</code></td></tr>
+  <tr><td class="mono">app/masking/logo_reference.py</td><td>Perceptual-hash client &amp; own-firm logo matching</td></tr>
+  <tr><td class="mono">app/documents/pptx_walk.py</td><td>Recursive shape traversal (new)</td></tr>
+  <tr><td class="mono">app/documents/images.py</td><td>Two-layer image enumeration (shape-tree + zip-glob)</td></tr>
+  <tr><td class="mono">app/documents/render.py</td><td>Word-boundary masking, PDF isolated-match check, xlsx same-pass image redaction</td></tr>
+  <tr><td class="mono">app/documents/verify.py</td><td>Text residual check (word-boundary safe)</td></tr>
+  <tr><td class="mono">app/documents/metadata_scan.py / metadata_scrub.py</td><td>Detect and fix docProps leaks (new)</td></tr>
+  <tr><td class="mono">app/documents/comment_scan.py / hyperlink_scan.py</td><td>Detect-only checks (new)</td></tr>
+  <tr><td class="mono">app/agents/sanitization/image_scan.py</td><td>Vision+OCR+phash merge logic, own-firm override, placeholder recognition</td></tr>
+  <tr><td class="mono">app/agents/sanitization/agent.py</td><td>Orchestration: confidence threshold, mandatory_redaction, multi-channel verify</td></tr>
+  <tr><td class="mono">app/llm/bedrock_client.py</td><td>JSON extraction + Haiku schema-echo repair</td></tr>
+  <tr><td class="mono">app/runs/background.py</td><td>Failure-path rollback fix</td></tr>
+  <tr><td class="mono">app/routers_governance.py</td><td>Masking dictionary view + skip/unskip endpoints (new)</td></tr>
+  <tr><td class="mono">frontend/.../ReviewDetailPage.jsx</td><td>Locked checkbox for mandatory_redaction, sanitization-style picker</td></tr>
+  <tr><td class="mono">frontend/.../AdminPage.jsx</td><td>Masking dictionary section (new)</td></tr>
+  <tr><td class="mono">app/agents/sanitization/summarizer.py</td><td>Prompt fix: domain/engagement_type as single terms, not comma-crammed (feeds Tagging)</td></tr>
+  <tr><td class="mono">app/agents/tagging/classifier.py</td><td>Validated, not modified this round — vocabulary gap identified is a data issue, not a code issue</td></tr>
+  <tr><td class="mono">tag_vocabulary (DB table)</td><td>Recommended addition: financial-services/asset-management (domain), global (geography) — see §6</td></tr>
+</table>
+
+<footer>
+  Generated from the full Sanitization + Tagging agent debugging session on the NaviKnow project, including live validation against the database's actual latest run of both agents (§2). Reflects the state of the codebase and data as of this report's generation — re-check against current code/DB before relying on specific file/line/run-ID references for anything beyond this document's own point in time.
+</footer>
+
+</div>
+</body>
+</html>

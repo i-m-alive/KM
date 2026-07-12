@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NaviKnow — Sanitization Agent (A-01) Detailed Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14203B; --ink-soft:#3C4A66; --muted:#697692;
+    --paper:#EBEEF4; --paper-2:#E2E7F0; --panel:#FFFFFF; --line:#D2D9E6;
+    --navy:#0D3C6E; --navy-deep:#0A2C52;
+    --signal:#2D6FE0; --signal-bg:#E6EFFB;
+    --brass:#A9791F; --brass-soft:#C79B45; --brass-bg:#FBF2E0; --brass-line:#E1BE82;
+    --skill:#1F7A66; --skill-bg:#E2F2ED; --skill-line:#9FCFC0;
+    --ready:#1E7A46; --ready-bg:#E4F2E9; --ready-line:#A9D6BC;
+    --mock:#B06A12; --mock-bg:#F7ECDC; --mock-line:#E1BE82;
+    --danger:#A83232; --danger-bg:#F8E8E8; --danger-line:#E3AFAF;
+    --radius:14px; --maxw:1200px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto;} *{animation:none!important;transition:none!important;}}
+  body{margin:0;background:radial-gradient(120% 60% at 100% 0%, #F3F6FB 0%, var(--paper) 55%) fixed;color:var(--ink);font-family:"Inter",system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+  a{color:var(--signal);text-decoration:none;} a:hover{text-decoration:underline;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;}
+  code.inline{font-family:"IBM Plex Mono";background:var(--paper-2);padding:1px 6px;border-radius:5px;font-size:.86em;}
+
+  .mast{background:linear-gradient(155deg,var(--navy-deep) 0%, var(--navy) 62%, #124d8a 100%);color:#EAF1FB;border-bottom:3px solid var(--brass);position:relative;overflow:hidden;}
+  .mast::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:34px 34px;mask:linear-gradient(180deg,#000,transparent 85%);-webkit-mask:linear-gradient(180deg,#000,transparent 85%);pointer-events:none;}
+  .mast .wrap{position:relative;z-index:1;padding-top:50px;padding-bottom:50px;}
+  .kicker{font-family:"IBM Plex Mono",monospace;font-size:12.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--brass-soft);margin:0 0 18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+  .kicker .dot{width:6px;height:6px;background:var(--brass-soft);border-radius:50%;display:inline-block;}
+  h1.title{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:clamp(1.9rem,4.4vw,3rem);line-height:1.08;margin:0;letter-spacing:-.02em;}
+  h1.title span{color:var(--brass-soft);}
+  .lede{max-width:70ch;margin:20px 0 0;font-size:1.05rem;color:#CFDCED;}
+  .mast-meta{margin-top:24px;display:flex;flex-wrap:wrap;gap:10px 26px;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:#A9C0DC;}
+  .mast-meta b{color:#EAF1FB;font-weight:500;}
+
+  nav.toc{position:sticky;top:0;z-index:20;background:rgba(235,238,244,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);}
+  nav.toc .wrap{display:flex;gap:4px;flex-wrap:wrap;padding-top:10px;padding-bottom:10px;align-items:center;}
+  nav.toc a{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.01em;color:var(--ink-soft);padding:6px 8px;border-radius:8px;text-decoration:none;white-space:nowrap;}
+  nav.toc a:hover{background:var(--paper-2);color:var(--navy);}
+  nav.toc .brandmark{font-family:"Space Grotesk";font-weight:700;color:var(--navy);margin-right:auto;letter-spacing:-.01em;font-size:14px;}
+
+  section{padding:56px 0 8px;}
+  .sec-head{display:flex;align-items:baseline;gap:18px;margin-bottom:8px;}
+  .num{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:14px;color:var(--brass);border:1px solid var(--brass);border-radius:7px;padding:3px 9px;flex:none;background:#fff;}
+  h2{font-family:"Space Grotesk",sans-serif;font-weight:600;letter-spacing:-.015em;font-size:clamp(1.35rem,2.6vw,1.9rem);margin:0;line-height:1.1;color:var(--ink);}
+  h3{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:1.08rem;color:var(--navy);margin:22px 0 8px;}
+  .sec-sub{color:var(--muted);margin:14px 0 26px;max-width:80ch;font-size:.99rem;}
+  p{margin:0 0 14px;}
+  ul.plain{margin:0 0 14px;padding-left:20px;color:var(--ink-soft);font-size:.94rem;}
+  ul.plain li{margin-bottom:6px;}
+
+  .board-legend{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0 18px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;}
+  .lg{display:flex;align-items:center;gap:7px;color:var(--ink-soft);}
+  .sw{width:12px;height:12px;border-radius:4px;border:1px solid;flex:none;}
+  .sw.tool{background:var(--signal-bg);border-color:var(--signal);}
+  .sw.prot{background:var(--brass-bg);border-color:var(--brass-line);}
+  .sw.skill{background:var(--skill-bg);border-color:var(--skill-line);}
+
+  table.board{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:.86rem;margin-bottom:20px;}
+  table.board th,table.board td{padding:11px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;}
+  table.board thead th{background:var(--navy);color:#EAF1FB;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:500;}
+  table.board tbody tr:last-child td{border-bottom:none;}
+  table.board td.anm{font-family:"Space Grotesk";font-weight:600;color:var(--navy);white-space:nowrap;}
+  table.board td.small{color:var(--ink-soft);}
+  table.board td.center{text-align:center;}
+
+  .pillrow{display:flex;flex-wrap:wrap;gap:5px;}
+  .pill{font-family:"IBM Plex Mono",monospace;font-size:10.8px;padding:3px 8px;border-radius:6px;border:1px solid;white-space:nowrap;}
+  .pill.tool{color:#1a4fa3;background:var(--signal-bg);border-color:#B7CDF2;}
+  .pill.prot{color:#8A5A10;background:var(--brass-bg);border-color:var(--brass-line);}
+  .pill.skill{color:var(--skill);background:var(--skill-bg);border-color:var(--skill-line);}
+  .pill.role{color:var(--navy);background:#E6EFFB;border-color:#B7CDF2;}
+  .pill.entity{color:var(--danger);background:var(--danger-bg);border-color:var(--danger-line);}
+  .pill.keep{color:var(--ready);background:var(--ready-bg);border-color:var(--ready-line);}
+
+  .callout{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--brass);border-radius:12px;padding:18px 20px;margin:20px 0;}
+  .callout.blue{border-left-color:var(--signal);}
+  .callout.danger{border-left-color:var(--danger);}
+  .callout.green{border-left-color:var(--ready);}
+  .callout .ctitle{font-family:"Space Grotesk";font-weight:600;color:var(--navy);margin:0 0 6px;font-size:1.01rem;}
+  .callout p{margin:0;color:var(--ink-soft);font-size:.93rem;}
+  .callout p+p{margin-top:8px;}
+
+  .timeline{display:flex;flex-direction:column;gap:0;margin-top:6px;}
+  .tstep{display:grid;grid-template-columns:44px 1fr;gap:14px;position:relative;padding-bottom:4px;}
+  .tstep:not(:last-child)::before{content:"";position:absolute;left:21px;top:44px;bottom:-4px;width:2px;background:var(--line);}
+  .tnode .circle{width:32px;height:32px;border-radius:50%;background:var(--navy);color:#fff;font-family:"Space Grotesk";font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none;z-index:1;}
+  .tstep.milestone .tnode .circle{background:var(--brass);}
+  .tstep.human .tnode .circle{background:var(--skill);}
+  .tcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:.88rem;}
+  .tcard b{font-family:"Space Grotesk";color:var(--navy);}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:6px 0 20px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:6px 0 20px;}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;}
+  .box h4{font-family:"Space Grotesk";margin:0 0 8px;color:var(--navy);font-size:1rem;}
+  .box .tag{font-family:"IBM Plex Mono";font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass);display:block;margin-bottom:6px;}
+  .box.against{border-left:4px solid var(--danger);}
+  .box.for{border-left:4px solid var(--ready);}
+  .box p{font-size:.9rem;color:var(--ink-soft);margin:0;}
+  @media(max-width:820px){ .grid2,.grid3{grid-template-columns:1fr;} }
+
+  .phaselane{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--panel);margin:6px 0 22px;}
+  .phaselane .lane{padding:20px 22px;}
+  .phaselane .lane:first-child{border-right:1px solid var(--line);}
+  .phaselane .lane h4{font-family:"Space Grotesk";margin:0 0 4px;color:var(--navy);font-size:1.05rem;}
+  .phaselane .lane .p-kick{font-family:"IBM Plex Mono";font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);}
+  .phaselane .lane ul{margin:12px 0 0;padding-left:18px;font-size:.88rem;color:var(--ink-soft);}
+  .phaselane .lane ul li{margin-bottom:6px;}
+  @media(max-width:820px){ .phaselane{grid-template-columns:1fr;} .phaselane .lane:first-child{border-right:none;border-bottom:1px solid var(--line);} }
+
+  .states{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 20px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;}
+  .state{padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink-soft);}
+  .state.run{background:var(--signal-bg);border-color:#B7CDF2;color:#1a4fa3;}
+  .state.pause{background:var(--skill-bg);border-color:var(--skill-line);color:var(--skill);}
+  .state.done{background:var(--ready-bg);border-color:var(--ready-line);color:var(--ready);}
+  .state.bad{background:var(--danger-bg);border-color:var(--danger-line);color:var(--danger);}
+  .arrow{color:var(--muted);}
+
+  .filetree{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-family:"IBM Plex Mono",monospace;font-size:.82rem;color:var(--ink-soft);overflow-x:auto;line-height:1.7;}
+  .filetree .new{color:var(--ready);font-weight:600;}
+  .filetree .comment{color:var(--muted);}
+
+  .decisionlog{border-collapse:collapse;width:100%;font-size:.86rem;}
+  .decisionlog td{padding:9px 4px;border-bottom:1px dashed var(--line);vertical-align:top;}
+  .decisionlog td:first-child{width:230px;font-family:"Space Grotesk";font-weight:600;color:var(--navy);}
+
+  footer{margin-top:56px;background:var(--navy-deep);color:#A9C0DC;border-top:3px solid var(--brass);}
+  footer .wrap{padding:30px 28px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  footer b{color:#EAF1FB;font-weight:500;}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="wrap">
+    <p class="kicker"><span class="dot"></span> NaviKnow · Agent Platform <span class="dot"></span> A-01 Detailed Design · v3</p>
+    <h1 class="title">Sanitization Agent — detect, <span>pause for human review</span>, then mask</h1>
+    <p class="lede">The first real agent, redesigned around a human-in-the-loop pause. It chunks a document, uses the LLM to find what to mask <em>and</em> to draft the metadata the Tagging agent will later use, then stops and shows the whole proposal to a reviewer. Only on approval does it deterministically apply the masks and feed every confirmed entity back into the dictionary — so the next document leans on cheap deterministic matching first.</p>
+    <div class="mast-meta">
+      <span>AGENT &nbsp;<b>A-01 · Sanitization</b></span>
+      <span>MODE &nbsp;<b>Background + review pause</b></span>
+      <span>SUB-AGENTS &nbsp;<b>NER pre-pass · Detector · Reconciler · Summarizer</b></span>
+      <span>MCP SERVER &nbsp;<b>naviknow-mcp, born here</b></span>
+      <span>TARGET COST &nbsp;<b>~$0.10–0.30 / 100-pg doc</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <span class="brandmark">NaviKnow</span>
+    <a href="#bigidea">01 The big idea</a>
+    <a href="#coldstart">02 Cold start</a>
+    <a href="#scope">03 Input &amp; formats</a>
+    <a href="#chunking">04 Chunking</a>
+    <a href="#subagents">05 Sub-agents</a>
+    <a href="#taxonomy">06 What gets masked</a>
+    <a href="#metadata">07 Metadata &amp; the client guardrail</a>
+    <a href="#tools">08 Tools vs protected</a>
+    <a href="#skills">09 Skills</a>
+    <a href="#cost">10 Cost &amp; economics</a>
+    <a href="#lifecycle">11 Run lifecycle</a>
+    <a href="#flow">12 End-to-end flow</a>
+    <a href="#data">13 Data model</a>
+    <a href="#exec">14 Execution</a>
+    <a href="#files">15 File layout</a>
+    <a href="#decisions">16 Decisions log</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <!-- 01 BIG IDEA -->
+  <section id="bigidea">
+    <div class="sec-head"><span class="num">01</span><h2>The big idea — two phases with a human gate between them</h2></div>
+    <p class="sec-sub">The single most important change from v1: the review is no longer a task filed at the end. The run <b>splits in two</b> and the agent physically stops in the middle until a reviewer approves. Detection is the LLM's job; application is deterministic code's job; the human sits exactly on the seam.</p>
+    <div class="phaselane">
+      <div class="lane">
+        <span class="p-kick">Phase 1 · propose</span>
+        <h4>Detect &amp; draft</h4>
+        <ul>
+          <li>Chunk the document by structural boundary.</li>
+          <li>LLM finds candidate entities — <b>what</b> to mask, its <b>type</b>, the <b>exact location</b> (chunk + character span), and a <b>confidence</b>.</li>
+          <li>LLM simultaneously drafts a <b>sanitized summary + metadata</b> for the Tagging agent to consume later.</li>
+          <li>Detects which <b>client</b> the document is about.</li>
+          <li>Run enters <code class="inline">awaiting_review</code> and <b>stops</b>. Nothing has been masked yet.</li>
+        </ul>
+      </div>
+      <div class="lane">
+        <span class="p-kick">Phase 2 · apply (only on approval)</span>
+        <h4>Mask &amp; learn</h4>
+        <ul>
+          <li>Reviewer approves / edits / rejects the proposal in the UI.</li>
+          <li>On approve, a <b>deterministic tool</b> applies every confirmed span replacement — no LLM re-reading, so nothing is missed or altered.</li>
+          <li>Confirmed entities are written into the <b>masking dictionary</b> as <code class="inline">approved</code> and linked to the client.</li>
+          <li>Real identity is captured to the protected <b>source registry</b>; masked output + metadata are written; run <code class="inline">completed</code>.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout blue">
+      <p class="ctitle">Why detection and application are split across the human</p>
+      <p>Letting the LLM both decide <i>and</i> perform the masking means a low-confidence or hallucinated span could get masked (or a real one missed) with nobody checking. By making detection a proposal and application a deterministic replacement over reviewer-approved spans, the human sees the full picture once, and the actual text surgery is exact and repeatable — not a second fallible LLM pass.</p>
+    </div>
+  </section>
+
+  <!-- 02 COLD START -->
+  <section id="coldstart">
+    <div class="sec-head"><span class="num">02</span><h2>Cold start — LLM-heavy now, deterministic-cheap later</h2></div>
+    <p class="sec-sub">Right now the dictionary is empty, so there is nothing to match deterministically — the first documents are almost entirely LLM work. That is expected and self-correcting.</p>
+    <div class="timeline">
+      <div class="tstep"><div class="tnode"><div class="circle">A</div></div><div class="tcard"><b>Deterministic pass</b> against approved dictionary entries. At cold start this finds nothing; every entity is a "gap."</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">B</div></div><div class="tcard"><b>LLM pass</b> handles all the gaps — at first, that's the whole document.</div></div>
+      <div class="tstep human"><div class="tnode"><div class="circle">C</div></div><div class="tcard"><b>Human approves.</b> Every confirmed entity + its aliases is written to the dictionary as <code class="inline">approved</code>, linked to a client.</div></div>
+      <div class="tstep milestone"><div class="tnode"><div class="circle">D</div></div><div class="tcard"><b>Next document:</b> the deterministic pass now recognises those clients instantly and for free. The LLM only works the genuinely new residual. Cost per document falls as the dictionary grows.</div></div>
+    </div>
+    <div class="callout green">
+      <p class="ctitle">The feedback loop is the whole point</p>
+      <p>The dictionary isn't seeded up front — it is <b>grown by approved runs</b>. Each review makes the next run cheaper and more consistent, and guarantees "the same client is always masked the same way" because the mask token is reused from the dictionary, never re-invented.</p>
+    </div>
+  </section>
+
+  <!-- 03 SCOPE -->
+  <section id="scope">
+    <div class="sec-head"><span class="num">03</span><h2>Input scope &amp; formats</h2></div>
+    <p class="sec-sub">One document per run (batch is the Coordinator's job later). Structure survives extraction so locations mean something and Deck Drafting can reuse slide boundaries.</p>
+    <table class="board">
+      <thead><tr><th style="width:110px">Phase</th><th style="width:130px">Format</th><th>Notes</th><th style="width:210px">Library</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">Now</td><td>PDF, DOCX</td><td class="small">Most proposals/reports; text-heavy, clean structural extraction.</td><td class="small"><code class="inline">PyMuPDF</code>/<code class="inline">pdfplumber</code>, <code class="inline">python-docx</code></td></tr>
+        <tr><td class="anm">Next</td><td>PPTX</td><td class="small">Decks. Preserve slide boundaries now so A-06 never re-parses.</td><td class="small"><code class="inline">python-pptx</code></td></tr>
+        <tr><td class="anm">Deferred</td><td>XLSX</td><td class="small">Rarely narrative client prose; a structured cell-masking problem, designed separately.</td><td class="small">—</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 04 CHUNKING -->
+  <section id="chunking">
+    <div class="sec-head"><span class="num">04</span><h2>Chunking — how the document is fed to the LLM</h2></div>
+    <p class="sec-sub">You asked for chunk-wise processing. Here's exactly how, and why it stays precise enough to apply masks deterministically afterwards.</p>
+    <ul class="plain">
+      <li><b>Chunk by structural boundary</b> — page (PDF), slide (PPTX), or a small group of paragraphs (DOCX) — never arbitrary token windows. This is what lets progress read "page 47 / 100" and what keeps a location meaningful.</li>
+      <li><b>Record exact character spans.</b> Every candidate carries <code class="inline">(chunk_id, start_offset, end_offset, surface_text)</code>. That precise coordinate is what makes Phase 2's masking a deterministic string replacement rather than a guess.</li>
+      <li><b>Small overlap between chunks</b> so a client name straddling a page break isn't lost at the seam.</li>
+      <li><b>Running "known entities so far" context.</b> Each chunk's LLM call is given the compact list of what earlier chunks (and the dictionary) already found — so "Acme" in chunk 50 resolves to the same entity as "Acme Corp" in chunk 1, without stuffing 100 pages into one context window.</li>
+    </ul>
+  </section>
+
+  <!-- 05 SUB-AGENTS -->
+  <section id="subagents">
+    <div class="sec-head"><span class="num">05</span><h2>Sub-agents — a free pre-pass plus three specialist LLM passes</h2></div>
+    <p class="sec-sub">You asked whether this needs sub-agents. Yes — internally. The catalogue still shows <b>one</b> "Sanitization" agent; under the hood a free deterministic pre-pass feeds three role-specialised LLM passes. They are internal steps, not separately catalogued agents (that separation is the Coordinator's concern later).</p>
+    <div class="grid3">
+      <div class="box for">
+        <span class="tag">Pre-pass · free, on-CPU</span>
+        <h4>NER / regex</h4>
+        <p>Before any LLM call: regex catches structured identifiers (emails, domains, IDs) exhaustively; a local NER model proposes org/person candidates. Zero tokens. Its output is deduped to the <b>distinct</b> candidate strings the Detector then classifies — this is the main cost lever (§10).</p>
+      </div>
+      <div class="box for">
+        <span class="tag">Sub-agent 1 · classify</span>
+        <h4>Detector</h4>
+        <p>Classifies the <b>deduped candidate set</b> (~50–100 items, not the whole document) with type + confidence, using the <code class="inline">sanitization-detection</code> skill. Still scans entity-dense chunks for anything the pre-pass missed. Flags low-confidence spans instead of guessing.</p>
+      </div>
+      <div class="box for">
+        <span class="tag">Sub-agent 2 · reduce</span>
+        <h4>Reconciler</h4>
+        <p>One pass over all chunk results. Merges duplicates, resolves aliases to one canonical entity, assigns a single consistent mask token per entity. <b>Mostly deterministic</b> (normalise + group); an LLM tie-breaker only for genuinely ambiguous cases.</p>
+      </div>
+      <div class="box for">
+        <span class="tag">Sub-agent 3 · document-level</span>
+        <h4>Summarizer</h4>
+        <p>Produces the <b>sanitized summary + metadata</b> for Tagging, and identifies the client. Runs over content with masks already substituted, so no raw identity leaks into the taggable metadata.</p>
+      </div>
+    </div>
+    <div class="callout">
+      <p class="ctitle">Why fan-out / reduce and not one giant prompt</p>
+      <p>A 100-page document won't fit one high-quality context, and detection must be <b>exhaustive</b> — every occurrence, not a best-effort skim. Splitting detection per chunk keeps each call sharp and lets them run in parallel; the Reconciler then guarantees cross-chunk consistency in a single deterministic sweep.</p>
+    </div>
+  </section>
+
+  <!-- 06 TAXONOMY -->
+  <section id="taxonomy">
+    <div class="sec-head"><span class="num">06</span><h2>What gets masked — a fixed entity taxonomy</h2></div>
+    <p class="sec-sub">A closed vocabulary of entity types, so the agent doesn't freelance on what counts as "identifying."</p>
+    <table class="board">
+      <thead><tr><th style="width:200px">Entity type</th><th>Examples</th><th style="width:100px">Action</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">CLIENT_NAME</td><td class="small">"Acme Corp", "Acme", "ACME" — aliases resolved to one canonical client</td><td class="center"><span class="pill entity">Mask</span></td></tr>
+        <tr><td class="anm">CLIENT_PERSON</td><td class="small">Named individuals at the client</td><td class="center"><span class="pill entity">Mask</span></td></tr>
+        <tr><td class="anm">CLIENT_LOCATION</td><td class="small">Client office addresses / sites</td><td class="center"><span class="pill entity">Mask</span></td></tr>
+        <tr><td class="anm">CLIENT_EMAIL_DOMAIN</td><td class="small">@acmecorp.com and similar</td><td class="center"><span class="pill entity">Mask</span></td></tr>
+        <tr><td class="anm">CLIENT_SYSTEM_NAME</td><td class="small">The client's proprietary tool/product names</td><td class="center"><span class="pill entity">Mask</span></td></tr>
+        <tr><td class="anm">CLIENT_CONTRACT_ID</td><td class="small">Account numbers, deal/contract identifiers</td><td class="center"><span class="pill entity">Mask</span></td></tr>
+        <tr><td class="anm">Internal consultant names</td><td class="small">NaviKnow's own team members</td><td class="center"><span class="pill keep">Keep</span></td></tr>
+        <tr><td class="anm">Generic domain/tech terms</td><td class="small">Industry/technology vocabulary — Tagging's job</td><td class="center"><span class="pill keep">Keep</span></td></tr>
+        <tr><td class="anm">Deal dollar amounts</td><td class="small">Commercial detail, not identity — kept unless you say otherwise</td><td class="center"><span class="pill keep">Keep</span></td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:.85rem;color:var(--muted)">Mask token format is consistent and readable — e.g. <code class="inline">[CLIENT_1]</code>, <code class="inline">[CLIENT_PERSON_2]</code> — assigned by the Reconciler and reused from the dictionary on future documents.</p>
+  </section>
+
+  <!-- 07 METADATA + GUARDRAIL -->
+  <section id="metadata">
+    <div class="sec-head"><span class="num">07</span><h2>Metadata for Tagging — and the client-tagging guardrail</h2></div>
+    <p class="sec-sub">You want the run to produce metadata the Tagging agent uses, and you want to be able to "tag by client." Those two goals pull in opposite directions unless we split them carefully.</p>
+    <div class="callout danger">
+      <p class="ctitle">The tension — flagged, not silently resolved</p>
+      <p>Catalogue §04 guardrail: Tagging and general Search must <b>never</b> see client identity — that's the whole "show me Client X's documents" protection. If the client name goes into the taggable metadata, that guardrail breaks and any Search user could reconstruct client work by name.</p>
+    </div>
+    <div class="grid2">
+      <div class="box for">
+        <span class="tag">Goes to Tagging</span>
+        <h4>Sanitized metadata</h4>
+        <p>Topic, domain, use-case, technology, geography, engagement type, and a masked summary. <b>No client identity.</b> This is the free-text/structured hint the Tagging agent classifies against its controlled vocabulary.</p>
+      </div>
+      <div class="box against">
+        <span class="tag">Stays protected</span>
+        <h4>Client linkage</h4>
+        <p>The run/document carries a protected <code class="inline">client_account_id</code> (via the source registry). "Tag by client" happens through this <b>protected path</b> — practice-leads/KM-governance filter by it; general Search cannot, because it never sees this field.</p>
+      </div>
+    </div>
+    <div class="callout green">
+      <p class="ctitle">Net result — you get what you asked for, guardrail intact</p>
+      <p>You can still retrieve and organise documents by client, through the same protected client-lookup path §04 already describes. What you <i>can't</i> do is leak client identity into the general, un-permissioned Tagging/Search surface — which is exactly the protection the platform is built to guarantee.</p>
+    </div>
+  </section>
+
+  <!-- 08 TOOLS -->
+  <section id="tools">
+    <div class="sec-head"><span class="num">08</span><h2>Tools (MCP) vs. protected calls</h2></div>
+    <p class="sec-sub">The colour split is the guardrail. Only two things are callable by the model; everything that writes identity, the dictionary, or the masked text is agent code the model can't reach.</p>
+    <div class="board-legend">
+      <span class="lg"><span class="sw tool"></span> MCP tool — the model may call it</span>
+      <span class="lg"><span class="sw prot"></span> Protected call — agent code only, never the model</span>
+    </div>
+    <table class="board">
+      <thead><tr><th style="width:280px">Call</th><th style="width:110px">Type</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">fs.read_document</td><td class="center"><span class="pill tool">MCP tool</span></td><td class="small">Model pulls a chunk / page-range of the document as it works.</td></tr>
+        <tr><td class="anm">review.create_task</td><td class="center"><span class="pill tool">MCP tool</span></td><td class="small">Model files the proposal for human review — the call that transitions the run to <code class="inline">awaiting_review</code>.</td></tr>
+        <tr><td class="anm">masking_dictionary.lookup</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Deterministic read pass (Phase 1, step A). Agent code.</td></tr>
+        <tr><td class="anm">masking_dictionary.create_pending</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">New candidate entity written as <code class="inline">pending_approval</code>. Agent code.</td></tr>
+        <tr><td class="anm">masking_dictionary.approve</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">On human approval, promote to <code class="inline">approved</code> + link client. Agent code, gated by reviewer role.</td></tr>
+        <tr><td class="anm">document.apply_masks</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Deterministic span replacement over approved entities. <b>Never</b> the model — this is the actual masking.</td></tr>
+        <tr><td class="anm">source_registry.capture</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Write-once, write-only real identity. Never readable back into output.</td></tr>
+        <tr><td class="anm">client_account.get_or_create</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Links the run to a client account (creates one if new). Agent code.</td></tr>
+        <tr><td class="anm">audit_log.write</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Trail of every state transition and approval. Agent code.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout danger">
+      <p class="ctitle">Masking is code, detection is model</p>
+      <p><code class="inline">document.apply_masks</code> is deliberately a protected, deterministic function — not an MCP tool. The model proposes spans; the code performs the exact replacement over the reviewer-approved set. That's how masking stays exhaustive and repeatable and how a stray model decision can never quietly write to the dictionary or alter the masked text.</p>
+    </div>
+  </section>
+
+  <!-- 09 SKILLS -->
+  <section id="skills">
+    <div class="sec-head"><span class="num">09</span><h2>Skills the agent needs</h2></div>
+    <p class="sec-sub">Reusable prompt/behaviour modules, in the platform's "skill" sense — the how-to-reason each pass loads.</p>
+    <table class="board">
+      <thead><tr><th style="width:250px">Skill</th><th>Used by</th><th>What it encodes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill skill">sanitization-detection</span></td><td class="small">Detector</td><td class="small">How to spot client-identifying spans, assign entity types, calibrate confidence, and "flag, don't guess."</td></tr>
+        <tr><td><span class="pill skill">alias-resolution</span></td><td class="small">Reconciler</td><td class="small">When two surface forms are the same entity; canonicalisation rules.</td></tr>
+        <tr><td><span class="pill skill">sanitization-masking-style</span></td><td class="small">Reconciler</td><td class="small">Consistent, readable mask-token format so masked docs stay legible.</td></tr>
+        <tr><td><span class="pill skill">document-metadata-extraction</span></td><td class="small">Summarizer</td><td class="small">Produce the sanitized summary + tag-relevant metadata Tagging will consume — with no client identity in it.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 10 COST & ECONOMICS -->
+  <section id="cost">
+    <div class="sec-head"><span class="num">10</span><h2>Cost &amp; token economics — and how we drive it down</h2></div>
+    <p class="sec-sub">Cost is essentially all LLM tokens (local storage, Postgres, compute are negligible). Model: Claude Sonnet 4.5 on Bedrock — <b>$3 / 1M input, $15 / 1M output</b>. A 100-page text document (~70K tokens of content) is the reference case.</p>
+
+    <h3>Naive cost (no optimisation, cold start)</h3>
+    <table class="board">
+      <thead><tr><th>Pass</th><th style="width:120px">Input tok</th><th style="width:120px">Output tok</th><th style="width:90px">Cost</th></tr></thead>
+      <tbody>
+        <tr><td class="small">Deterministic dictionary pass</td><td class="small">0 (no LLM)</td><td class="small">0</td><td class="small">$0.00</td></tr>
+        <tr><td class="small">Detector (20 chunks × ~5,650 in / ~600 out)</td><td class="small">113,000</td><td class="small">12,000</td><td class="small">$0.52</td></tr>
+        <tr><td class="small">Reconciler (mostly code; occasional tie-break)</td><td class="small">5,000</td><td class="small">1,000</td><td class="small">$0.03</td></tr>
+        <tr><td class="small">Summarizer (metadata, map-reduce)</td><td class="small">8,000</td><td class="small">2,000</td><td class="small">$0.05</td></tr>
+        <tr><td class="anm">Total</td><td class="small">~126,000</td><td class="small">~15,000</td><td class="anm">≈ $0.60</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:.85rem;color:var(--muted)">Range $0.60–$1.00 depending on chunk size; ~$0.75 central. A 100-slide deck (~$0.25) is cheaper; a dense legal PDF (~$1.30) is more.</p>
+
+    <div class="callout danger">
+      <p class="ctitle">The one thing that can blow this up</p>
+      <p>If detection runs as a <b>freely-looping tool-use conversation</b> over one accumulating context, tokens grow quadratically (each turn re-sends the whole history) and cost can be <b>3–10× higher</b>. Every estimate here assumes <b>bounded per-chunk context</b> — the single biggest cost lever, and the reason we chunk rather than hand the model the whole document.</p>
+    </div>
+
+    <h3>The reduction levers (baked into the plan)</h3>
+    <div class="grid2">
+      <div class="box for">
+        <span class="tag">Structural win</span>
+        <h4>NER/regex pre-pass → dedupe → classify unique set</h4>
+        <p>A local regex/NER pass (free, on-CPU) catches structured identifiers — emails, domains, phone/account IDs — with <b>zero LLM tokens</b>, and generates org/person candidates. Dedupe to the <b>distinct</b> candidate strings (a client named 200× is one entity). The LLM then classifies only the unique set (~50–100 items), not the whole document. Cost becomes proportional to <b>distinct entities</b>, not page count — roughly flat as documents grow.</p>
+      </div>
+      <div class="box for">
+        <span class="tag">Free, no recall risk</span>
+        <h4>Bedrock Batch + prompt caching + compact output</h4>
+        <p><b>Batch inference −50%</b> on all tokens — Sanitization is already async with a human pause, so zero latency cost. <b>Prompt-cache</b> the skill/system prompt + "known-entities" context (identical across chunks and docs; reads at 0.1× input). <b>Compact output</b> — output is 5× input cost/token, so return minimal JSON and never echo document text back.</p>
+      </div>
+    </div>
+    <div class="callout">
+      <p class="ctitle">Model tiering — held until measured</p>
+      <p>Haiku 4.5 ($1/$5, ~3× cheaper than Sonnet) could run the bulk detection scan, escalating to Sonnet only for ambiguous alias tie-breaks. Deferred until we've measured Haiku's detection <b>recall</b> on real docs — a missed entity is a leak, so this trades recall for cost and must be validated first.</p>
+    </div>
+
+    <table class="board">
+      <thead><tr><th>Configuration</th><th style="width:160px">≈ Cost / 100-pg doc</th></tr></thead>
+      <tbody>
+        <tr><td class="small">Naive (cold start, no optimisation)</td><td class="small">~$0.75</td></tr>
+        <tr><td class="small">+ Batch (−50%) + prompt caching + compact output</td><td class="small">~$0.30</td></tr>
+        <tr><td class="small">+ NER pre-pass + dedupe (classify unique set only)</td><td class="anm">~$0.10–0.15</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout green">
+      <p class="ctitle">Honest note on "warm state"</p>
+      <p>As the dictionary fills, known clients mask for free — but the LLM still must <b>read every page to catch new identifiers</b>, so first-time-document API savings from the dictionary alone are modest (~10–25%). The dictionary's bigger payoff is <b>human-review time</b> and guaranteed consistency. The dedupe + NER + batch + caching levers above are what actually move the API bill.</p>
+    </div>
+  </section>
+
+  <!-- 11 LIFECYCLE -->
+  <section id="lifecycle">
+    <div class="sec-head"><span class="num">11</span><h2>Run lifecycle — the states, including the pause</h2></div>
+    <p class="sec-sub">The run is no longer a straight line to <code class="inline">completed</code>. It parks at <code class="inline">awaiting_review</code> until a human acts.</p>
+    <div class="states">
+      <span class="state">pending</span><span class="arrow">→</span>
+      <span class="state run">detecting</span><span class="arrow">→</span>
+      <span class="state pause">awaiting_review</span><span class="arrow">→</span>
+      <span class="state run">applying</span><span class="arrow">→</span>
+      <span class="state done">completed</span>
+    </div>
+    <div class="states">
+      <span class="state pause">awaiting_review</span><span class="arrow">→</span>
+      <span class="state bad">rejected</span>
+      <span style="color:var(--muted);margin-left:14px">· any state <span class="arrow">→</span></span>
+      <span class="state bad">failed</span>
+    </div>
+    <ul class="plain">
+      <li><b>detecting</b> — worker runs Detector fan-out → Reconciler → Summarizer, writing step rows as chunks finish.</li>
+      <li><b>awaiting_review</b> — proposal (entities + locations + masks + summary + detected client) is filed; the worker <b>releases the run</b> and moves on. No thread is held.</li>
+      <li><b>applying</b> — triggered by the reviewer's approval call; <code class="inline">document.apply_masks</code> runs, dictionary + registry are written. Cheap and deterministic, so it can run inline on approval.</li>
+      <li><b>rejected</b> — reviewer declines; nothing is masked, no dictionary writes, run closed with the reason recorded.</li>
+    </ul>
+    <div class="callout">
+      <p class="ctitle">Who reviews — not necessarily who submitted</p>
+      <p>Per the RBAC matrix, the mask/approval step is a <b>KM-reviewer / KM-governance</b> capability, and the identity that produced a run is never the one that approves it. A <code class="inline">delivery</code> user can submit a document, but the approval that promotes masks to <code class="inline">approved</code> and applies them is a reviewer's action.</p>
+    </div>
+  </section>
+
+  <!-- 12 FLOW -->
+  <section id="flow">
+    <div class="sec-head"><span class="num">12</span><h2>End-to-end flow</h2></div>
+    <div class="timeline">
+      <div class="tstep"><div class="tnode"><div class="circle">1</div></div><div class="tcard">Upload → <code class="inline">POST /documents</code> stores the file, returns <code class="inline">document_id</code>.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">2</div></div><div class="tcard"><code class="inline">POST /runs {agent_id:"sanitization", input:{document_id}}</code> → <code class="inline">pending</code> row, returns immediately.</div></div>
+      <div class="tstep milestone"><div class="tnode"><div class="circle">3</div></div><div class="tcard"><b>Worker</b> picks it up → <code class="inline">detecting</code>. Deterministic dictionary pass first, then chunk fan-out.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">4</div></div><div class="tcard"><b>Detector</b> runs per chunk via a Bedrock tool-use loop calling <code class="inline">fs.read_document</code>; records candidate spans with exact locations + confidence.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">5</div></div><div class="tcard"><b>Reconciler</b> merges + dedupes across chunks, resolves aliases, assigns consistent mask tokens; new entities written <code class="inline">pending_approval</code>.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">6</div></div><div class="tcard"><b>Summarizer</b> drafts the sanitized metadata for Tagging and identifies the client.</div></div>
+      <div class="tstep human"><div class="tnode"><div class="circle">7</div></div><div class="tcard"><b>review.create_task</b> files the proposal → run parks at <code class="inline">awaiting_review</code>. Worker moves on.</div></div>
+      <div class="tstep human"><div class="tnode"><div class="circle">8</div></div><div class="tcard"><b>Reviewer</b> opens the proposal, checks entities/locations/summary, and edits or approves via <code class="inline">POST /runs/{id}/review</code>.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">9</div></div><div class="tcard">On approve → <code class="inline">applying</code>: <code class="inline">document.apply_masks</code> replaces every approved span; <code class="inline">masking_dictionary.approve</code> promotes entities; <code class="inline">client_account.get_or_create</code> + <code class="inline">source_registry.capture</code> link + store identity.</div></div>
+      <div class="tstep milestone"><div class="tnode"><div class="circle">10</div></div><div class="tcard">Masked document + sanitized metadata written to <code class="inline">backend/outputs/sanitization/&lt;run_id&gt;/</code>; run <code class="inline">completed</code>. Dictionary is now richer for the next document.</div></div>
+    </div>
+  </section>
+
+  <!-- 13 DATA MODEL -->
+  <section id="data">
+    <div class="sec-head"><span class="num">13</span><h2>Data model additions</h2></div>
+    <table class="board">
+      <thead><tr><th style="width:210px">Table</th><th>Key columns</th><th style="width:100px">Status</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">uploaded_documents</td><td class="small">id, filename, content_type, stored_path, uploaded_by, uploaded_at</td><td class="center"><span class="pill entity">New</span></td></tr>
+        <tr><td class="anm">masking_dictionary</td><td class="small">raw_value, normalized_key, entity_type, mask_token, client_account_id?, status (pending_approval / approved), created_by_run_id</td><td class="center"><span class="pill entity">New</span></td></tr>
+        <tr><td class="anm">masking_occurrences</td><td class="small">run_id, dictionary_id, chunk_id, start_offset, end_offset — where each entity appeared, for exact application + audit</td><td class="center"><span class="pill entity">New</span></td></tr>
+        <tr><td class="anm">source_registry</td><td class="small">client_account_id, run_id, raw_identity_json — write-only</td><td class="center"><span class="pill entity">New</span></td></tr>
+        <tr><td class="anm">document_metadata</td><td class="small">run_id, sanitized_summary, metadata_json (topic/domain/tech/geo/engagement) — the Tagging hand-off; no client identity</td><td class="center"><span class="pill entity">New</span></td></tr>
+        <tr><td class="anm">agent_runs</td><td class="small">Extended: <code class="inline">status</code> gains <code class="inline">detecting / awaiting_review / applying / rejected</code></td><td class="center"><span class="pill keep">Extended</span></td></tr>
+        <tr><td class="anm">review_items</td><td class="small">Reused from Step 0 — run_id, reviewer_id, decision, notes, decided_at</td><td class="center"><span class="pill keep">Reused</span></td></tr>
+        <tr><td class="anm">client_accounts / account_ownership</td><td class="small">Reused from Step 0.5 — linked here during review, not at upload</td><td class="center"><span class="pill keep">Reused</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 14 EXECUTION -->
+  <section id="exec">
+    <div class="sec-head"><span class="num">14</span><h2>Execution model</h2></div>
+    <ul class="plain">
+      <li><b>DB-polling worker, no broker.</b> <code class="inline">POST /runs</code> inserts <code class="inline">pending</code> and returns; a worker loop executes detection. No Redis/Celery at this scale.</li>
+      <li><b>The pause needs no held thread.</b> The worker files the review and releases the run — <code class="inline">awaiting_review</code> is just a row state. Approval is a separate inbound request that drives Phase 2.</li>
+      <li><b>Incremental step rows</b> written as each chunk finishes, so <code class="inline">GET /runs/{id}</code> is a live progress view on long documents.</li>
+      <li><b>Application is inline &amp; deterministic</b> — cheap enough to run inside the approval request; no second background hop needed.</li>
+    </ul>
+  </section>
+
+  <!-- 15 FILES -->
+  <section id="files">
+    <div class="sec-head"><span class="num">15</span><h2>File layout</h2></div>
+    <div class="filetree">naviknow/<br>
+&nbsp;&nbsp;<span class="new">mcp_server/</span> <span class="comment"># naviknow-mcp, stdio, owned by backend</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">server.py</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">tools/fs_read_document.py</span> <span class="comment"># MCP tool</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">tools/review_create_task.py</span> <span class="comment"># MCP tool</span><br>
+&nbsp;&nbsp;backend/app/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">mcp_client.py</span> <span class="comment"># persistent MCP ClientSession</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;llm/bedrock_client.py <span class="comment"># EXTENDED - Converse loop + prompt caching + batch</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;agents/<span class="new">sanitization/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">agent.py</span> <span class="comment"># orchestrates pre-pass + 3 sub-agents + phases</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">ner_prepass.py</span> <span class="comment"># regex + local NER; free candidate detection</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">detector.py</span> <span class="comment"># classify deduped unique candidate set (LLM)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">reconciler.py</span> <span class="comment"># dedupe + alias + mask tokens</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">summarizer.py</span> <span class="comment"># sanitized metadata for Tagging</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">apply_masks.py</span> <span class="comment"># deterministic span replacement</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">documents/</span> <span class="comment"># upload endpoint + raw doc storage + chunker</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">masking/</span> <span class="comment"># dictionary + source_registry (protected calls)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">review/</span> <span class="comment"># POST /runs/{id}/review + queue endpoints</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">worker.py</span> <span class="comment"># DB-polling background worker</span></div>
+  </section>
+
+  <!-- 16 DECISIONS -->
+  <section id="decisions">
+    <div class="sec-head"><span class="num">16</span><h2>Decisions log</h2></div>
+    <table class="decisionlog">
+      <tbody>
+        <tr><td>Two-phase + human gate</td><td class="small">Detection (LLM) and application (deterministic code) are split by a mandatory review pause. Run parks at <code class="inline">awaiting_review</code>.</td></tr>
+        <tr><td>Cold start</td><td class="small">Dictionary starts empty; LLM does everything at first. Deterministic coverage grows as approved runs populate the dictionary.</td></tr>
+        <tr><td>Chunking</td><td class="small">Structural boundaries + exact char spans + small overlap + running known-entities context.</td></tr>
+        <tr><td>Sub-agents</td><td class="small">Detector (fan-out) · Reconciler (reduce, mostly deterministic) · Summarizer (metadata). Internal steps, one catalogued agent.</td></tr>
+        <tr><td>Cost — pre-pass + dedupe</td><td class="small">Local regex/NER pre-pass (free) + dedupe to distinct candidates; LLM classifies only the unique set. Cost scales with distinct entities, not page count.</td></tr>
+        <tr><td>Cost — free levers</td><td class="small">Bedrock Batch inference (−50%, fits the async pause), prompt caching of skill + known-entities context, compact JSON output. Target ~$0.10–0.30 / 100-pg doc.</td></tr>
+        <tr><td>Cost — model tiering</td><td class="small">Haiku-for-scan / Sonnet-for-tie-breaks held until detection recall is measured on real docs (a miss is a leak).</td></tr>
+        <tr><td>Metadata &amp; client tagging</td><td class="small">Sanitized metadata → Tagging (no identity). "Tag by client" via protected <code class="inline">client_account_id</code> only. Guardrail §04 preserved.</td></tr>
+        <tr><td>Masking is code</td><td class="small"><code class="inline">document.apply_masks</code> is a protected deterministic function, never a model tool.</td></tr>
+        <tr><td>Who approves</td><td class="small">KM-reviewer / KM-governance. Submitter ≠ approver.</td></tr>
+        <tr><td>Client tagging at upload</td><td class="small">Always blank — client identified by the agent, confirmed &amp; linked at review.</td></tr>
+        <tr><td>MCP server</td><td class="small">Real MCP protocol server (<code class="inline">naviknow-mcp</code>), stdio, subprocess owned by the backend. Only <code class="inline">fs.read_document</code> + <code class="inline">review.create_task</code> exposed to the model.</td></tr>
+        <tr><td>Execution</td><td class="small">DB-polling worker, no broker. Pause is a row state, not a held thread. Application inline on approval.</td></tr>
+        <tr><td>Mask-token scope</td><td class="small"><b>Global across the repository</b> — the masking dictionary owns one stable token per canonical client, reused in every document, so the same client always reads identically (and Search/Deck can rely on it).</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>NaviKnow · Sanitization Agent (A-01) Detailed Design · v3</span>
+    <span>Resolved: mask tokens are GLOBAL — one stable token per canonical client across the repository.</span>
+  </div>
+</footer>
+
+</body>
+</html>

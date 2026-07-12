@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NaviKnow — Tagging Agent (A-02) Detailed Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14203B; --ink-soft:#3C4A66; --muted:#697692;
+    --paper:#EBEEF4; --paper-2:#E2E7F0; --panel:#FFFFFF; --line:#D2D9E6;
+    --navy:#0D3C6E; --navy-deep:#0A2C52;
+    --signal:#2D6FE0; --signal-bg:#E6EFFB;
+    --brass:#A9791F; --brass-soft:#C79B45; --brass-bg:#FBF2E0; --brass-line:#E1BE82;
+    --skill:#1F7A66; --skill-bg:#E2F2ED; --skill-line:#9FCFC0;
+    --ready:#1E7A46; --ready-bg:#E4F2E9; --ready-line:#A9D6BC;
+    --mock:#B06A12; --mock-bg:#F7ECDC; --mock-line:#E1BE82;
+    --danger:#A83232; --danger-bg:#F8E8E8; --danger-line:#E3AFAF;
+    --radius:14px; --maxw:1200px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto;} *{animation:none!important;transition:none!important;}}
+  body{margin:0;background:radial-gradient(120% 60% at 100% 0%, #F3F6FB 0%, var(--paper) 55%) fixed;color:var(--ink);font-family:"Inter",system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+  a{color:var(--signal);text-decoration:none;} a:hover{text-decoration:underline;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;}
+  code.inline{font-family:"IBM Plex Mono";background:var(--paper-2);padding:1px 6px;border-radius:5px;font-size:.86em;}
+
+  .mast{background:linear-gradient(155deg,var(--navy-deep) 0%, var(--navy) 62%, #124d8a 100%);color:#EAF1FB;border-bottom:3px solid var(--skill-line);position:relative;overflow:hidden;}
+  .mast::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:34px 34px;mask:linear-gradient(180deg,#000,transparent 85%);-webkit-mask:linear-gradient(180deg,#000,transparent 85%);pointer-events:none;}
+  .mast .wrap{position:relative;z-index:1;padding-top:50px;padding-bottom:50px;}
+  .kicker{font-family:"IBM Plex Mono",monospace;font-size:12.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--skill-line);margin:0 0 18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+  .kicker .dot{width:6px;height:6px;background:var(--skill-line);border-radius:50%;display:inline-block;}
+  h1.title{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:clamp(1.9rem,4.4vw,3rem);line-height:1.08;margin:0;letter-spacing:-.02em;}
+  h1.title span{color:var(--skill-line);}
+  .lede{max-width:70ch;margin:20px 0 0;font-size:1.05rem;color:#CFDCED;}
+  .mast-meta{margin-top:24px;display:flex;flex-wrap:wrap;gap:10px 26px;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:#A9C0DC;}
+  .mast-meta b{color:#EAF1FB;font-weight:500;}
+
+  nav.toc{position:sticky;top:0;z-index:20;background:rgba(235,238,244,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);}
+  nav.toc .wrap{display:flex;gap:4px;flex-wrap:wrap;padding-top:10px;padding-bottom:10px;align-items:center;}
+  nav.toc a{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.01em;color:var(--ink-soft);padding:6px 8px;border-radius:8px;text-decoration:none;white-space:nowrap;}
+  nav.toc a:hover{background:var(--paper-2);color:var(--navy);}
+  nav.toc .brandmark{font-family:"Space Grotesk";font-weight:700;color:var(--navy);margin-right:auto;letter-spacing:-.01em;font-size:14px;}
+
+  section{padding:56px 0 8px;}
+  .sec-head{display:flex;align-items:baseline;gap:18px;margin-bottom:8px;}
+  .num{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:14px;color:var(--skill);border:1px solid var(--skill);border-radius:7px;padding:3px 9px;flex:none;background:#fff;}
+  h2{font-family:"Space Grotesk",sans-serif;font-weight:600;letter-spacing:-.015em;font-size:clamp(1.35rem,2.6vw,1.9rem);margin:0;line-height:1.1;color:var(--ink);}
+  h3{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:1.08rem;color:var(--navy);margin:22px 0 8px;}
+  .sec-sub{color:var(--muted);margin:14px 0 26px;max-width:80ch;font-size:.99rem;}
+  p{margin:0 0 14px;}
+  ul.plain{margin:0 0 14px;padding-left:20px;color:var(--ink-soft);font-size:.94rem;}
+  ul.plain li{margin-bottom:6px;}
+
+  .board-legend{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0 18px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;}
+  .lg{display:flex;align-items:center;gap:7px;color:var(--ink-soft);}
+  .sw{width:12px;height:12px;border-radius:4px;border:1px solid;flex:none;}
+  .sw.tool{background:var(--signal-bg);border-color:var(--signal);}
+  .sw.prot{background:var(--brass-bg);border-color:var(--brass-line);}
+  .sw.skill{background:var(--skill-bg);border-color:var(--skill-line);}
+
+  table.board{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:.86rem;margin-bottom:20px;}
+  table.board th,table.board td{padding:11px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;}
+  table.board thead th{background:var(--navy);color:#EAF1FB;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:500;}
+  table.board tbody tr:last-child td{border-bottom:none;}
+  table.board td.anm{font-family:"Space Grotesk";font-weight:600;color:var(--navy);white-space:nowrap;}
+  table.board td.small{color:var(--ink-soft);}
+  table.board td.center{text-align:center;}
+
+  .pillrow{display:flex;flex-wrap:wrap;gap:5px;}
+  .pill{font-family:"IBM Plex Mono",monospace;font-size:10.8px;padding:3px 8px;border-radius:6px;border:1px solid;white-space:nowrap;}
+  .pill.tool{color:#1a4fa3;background:var(--signal-bg);border-color:#B7CDF2;}
+  .pill.prot{color:#8A5A10;background:var(--brass-bg);border-color:var(--brass-line);}
+  .pill.skill{color:var(--skill);background:var(--skill-bg);border-color:var(--skill-line);}
+  .pill.cat{color:var(--navy);background:#E6EFFB;border-color:#B7CDF2;}
+  .pill.no{color:var(--danger);background:var(--danger-bg);border-color:var(--danger-line);}
+  .pill.keep{color:var(--ready);background:var(--ready-bg);border-color:var(--ready-line);}
+
+  .callout{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--skill);border-radius:12px;padding:18px 20px;margin:20px 0;}
+  .callout.blue{border-left-color:var(--signal);}
+  .callout.danger{border-left-color:var(--danger);}
+  .callout.green{border-left-color:var(--ready);}
+  .callout .ctitle{font-family:"Space Grotesk";font-weight:600;color:var(--navy);margin:0 0 6px;font-size:1.01rem;}
+  .callout p{margin:0;color:var(--ink-soft);font-size:.93rem;}
+  .callout p+p{margin-top:8px;}
+
+  .timeline{display:flex;flex-direction:column;gap:0;margin-top:6px;}
+  .tstep{display:grid;grid-template-columns:44px 1fr;gap:14px;position:relative;padding-bottom:4px;}
+  .tstep:not(:last-child)::before{content:"";position:absolute;left:21px;top:44px;bottom:-4px;width:2px;background:var(--line);}
+  .tnode .circle{width:32px;height:32px;border-radius:50%;background:var(--navy);color:#fff;font-family:"Space Grotesk";font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none;z-index:1;}
+  .tstep.milestone .tnode .circle{background:var(--skill);}
+  .tstep.human .tnode .circle{background:var(--brass);}
+  .tcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:.88rem;}
+  .tcard b{font-family:"Space Grotesk";color:var(--navy);}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:6px 0 20px;}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;}
+  .box h4{font-family:"Space Grotesk";margin:0 0 8px;color:var(--navy);font-size:1rem;}
+  .box .tag{font-family:"IBM Plex Mono";font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--skill);display:block;margin-bottom:6px;}
+  .box.against{border-left:4px solid var(--danger);}
+  .box.for{border-left:4px solid var(--ready);}
+  .box p{font-size:.9rem;color:var(--ink-soft);margin:0;}
+  @media(max-width:820px){ .grid2{grid-template-columns:1fr;} }
+
+  .states{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 20px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;}
+  .state{padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink-soft);}
+  .state.run{background:var(--signal-bg);border-color:#B7CDF2;color:#1a4fa3;}
+  .state.pause{background:var(--brass-bg);border-color:var(--brass-line);color:#8A5A10;}
+  .state.done{background:var(--ready-bg);border-color:var(--ready-line);color:var(--ready);}
+  .state.bad{background:var(--danger-bg);border-color:var(--danger-line);color:var(--danger);}
+  .arrow{color:var(--muted);}
+
+  .filetree{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-family:"IBM Plex Mono",monospace;font-size:.82rem;color:var(--ink-soft);overflow-x:auto;line-height:1.7;}
+  .filetree .new{color:var(--ready);font-weight:600;}
+  .filetree .shared{color:var(--signal);font-weight:600;}
+  .filetree .comment{color:var(--muted);}
+
+  .decisionlog{border-collapse:collapse;width:100%;font-size:.86rem;}
+  .decisionlog td{padding:9px 4px;border-bottom:1px dashed var(--line);vertical-align:top;}
+  .decisionlog td:first-child{width:230px;font-family:"Space Grotesk";font-weight:600;color:var(--navy);}
+
+  footer{margin-top:56px;background:var(--navy-deep);color:#A9C0DC;border-top:3px solid var(--skill-line);}
+  footer .wrap{padding:30px 28px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  footer b{color:#EAF1FB;font-weight:500;}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="wrap">
+    <p class="kicker"><span class="dot"></span> NaviKnow · Agent Platform <span class="dot"></span> A-02 Detailed Design</p>
+    <h1 class="title">Tagging Agent — classify sanitized content against <span>a fixed, governed vocabulary</span></h1>
+    <p class="lede">The second real agent, built alongside Sanitization. It never sees a raw document — only Sanitization's masked output — and maps that content to a controlled tag taxonomy (domain, use-case, technology, geography, engagement type). Client name is deliberately not a tag category, and a deterministic validator makes an out-of-vocabulary tag structurally impossible to emit.</p>
+    <div class="mast-meta">
+      <span>AGENT &nbsp;<b>A-02 · Tagging</b></span>
+      <span>MODE &nbsp;<b>Background + review pause</b></span>
+      <span>INPUT &nbsp;<b>Sanitization's output only</b></span>
+      <span>TARGET COST &nbsp;<b>~$0.02–0.05 / doc</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <span class="brandmark">NaviKnow</span>
+    <a href="#position">01 Where it sits</a>
+    <a href="#contrast">02 Contrast with A-01</a>
+    <a href="#scope">03 Input scope</a>
+    <a href="#vocab">04 The vocabulary</a>
+    <a href="#process">05 Process</a>
+    <a href="#guardrails">06 Guardrails</a>
+    <a href="#tools">07 Tools vs protected</a>
+    <a href="#skill">08 Skill</a>
+    <a href="#taxonomy">09 Taxonomy governance</a>
+    <a href="#cost">10 Cost</a>
+    <a href="#lifecycle">11 Lifecycle</a>
+    <a href="#flow">12 End-to-end flow</a>
+    <a href="#data">13 Data model</a>
+    <a href="#shared">14 Shared with A-01</a>
+    <a href="#decisions">15 Decisions log</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <!-- 01 POSITION -->
+  <section id="position">
+    <div class="sec-head"><span class="num">01</span><h2>Where it sits — downstream of Sanitization</h2></div>
+    <p class="sec-sub">Tagging consumes what Sanitization produces. It runs on a <b>completed, approved</b> Sanitization run, never on a raw upload.</p>
+    <div class="timeline">
+      <div class="tstep"><div class="tnode"><div class="circle">1</div></div><div class="tcard"><b>Sanitization (A-01)</b> masks a document and, via its Summarizer, emits <code class="inline">document_metadata</code> — a sanitized summary + free-form hints (topic/domain/tech/geo/engagement). Reviewer approves.</div></div>
+      <div class="tstep milestone"><div class="tnode"><div class="circle">2</div></div><div class="tcard"><b>Tagging (A-02)</b> takes that masked output + metadata hints and maps them to the <b>controlled vocabulary</b>, validating every tag. It is the authority on tags; Sanitization's hints are just a warm start.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">3</div></div><div class="tcard">Approved tags become the searchable index Search (A-05) and Deck (A-06) query later — by topic, never by client.</div></div>
+    </div>
+    <div class="callout blue">
+      <p class="ctitle">For now: manual chaining; later: Coordinator</p>
+      <p>Until the Coordinator (A-04) exists, a user triggers Tagging on a completed Sanitization run by selecting it. A-04 will chain Sanitization → Tagging automatically. The one-run-per-document contract is identical to A-01, so nothing about Tagging changes when the Coordinator arrives.</p>
+    </div>
+  </section>
+
+  <!-- 02 CONTRAST -->
+  <section id="contrast">
+    <div class="sec-head"><span class="num">02</span><h2>The contrast with Sanitization — best-match, not exhaustive</h2></div>
+    <p class="sec-sub">The two agents share infrastructure but have opposite failure modes, and that changes how each is built.</p>
+    <div class="grid2">
+      <div class="box against">
+        <span class="tag">Sanitization (A-01)</span>
+        <h4>Must be exhaustive</h4>
+        <p>Every occurrence of every client identifier must be caught — a single miss is a leak. It reads every page. That's why it's token-heavy and needs the NER pre-pass + dedupe cost work.</p>
+      </div>
+      <div class="box for">
+        <span class="tag">Tagging (A-02)</span>
+        <h4>Best-match is enough</h4>
+        <p>Assigning "domain: retail" needs the gist, not every sentence. Tagging works off the sanitized summary + representative content, not an exhaustive scan. A missed nuance is a re-tag, not a breach — so it's cheap (one or few LLM calls) and low-risk.</p>
+      </div>
+    </div>
+    <div class="callout">
+      <p class="ctitle">Why this matters</p>
+      <p>Because Tagging is best-match, it doesn't need chunk fan-out, exact character spans, or a NER pre-pass. It largely maps Sanitization's existing metadata hints onto the validated vocabulary and fills gaps — which is why its cost is an order of magnitude below Sanitization's.</p>
+    </div>
+  </section>
+
+  <!-- 03 SCOPE -->
+  <section id="scope">
+    <div class="sec-head"><span class="num">03</span><h2>Input scope</h2></div>
+    <ul class="plain">
+      <li><b>One sanitized run per Tagging run.</b> Input is a reference to a completed, approved Sanitization run — its masked output and <code class="inline">document_metadata</code>. Same one-per-run contract as A-01.</li>
+      <li><b>Never a raw document.</b> Tagging has no <code class="inline">fs.read_document</code> tool and no path to the uploads directory — it can only see Sanitization's sanitized artifact. This is structural, not a policy.</li>
+      <li><b>Eligibility gate (later):</b> the Coordinator will refuse to run Tagging on a Sanitization run that isn't <code class="inline">completed</code> + approved. For now the trigger endpoint enforces that check directly.</li>
+    </ul>
+  </section>
+
+  <!-- 04 VOCABULARY -->
+  <section id="vocab">
+    <div class="sec-head"><span class="num">04</span><h2>The controlled vocabulary — five categories, fixed and governed</h2></div>
+    <p class="sec-sub">A closed set of categories, each with a governed list of allowed values. Client identity is deliberately absent.</p>
+    <table class="board">
+      <thead><tr><th style="width:200px">Category</th><th>Example values</th><th style="width:110px">Multi?</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">domain</td><td class="small">retail, banking, healthcare, public-sector, telecom…</td><td class="center">single</td></tr>
+        <tr><td class="anm">use_case</td><td class="small">data-migration, cloud-modernisation, fraud-detection, CX-transformation…</td><td class="center">multi</td></tr>
+        <tr><td class="anm">technology</td><td class="small">AWS, Azure, Snowflake, SAP, React, Kafka…</td><td class="center">multi</td></tr>
+        <tr><td class="anm">geography</td><td class="small">NA, EMEA, APAC, India, UK… (region, not client site)</td><td class="center">multi</td></tr>
+        <tr><td class="anm">engagement_type</td><td class="small">assessment, implementation, managed-service, advisory…</td><td class="center">single</td></tr>
+        <tr><td class="anm">CLIENT_*</td><td class="small">Not a category. There is no client tag.</td><td class="center"><span class="pill no">Never</span></td></tr>
+      </tbody>
+    </table>
+    <div class="callout danger">
+      <p class="ctitle">Client is not a tag — by design</p>
+      <p>Adding a client tag would reintroduce exactly the identity leak Sanitization removes and §04 of the catalogue forbids. "Organise by client" is served only through the protected <code class="inline">client_account_id</code> link Sanitization writes — never through the taggable, un-permissioned index Tagging produces.</p>
+    </div>
+  </section>
+
+  <!-- 05 PROCESS -->
+  <section id="process">
+    <div class="sec-head"><span class="num">05</span><h2>Process — propose, hard-validate, flag, review, apply</h2></div>
+    <div class="timeline">
+      <div class="tstep"><div class="tnode"><div class="circle">1</div></div><div class="tcard"><b>Load sanitized input.</b> The masked document + Sanitization's metadata hints. No LLM cost yet.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">2</div></div><div class="tcard"><b>Propose tags (LLM).</b> One pass over the sanitized summary + representative content proposes candidate tags per category with confidence, using the <code class="inline">tagging-classification</code> skill and the current vocabulary as the allowed menu.</div></div>
+      <div class="tstep milestone"><div class="tnode"><div class="circle">3</div></div><div class="tcard"><b><code class="inline">tags.validate</code> (protected, deterministic).</b> Hard-rejects any tag outside the approved vocabulary — the model <b>physically cannot</b> apply an out-of-vocab tag. Unknown-but-plausible tags become <code class="inline">pending_approval</code> proposals for governance, never applied silently.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">4</div></div><div class="tcard"><b>Flag low-confidence.</b> Tags below threshold are flagged for reviewer confirmation, not auto-applied — "flag, don't guess," same rule as A-01.</div></div>
+      <div class="tstep human"><div class="tnode"><div class="circle">5</div></div><div class="tcard"><b>Conditional review pause.</b> If every tag is high-confidence and in-vocabulary, they auto-apply and the run completes — no pause. Only if there are low-confidence tags or new-term proposals does <code class="inline">review.create_task</code> file a proposal and park the run at <code class="inline">awaiting_review</code> for KM-reviewer / KM-governance.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">6</div></div><div class="tcard"><b>Apply.</b> Confirmed (or auto-applied) tags are written to <code class="inline">run_tags</code> and the document becomes searchable by them. <code class="inline">audit_log.write</code> records it.</div></div>
+    </div>
+  </section>
+
+  <!-- 06 GUARDRAILS -->
+  <section id="guardrails">
+    <div class="sec-head"><span class="num">06</span><h2>Guardrails — structural, not prompted</h2></div>
+    <ul class="plain">
+      <li><b>Cannot emit an out-of-vocabulary tag.</b> <code class="inline">tags.validate</code> is a deterministic hard gate — anything not in the approved list is rejected or downgraded to a proposal. Not a prompt instruction the model could argue around.</li>
+      <li><b>Never receives unsanitized input.</b> Its only input path is a completed Sanitization run's masked output. No raw-document tool exists on this agent.</li>
+      <li><b>No access to <code class="inline">masking_dictionary</code> or <code class="inline">source_registry</code>.</b> It cannot reconstruct client identity even if asked to — those calls aren't wired to it at all.</li>
+      <li><b>Low-confidence tags are flagged, never auto-applied.</b> A reviewer confirms them before they hit the index.</li>
+    </ul>
+    <div class="callout danger">
+      <p class="ctitle">The point of the validator</p>
+      <p>"Only approved tags exist in the index" is a guarantee only if the code path that writes tags rejects everything else — same reasoning as Sanitization's <code class="inline">apply_masks</code> being deterministic. The LLM proposes; the validator decides what can be written.</p>
+    </div>
+  </section>
+
+  <!-- 07 TOOLS -->
+  <section id="tools">
+    <div class="sec-head"><span class="num">07</span><h2>Tools (MCP) vs. protected calls</h2></div>
+    <div class="board-legend">
+      <span class="lg"><span class="sw tool"></span> MCP tool — the model may call it</span>
+      <span class="lg"><span class="sw prot"></span> Protected call — agent code only, never the model</span>
+    </div>
+    <table class="board">
+      <thead><tr><th style="width:240px">Call</th><th style="width:110px">Type</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">review.create_task</td><td class="center"><span class="pill tool">MCP tool</span></td><td class="small">Files the tag proposal for human review — transitions the run to <code class="inline">awaiting_review</code>. Shared with A-01.</td></tr>
+        <tr><td class="anm">tags.validate</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Deterministic hard-reject of out-of-vocab tags; routes unknowns to <code class="inline">pending_approval</code>. Agent code, never the model.</td></tr>
+        <tr><td class="anm">tags.apply</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Writes confirmed tags to <code class="inline">run_tags</code> on approval. Agent code.</td></tr>
+        <tr><td class="anm">audit_log.write</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Trail of proposal, validation, and approval. Agent code.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout blue">
+      <p class="ctitle">Note the absence</p>
+      <p>Tagging has <b>no</b> <code class="inline">fs.read_document</code>, no <code class="inline">masking_dictionary.*</code>, no <code class="inline">source_registry.*</code>. The tool surface itself is the guardrail — it reuses the shared MCP server born with A-01 but is granted only <code class="inline">review.create_task</code>.</p>
+    </div>
+  </section>
+
+  <!-- 08 SKILL -->
+  <section id="skill">
+    <div class="sec-head"><span class="num">08</span><h2>Skill</h2></div>
+    <table class="board">
+      <thead><tr><th style="width:250px">Skill</th><th>What it encodes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill skill">tagging-classification</span></td><td class="small">How to read sanitized content and map it to the controlled vocabulary: pick the single best value for single-valued categories, the relevant set for multi-valued ones, calibrate confidence, prefer an existing vocabulary term over inventing one, and flag rather than guess when unsure.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 09 TAXONOMY GOVERNANCE -->
+  <section id="taxonomy">
+    <div class="sec-head"><span class="num">09</span><h2>Taxonomy governance — who owns the vocabulary</h2></div>
+    <p class="sec-sub">The vocabulary is a governed resource, mirroring the masking dictionary's approval flow. This maps directly onto the Step 0.5 RBAC matrix.</p>
+    <table class="board">
+      <thead><tr><th style="width:200px">Action</th><th>Who</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">Manage tag taxonomy</td><td class="small"><span class="pill cat">km_governance</span> — add/retire/rename approved values</td></tr>
+        <tr><td class="anm">Propose a tag</td><td class="small"><span class="pill cat">practice_lead</span> — proposes; lands as <code class="inline">pending_approval</code></td></tr>
+        <tr><td class="anm">Confirm tag applications</td><td class="small"><span class="pill cat">km_governance</span> <span class="pill cat">km_reviewer</span></td></tr>
+      </tbody>
+    </table>
+    <div class="callout green">
+      <p class="ctitle">Same feedback loop as the masking dictionary</p>
+      <p>A candidate the agent surfaces that isn't yet in the vocabulary becomes a <code class="inline">pending_approval</code> proposal. Governance approves it into the vocabulary; from then on the deterministic validator accepts it. The taxonomy grows by governed approval, never by the agent inventing terms at runtime.</p>
+    </div>
+  </section>
+
+  <!-- 10 COST -->
+  <section id="cost">
+    <div class="sec-head"><span class="num">10</span><h2>Cost — an order of magnitude below Sanitization</h2></div>
+    <p class="sec-sub">Because Tagging is best-match and works off the summary, it's cheap. Model: Claude Sonnet 4.5 on Bedrock ($3 / 1M in, $15 / 1M out).</p>
+    <table class="board">
+      <thead><tr><th>Pass</th><th style="width:120px">Input tok</th><th style="width:120px">Output tok</th><th style="width:90px">Cost</th></tr></thead>
+      <tbody>
+        <tr><td class="small">Load sanitized input + metadata</td><td class="small">0 (no LLM)</td><td class="small">0</td><td class="small">$0.00</td></tr>
+        <tr><td class="small">Propose tags (summary + representative content + vocabulary menu)</td><td class="small">~8,000</td><td class="small">~800</td><td class="small">$0.036</td></tr>
+        <tr><td class="small"><code class="inline">tags.validate</code> / apply</td><td class="small">0 (deterministic)</td><td class="small">0</td><td class="small">$0.00</td></tr>
+        <tr><td class="anm">Total</td><td class="small">~8,000</td><td class="small">~800</td><td class="anm">≈ $0.04</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:.85rem;color:var(--muted)">With Bedrock Batch (−50%) + prompt-caching the vocabulary menu and skill (identical across every run), effectively <b>~$0.02 / document</b>. No NER pre-pass, no chunk fan-out — none of A-01's cost machinery is needed here.</p>
+  </section>
+
+  <!-- 11 LIFECYCLE -->
+  <section id="lifecycle">
+    <div class="sec-head"><span class="num">11</span><h2>Run lifecycle</h2></div>
+    <p class="sec-sub">Identical state machine to Sanitization — it reuses the same worker and review infrastructure.</p>
+    <div class="states">
+      <span class="state">pending</span><span class="arrow">→</span>
+      <span class="state run">tagging</span><span class="arrow">→</span>
+      <span class="state pause">awaiting_review</span><span class="arrow">→</span>
+      <span class="state run">applying</span><span class="arrow">→</span>
+      <span class="state done">completed</span>
+    </div>
+    <div class="states">
+      <span class="state pause">awaiting_review</span><span class="arrow">→</span>
+      <span class="state bad">rejected</span>
+      <span style="color:var(--muted);margin-left:14px">· any state <span class="arrow">→</span></span>
+      <span class="state bad">failed</span>
+    </div>
+    <ul class="plain">
+      <li><b>tagging</b> — worker runs the propose + validate passes; no chunk fan-out, so it's fast.</li>
+      <li><b>awaiting_review</b> — proposal filed; worker releases the run. Reviewer confirms/edits/rejects.</li>
+      <li><b>applying</b> — on approval, <code class="inline">tags.apply</code> writes <code class="inline">run_tags</code>; cheap and inline.</li>
+    </ul>
+  </section>
+
+  <!-- 12 FLOW -->
+  <section id="flow">
+    <div class="sec-head"><span class="num">12</span><h2>End-to-end flow</h2></div>
+    <div class="timeline">
+      <div class="tstep"><div class="tnode"><div class="circle">1</div></div><div class="tcard">User picks a completed + approved Sanitization run and submits <code class="inline">POST /runs {agent_id:"tagging", input:{sanitization_run_id}}</code> → <code class="inline">pending</code>, returns immediately.</div></div>
+      <div class="tstep milestone"><div class="tnode"><div class="circle">2</div></div><div class="tcard"><b>Worker</b> picks it up → <code class="inline">tagging</code>. Loads the sanitized output + metadata; rejects if the source run isn't approved.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">3</div></div><div class="tcard">LLM proposes tags per category against the current vocabulary; <code class="inline">tags.validate</code> hard-filters; low-confidence flagged.</div></div>
+      <div class="tstep human"><div class="tnode"><div class="circle">4</div></div><div class="tcard"><code class="inline">review.create_task</code> files the proposal → <code class="inline">awaiting_review</code>. Reviewer confirms via <code class="inline">POST /runs/{id}/review</code>.</div></div>
+      <div class="tstep milestone"><div class="tnode"><div class="circle">5</div></div><div class="tcard">On approve → <code class="inline">tags.apply</code> writes <code class="inline">run_tags</code>; document is now searchable by topic. Run <code class="inline">completed</code>. Any new-term proposals sit in the vocabulary queue for governance.</div></div>
+    </div>
+  </section>
+
+  <!-- 13 DATA MODEL -->
+  <section id="data">
+    <div class="sec-head"><span class="num">13</span><h2>Data model additions</h2></div>
+    <table class="board">
+      <thead><tr><th style="width:200px">Table</th><th>Key columns</th><th style="width:100px">Status</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">tag_vocabulary</td><td class="small">id, category, value, status (approved / pending_approval), proposed_by, created_at — the governed controlled vocabulary</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">run_tags</td><td class="small">run_id, tag_id, confidence, status (applied / flagged / confirmed) — tags attached to a Tagging run</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">document_metadata</td><td class="small">Produced by A-01, consumed here as the warm-start hints (read-only for Tagging)</td><td class="center"><span class="pill keep">From A-01</span></td></tr>
+        <tr><td class="anm">agent_runs</td><td class="small">Reused — a Tagging run's <code class="inline">input_json</code> holds <code class="inline">{sanitization_run_id}</code>; <code class="inline">status</code> reuses the shared lifecycle states</td><td class="center"><span class="pill keep">Reused</span></td></tr>
+        <tr><td class="anm">review_items</td><td class="small">Reused — same review queue as A-01</td><td class="center"><span class="pill keep">Reused</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 14 SHARED -->
+  <section id="shared">
+    <div class="sec-head"><span class="num">14</span><h2>What A-02 shares with A-01 — why we build them together</h2></div>
+    <p class="sec-sub">Tagging adds a thin, cheap agent on top of infrastructure Sanitization already stands up. Building both at once means writing that shared layer once.</p>
+    <div class="filetree">naviknow/<br>
+&nbsp;&nbsp;<span class="shared">mcp_server/</span> <span class="comment"># SHARED - born with A-01; A-02 uses review.create_task only</span><br>
+&nbsp;&nbsp;backend/app/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="shared">worker.py</span> <span class="comment"># SHARED - DB-polling worker runs both agents</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="shared">review/</span> <span class="comment"># SHARED - POST /runs/{id}/review + queue endpoints</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="shared">llm/bedrock_client.py</span> <span class="comment"># SHARED - Converse + prompt caching + batch</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;runs/ <span class="comment"># SHARED - lifecycle states: pending/…/awaiting_review/applying/completed</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;agents/<span class="new">tagging/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">agent.py</span> <span class="comment"># orchestrates propose → validate → review → apply</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">classifier.py</span> <span class="comment"># LLM tag proposal (single pass)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">tags/</span> <span class="comment"># NEW - tag_vocabulary + validate/apply (protected calls)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">routers_tags.py</span> <span class="comment"># NEW - vocabulary CRUD (governance) + proposal queue</span></div>
+    <div class="callout green">
+      <p class="ctitle">The build-together payoff</p>
+      <p>Worker, review pause, run-lifecycle states, MCP server, and the Bedrock caching/batch layer are written once and exercised by two agents. Tagging then reduces to a classifier pass + a validator + a vocabulary table — a fraction of Sanitization's surface.</p>
+    </div>
+  </section>
+
+  <!-- 15 DECISIONS -->
+  <section id="decisions">
+    <div class="sec-head"><span class="num">15</span><h2>Decisions log</h2></div>
+    <table class="decisionlog">
+      <tbody>
+        <tr><td>Input</td><td class="small">One completed + approved Sanitization run per Tagging run. Never a raw document — no <code class="inline">fs.read_document</code>.</td></tr>
+        <tr><td>Best-match, not exhaustive</td><td class="small">Works off the sanitized summary + representative content. No chunk fan-out, no NER pre-pass — a missed nuance is a re-tag, not a leak.</td></tr>
+        <tr><td>Controlled vocabulary</td><td class="small">Five categories (domain, use_case, technology, geography, engagement_type). Client is not a category.</td></tr>
+        <tr><td>Validator is code</td><td class="small"><code class="inline">tags.validate</code> deterministically hard-rejects out-of-vocab tags; unknowns become governance proposals. Never a model tool.</td></tr>
+        <tr><td>Taxonomy governance</td><td class="small">km_governance manages the vocabulary; practice_lead proposes; new terms land <code class="inline">pending_approval</code> — mirrors the masking-dictionary flow.</td></tr>
+        <tr><td>Human review</td><td class="small"><b>Conditional</b> — high-confidence, all-in-vocabulary tags auto-apply and the run completes without a pause; the run parks at <code class="inline">awaiting_review</code> only when there are low-confidence tags or new-term proposals. KM-reviewer / KM-governance confirm those.</td></tr>
+        <tr><td>Cost</td><td class="small">~$0.04/doc naive, ~$0.02 with batch + caching. No A-01 cost machinery needed.</td></tr>
+        <tr><td>Shared infrastructure</td><td class="small">Reuses the worker, review endpoints, lifecycle states, MCP server, and Bedrock client from A-01 — the reason to build both together.</td></tr>
+        <tr><td>Chaining</td><td class="small">Manual trigger on an approved Sanitization run for now; Coordinator (A-04) automates Sanitize → Tag later with no change to this agent.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>NaviKnow · Tagging Agent (A-02) Detailed Design</span>
+    <span>Resolved: review only when needed — high-confidence in-vocab tags auto-apply; pause only for low-confidence or new-term proposals.</span>
+  </div>
+</footer>
+
+</body>
+</html>

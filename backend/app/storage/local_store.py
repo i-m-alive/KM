@@ -17,3 +17,19 @@ def save_run_output(agent_id: str, run_id: str, data: dict[str, Any]) -> str:
         json.dump(data, f, indent=2, default=str)
 
     return file_path
+
+
+def save_masked_document(run_id: str, original_filename: str, masked_chunks: list[dict]) -> str:
+    """Writes the sanitized document as a readable .txt under
+    backend/outputs/sanitization/, named after the original file."""
+    out_dir = os.path.join(settings.OUTPUTS_DIR, "sanitization")
+    os.makedirs(out_dir, exist_ok=True)
+
+    stem = os.path.splitext(os.path.basename(original_filename))[0]
+    file_path = os.path.join(out_dir, f"{run_id}__{stem}.sanitized.txt")
+    with open(file_path, "w") as f:
+        for c in masked_chunks:
+            f.write(f"=== {c.get('label', 'chunk')} ===\n")
+            f.write(c.get("text", ""))
+            f.write("\n\n")
+    return file_path

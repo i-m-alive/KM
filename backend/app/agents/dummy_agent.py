@@ -25,6 +25,7 @@ class DummyEchoAgent(Agent):
     description = "Exercises the full NaviKnow pipeline: summarizes input text via Claude on Bedrock and reports confidence. No real KM logic - plumbing only."
     mode = "interactive"
     tools = ["bedrock"]
+    allowed_roles: list[str] = []  # open to all roles, same as Search will be
 
     async def run(self, input_data: dict[str, Any]) -> AgentResult:
         steps: list[AgentStep] = []

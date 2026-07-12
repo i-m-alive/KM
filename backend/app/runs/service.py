@@ -12,10 +12,19 @@ class UnknownAgentError(Exception):
     pass
 
 
-async def execute_run(db: Session, *, agent_id: str, input_data: dict[str, Any], created_by: uuid.UUID) -> AgentRun:
+class RoleNotAllowedError(Exception):
+    pass
+
+
+async def execute_run(
+    db: Session, *, agent_id: str, input_data: dict[str, Any], created_by: uuid.UUID, created_by_role: str
+) -> AgentRun:
     agent = get_agent(agent_id)
     if agent is None:
         raise UnknownAgentError(f"No agent registered with id '{agent_id}'")
+
+    if agent.allowed_roles and created_by_role not in agent.allowed_roles:
+        raise RoleNotAllowedError(f"Role '{created_by_role}' is not permitted to trigger agent '{agent_id}'")
 
     run = AgentRun(agent_id=agent_id, status="running", input_json=input_data, created_by=created_by)
     db.add(run)

@@ -88,4 +88,84 @@ export async function apiGet(path) {
   return apiFetch(path, { method: "GET" });
 }
 
+export async function apiPatch(path, data) {
+  return apiFetch(path, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export async function apiDelete(path) {
+  return apiFetch(path, { method: "DELETE" });
+}
+
+// Multipart upload — must NOT set Content-Type (browser sets the boundary).
+export async function apiUpload(path, file) {
+  const form = new FormData();
+  form.append("file", file);
+  let res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+    body: form,
+  });
+  if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      res = await fetch(`${API_BASE_URL}${path}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+        body: form,
+      });
+    }
+  }
+  if (!res.ok) {
+    let body = null;
+    try {
+      body = await res.json();
+    } catch {
+      // no JSON
+    }
+    throw new ApiError(body?.detail || `Upload to ${path} failed with ${res.status}`, res.status, body);
+  }
+  return res.json();
+}
+
+// Authenticated file download — fetches with the bearer token and triggers a
+// browser "save" of the returned file.
+export async function apiDownload(path, fallbackName = "download") {
+  let res = await rawFetch(path, { method: "GET" });
+  if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) res = await rawFetch(path, { method: "GET" });
+  }
+  if (!res.ok) throw new ApiError(`Download failed with ${res.status}`, res.status, null);
+
+  const disposition = res.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const name = match ? match[1] : fallbackName;
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Authenticated fetch that returns a blob object URL - for <img>/<iframe> src
+// where the browser can't attach an Authorization header itself. Caller must
+// revoke the URL (URL.revokeObjectURL) when done, e.g. in a useEffect cleanup.
+export async function apiBlobUrl(path) {
+  let res = await rawFetch(path, { method: "GET" });
+  if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) res = await rawFetch(path, { method: "GET" });
+  }
+  if (!res.ok) throw new ApiError(`Request to ${path} failed with ${res.status}`, res.status, null);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 export { tryRefresh, ApiError };

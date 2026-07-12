@@ -197,9 +197,38 @@ button {
   background: #f8d7da;
 }
 
+.status-pill--completed_with_issues {
+  background: #ffe0b3;
+}
+
 .status-pill--running,
-.status-pill--pending {
+.status-pill--pending,
+.status-pill--working,
+.status-pill--detecting,
+.status-pill--tagging,
+.status-pill--applying {
   background: #fff3cd;
+}
+
+.status-pill--awaiting_review {
+  background: #e7f1ff;
+}
+
+.status-pill--rejected {
+  background: #f8d7da;
+}
+
+.callout {
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  background: #e7f1ff;
+  margin: 0.75rem 0;
+}
+
+.callout--warning {
+  background: #fff0d9;
+  border: 1px solid #e0a94a;
+  color: #6b4400;
 }
 
 .run-result__summary {
