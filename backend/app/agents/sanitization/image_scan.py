@@ -30,7 +30,14 @@ from app.documents.images import VECTOR_FORMATS, ImageRef, extract_images
 from app.llm import bedrock_client
 from app.masking import dictionary
 from app.masking.dictionary import is_own_firm
-from app.masking.logo_reference import MATCH_THRESHOLD, UNCERTAIN_THRESHOLD, compute_phash, find_matches, is_own_firm_logo
+from app.masking.logo_reference import (
+    MATCH_THRESHOLD,
+    UNCERTAIN_THRESHOLD,
+    compute_phash,
+    find_matches,
+    is_own_firm_logo,
+    phash_distance,
+)
 
 settings = get_settings()
 
@@ -131,12 +138,13 @@ def _ocr_match(ocr_text: list[str], db: Session) -> str | None:
     return None
 
 
-async def _scan_one_group(db: Session, g_idx: int, occurrences: list[ImageRef]) -> tuple[ImageGroup, int, int, float]:
+async def _scan_one_group(
+    db: Session, g_idx: int, occurrences: list[ImageRef], raster: bytes | None, phash: str | None
+) -> tuple[ImageGroup, int, int, float]:
     sample = occurrences[0]
     locations = sorted({o.location_label for o in occurrences})
     all_indices = [o.index for o in occurrences]
 
-    raster = _raster_bytes(sample)
     if raster is None:
         return (
             ImageGroup(
@@ -147,7 +155,6 @@ async def _scan_one_group(db: Session, g_idx: int, occurrences: list[ImageRef]) 
             0, 0, 0.0,
         )
 
-    phash = compute_phash(raster)
     logo_hits = find_matches(db, phash, threshold=UNCERTAIN_THRESHOLD) if phash else []
     best_logo = logo_hits[0] if logo_hits else None
 
@@ -233,6 +240,15 @@ async def _scan_one_group(db: Session, g_idx: int, occurrences: list[ImageRef]) 
     return group, resp.input_tokens, resp.output_tokens, resp.estimated_cost_usd
 
 
+# Two SHA-distinct images within this phash Hamming distance are treated as
+# THE SAME image for scanning purposes - the same logo re-exported at a
+# different compression/resize shows up as a different SHA-256 on every slide
+# variant, each previously costing its own Bedrock vision call. Kept tight
+# (well under MATCH_THRESHOLD) so only near-identical renditions merge, never
+# two genuinely different logos.
+PERCEPTUAL_DEDUP_THRESHOLD = 2
+
+
 async def scan_document_images(
     stored_path: str, content_type: str, filename: str, db: Session
 ) -> tuple[list[ImageGroup], int, int, float, int]:
@@ -244,25 +260,44 @@ async def scan_document_images(
         h = hashlib.sha256(ref.image_bytes).hexdigest()
         by_hash.setdefault(h, []).append(ref)
 
-    unique = list(by_hash.values())
-    skipped = max(0, len(unique) - MAX_IMAGES_SCANNED)
-    to_scan = unique[:MAX_IMAGES_SCANNED]
+    # Second-stage perceptual dedup: cluster SHA-unique groups whose phashes
+    # are near-identical, so one vision call covers every rendition and an
+    # approval on the cluster redacts ALL of them (all_indices aggregates
+    # across the merged SHA groups). Unhashable images stay singletons.
+    clusters: list[dict] = []
+    for occurrences in by_hash.values():
+        raster = _raster_bytes(occurrences[0])
+        phash = compute_phash(raster) if raster is not None else None
+        merged = False
+        if phash is not None:
+            for c in clusters:
+                if c["phash"] is None:
+                    continue
+                d = phash_distance(phash, c["phash"])
+                if d is not None and d <= PERCEPTUAL_DEDUP_THRESHOLD:
+                    c["occurrences"].extend(occurrences)
+                    merged = True
+                    break
+        if not merged:
+            clusters.append({"occurrences": list(occurrences), "raster": raster, "phash": phash})
+
+    skipped = max(0, len(clusters) - MAX_IMAGES_SCANNED)
+    to_scan = clusters[:MAX_IMAGES_SCANNED]
 
     groups: list[ImageGroup] = []
     total_in = total_out = 0
     total_cost = 0.0
 
-    for g_idx, occurrences in enumerate(to_scan):
-        group, in_tok, out_tok, cost = await _scan_one_group(db, g_idx, occurrences)
+    for g_idx, cluster in enumerate(to_scan):
+        group, in_tok, out_tok, cost = await _scan_one_group(
+            db, g_idx, cluster["occurrences"], cluster["raster"], cluster["phash"]
+        )
         groups.append(group)
         total_in += in_tok
         total_out += out_tok
         total_cost += cost
 
     return groups, total_in, total_out, total_cost, skipped
-
-
-_PLACEHOLDER_GRAY = (60, 60, 60)
 
 
 def _is_own_placeholder(g: "ImageGroup") -> bool:
@@ -279,40 +314,46 @@ def _is_own_placeholder(g: "ImageGroup") -> bool:
     pixel content (a near-solid (60,60,60) gray box - see
     image_redact.placeholder_png) catches that case without depending on the
     model reading anything."""
-    from app.documents.image_redact import PLACEHOLDER_LABEL
+    from app.documents.image_redact import PLACEHOLDER_LABEL, is_placeholder_bytes
 
     ocr_normalized = {s.strip().upper() for s in g.ocr_text}
     if ocr_normalized and ocr_normalized.issubset({PLACEHOLDER_LABEL}):
         return True
+    return is_placeholder_bytes(g.sample_ref.image_bytes)
 
-    try:
-        from PIL import Image
 
-        img = Image.open(io.BytesIO(g.sample_ref.image_bytes)).convert("RGB")
-        thumb = img.resize((20, 20))
-        pixels = list(thumb.getdata())
-        near_gray = sum(1 for p in pixels if all(abs(p[i] - _PLACEHOLDER_GRAY[i]) <= 15 for i in range(3)))
-        return (near_gray / len(pixels)) > 0.85
-    except Exception:
-        return False
+async def find_residual_image_groups(
+    masked_path: str, content_type: str, filename: str, db: Session
+) -> tuple[list[ImageGroup], int, int, int, float]:
+    """Re-run the full scan against the RENDERED masked file and return the
+    groups that still look client-identifying, as STRUCTURED data (locations
+    + all_indices survive into output_json so a later remediation pass can
+    target exactly these images without re-scanning anything). Returns
+    (residual_groups, skipped, input_tokens, output_tokens, cost)."""
+    groups, in_tok, out_tok, cost, skipped = await scan_document_images(masked_path, content_type, filename, db)
+    residual = [g for g in groups if g.contains_client_identity and not _is_own_placeholder(g)]
+    return residual, skipped, in_tok, out_tok, cost
+
+
+def residual_image_messages(residual_groups: list[ImageGroup], skipped: int) -> list[str]:
+    """Human-readable flag lines for the structured residuals."""
+    messages = []
+    for g in residual_groups:
+        detail = (
+            g.description
+            or g.ocr_matched_surface
+            or (f"OCR read: {', '.join(g.ocr_text)}" if g.ocr_text else None)
+            or f"flagged at {g.confidence:.0%} confidence, no description or OCR text returned - inspect this image manually"
+        )
+        messages.append(f"{g.locations[0] if g.locations else 'image'} (group {g.group_index}): {detail}")
+    if skipped:
+        messages.append(f"{skipped} image(s) could not be re-verified (scan cap reached)")
+    return messages
 
 
 async def find_residual_images(masked_path: str, content_type: str, filename: str, db: Session) -> list[str]:
-    """Re-run the full scan against the RENDERED masked file and report any
-    image that still looks client-identifying - the whole point of this check
-    is to catch a redaction that silently didn't happen, so it must re-derive
-    the verdict from scratch rather than trusting anything computed pre-render."""
-    groups, _, _, _, skipped = await scan_document_images(masked_path, content_type, filename, db)
-    residual = []
-    for g in groups:
-        if g.contains_client_identity and not _is_own_placeholder(g):
-            detail = (
-                g.description
-                or g.ocr_matched_surface
-                or (f"OCR read: {', '.join(g.ocr_text)}" if g.ocr_text else None)
-                or f"flagged at {g.confidence:.0%} confidence, no description or OCR text returned - inspect this image manually"
-            )
-            residual.append(f"{g.locations[0] if g.locations else 'image'} (group {g.group_index}): {detail}")
-    if skipped:
-        residual.append(f"{skipped} image(s) could not be re-verified (scan cap reached)")
-    return residual
+    """Message-only form of find_residual_image_groups, kept for callers that
+    just need flag text - it must re-derive the verdict from scratch rather
+    than trusting anything computed pre-render."""
+    residual_groups, skipped, _, _, _ = await find_residual_image_groups(masked_path, content_type, filename, db)
+    return residual_image_messages(residual_groups, skipped)

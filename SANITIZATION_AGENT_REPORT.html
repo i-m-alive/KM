@@ -182,12 +182,12 @@
 <header class="hero">
   <h1>Sanitization &amp; Tagging Agents — Debugging Report, Live Validation &amp; Optimization Plan</h1>
   <p>NaviKnow · A-01 Sanitization + A-02 Tagging pipeline</p>
-  <p class="muted" style="color:#cfd8e3;">Compiled from the full end-to-end debugging session against a real client deck (57 embedded images, 40+ masking entities), plus live validation of the latest real run of both agents</p>
+  <p class="muted" style="color:#cfd8e3;">Compiled from the full end-to-end debugging session against a real client deck (57 embedded images, 40+ masking entities), the full optimization round that followed (every P1/P2 recommendation implemented), and live validation of the latest real run of both agents</p>
   <div class="summary-grid">
-    <div class="stat"><span class="n">17</span><span class="l">Distinct bugs found</span></div>
-    <div class="stat"><span class="n">15</span><span class="l">Fixed this session</span></div>
-    <div class="stat"><span class="n">5 / 5</span><span class="l">Verification channels clean</span></div>
-    <div class="stat"><span class="n">1st</span><span class="l">Fully clean run reached</span></div>
+    <div class="stat"><span class="n">19</span><span class="l">Distinct bugs found — all fixed</span></div>
+    <div class="stat"><span class="n">5 / 5</span><span class="l">Channels verified clean (latest run)</span></div>
+    <div class="stat"><span class="n">43</span><span class="l">Regression checks, all passing</span></div>
+    <div class="stat"><span class="n">$0.058</span><span class="l">Full run cost, both agents (Haiku)</span></div>
   </div>
 </header>
 
@@ -232,16 +232,18 @@
   <tr><td><code>verified_text</code></td><td>Masked surfaces don't survive in extracted text</td><td>Yes — full masking pipeline</td></tr>
   <tr><td><code>verified_images</code></td><td>Re-scans every image in the rendered file for logos/wordmarks</td><td>Yes — image redaction + <span class="mono">mandatory_redaction</span></td></tr>
   <tr><td><code>verified_metadata</code></td><td>Core/app/custom docProps properties</td><td>Yes — metadata scrubbing</td></tr>
-  <tr><td><code>verified_comments</code></td><td>Comments, track-changes deletions, PDF annotations</td><td><span class="badge gap">No</span> detect-and-block only</td></tr>
-  <tr><td><code>verified_hyperlinks</code></td><td>Hyperlink target URLs (not just display text)</td><td><span class="badge gap">No</span> detect-and-block only</td></tr>
+  <tr><td><code>verified_comments</code></td><td>Comments, track-changes deletions, PDF annotations</td><td>Yes — comment/track-changes scrubbing</td></tr>
+  <tr><td><code>verified_hyperlinks</code></td><td>Hyperlink target URLs (not just display text)</td><td>Yes — hyperlink-target scrubbing</td></tr>
 </table>
+
+<p><strong>Targeted remediation loop (new).</strong> A run that finishes <code>completed_with_issues</code> now shows a <em>"Re-run sanitization on the flagged content"</em> button on its run page. It fixes the already-rendered sanitized file <em>in place</em>: redacts only the flagged images (scoped to the exact slides/pages/worksheets the verifier identified — for new runs with zero additional vision calls, because the verify pass persists the flagged images' structured locations), re-scrubs metadata/comments/hyperlink targets, and re-verifies every channel. If all channels come back clean, the run flips to <code>completed</code> and the stale blocking flags are cleared. The one honest limitation, stated in the UI: a residual in the document's own <em>body text</em> can't be fixed in place (text masking happens while rendering from the original) and still requires a full re-run.</p>
 
 <h2 id="validation"><span class="num">2</span>Live validation: latest real run, both agents</h2>
 <p>Pulled directly from the database for the most recent completed run of each agent against the same document — not a hypothetical, the actual stored output.</p>
 
 <div class="validate">
-  <h4>Sanitization — run <code class="mono">ece1d9ab</code> — <span class="badge pass">completed (not completed_with_issues)</span></h4>
-  <p class="muted">The first run this session to pass every verification channel cleanly. 24 client entities masked, 39/57 images redacted, 12 text occurrences masked, 1 metadata property rewritten.</p>
+  <h4>Sanitization — run <code class="mono">9bd3c579</code> — <span class="badge pass">completed — all 5 channels verified clean</span></h4>
+  <p class="muted">The first run after the full optimization round, against the same real client deck. 39 client entities resolved to global tokens, 13 text occurrences masked across 21 chunks, <strong>50 unique image clusters</strong> scanned (perceptual dedup now grouping near-identical renditions before any vision call), 31 flagged, 32 groups approved → <strong>41 occurrences resolved via the new index-based resolution, 39 images blacked out</strong>, 3 metadata properties rewritten. Confidence 0.92, total cost <strong>$0.0547</strong> on Haiku, 4.5 minutes end to end.</p>
   <div class="check-grid">
     <div class="check pass">verified_text ✓</div>
     <div class="check pass">verified_images ✓</div>
@@ -249,26 +251,27 @@
     <div class="check pass">verified_comments ✓</div>
     <div class="check pass">verified_hyperlinks ✓</div>
   </div>
-  <p><span class="label">Sanitized summary (auto-generated, checked for identity leaks):</span></p>
-  <p class="muted" style="font-size:0.88rem; font-style:italic;">"A consulting firm presents AI transformation opportunities for finance functions, specifically targeting global asset management and financial services organizations. The engagement showcases their AI and data capabilities... through case studies demonstrating measurable ROI—including automated regulatory reporting, reconciliation, order-to-cash processes, and fraud detection..."</p>
-  <p class="muted">No client name, mask token, or inferable identity detail present — reads as a fully generic engagement description. This is the risk category nothing in the pipeline mechanically checks (see Fragile, §4) — validated here by direct read, not by a tool.</p>
-  <p><span class="label">Metadata hints (schema-adherence fix from earlier in the session, re-confirmed):</span> <code>domain: "financial services"</code>, <code>engagement_type: "consulting"</code> — both clean single terms, not the comma-crammed multi-value strings seen before the summarizer prompt fix.</p>
-  <p><span class="label">Still-present info line (expected, not a bug):</span> <code>4 low-confidence candidate(s) excluded: Ajio, Myntra, Arvind Fashions, gsk</code> — these are third-party case-study company names mentioned in the deck's own content (not the primary client), correctly held below the auto-mask threshold rather than either force-masked or silently dropped with no record.</p>
+  <p><span class="label">Independent validation beyond the run's own verifier:</span> a raw-XML sweep of <em>every part</em> in the rendered PPTX package (text, rels, comments, metadata, notes — stronger than any extraction path) found the client name in <strong>zero parts</strong>. The file is clean not just by the pipeline's own five channels but by an outside check that shares no code with them.</p>
+  <p><span class="label">Sanitized summary (auto-generated, checked by direct read for identity leaks):</span></p>
+  <p class="muted" style="font-size:0.88rem; font-style:italic;">"A global consulting firm presents AI transformation opportunities in finance, showcasing how enterprises can leverage generative AI and machine learning to reshape financial operations across FP&amp;A, controllership, reporting, and treasury... illustrates real-world case studies of automated month-end close and AI-powered copilots managing trillions in assets, and provides a structured roadmap for implementing agentic AI solutions..."</p>
+  <p class="muted">No client name, mask token, or inferable identity detail present. "Managing trillions in assets" is the closest thing to a hint and is generic across the asset-management industry.</p>
+  <p><span class="label">Metadata hints (schema adherence re-confirmed):</span> <code>domain: "finance"</code>, <code>engagement_type: "consulting"</code> — clean single terms; <code>use_case</code>/<code>technology</code>/<code>geography</code> as proper arrays (9/10/5 items), including <code>geography: ["global", ...]</code> which Tagging can now actually use (see below).</p>
+  <p><span class="label">Guardrails behaving as designed:</span> 2 low-confidence candidates (TMG, RIA) auto-excluded below the 60% threshold with an info flag, not silently dropped. One cosmetic leftover: the detect-phase awareness flag ("31 embedded images appear to reveal the client") remains visible on the completed run even though every flagged image was subsequently redacted and verified — it describes the pre-review state, not the final file. Harmless but slightly misleading; noted in §5.</p>
 </div>
 
 <div class="validate">
-  <h4>Tagging — run <code class="mono">efab6ea8</code> — <span class="badge">awaiting_review</span></h4>
-  <p class="muted">Ran successfully against the clean Sanitization run above. 11 tags proposed, 8 auto-applied (≥0.7 confidence), 3 flagged for review.</p>
+  <h4>Tagging — run <code class="mono">49a43ddc</code> — <span class="badge pass">completed — 9 tags confirmed, 1 new term proposed</span></h4>
+  <p class="muted">Ran against the clean Sanitization run above. 9 tags applied and confirmed, plus <code>technology=generative-ai</code> correctly routed as a <em>proposed new term</em> through governance instead of being force-fit or dropped. Cost $0.0032, 22 seconds.</p>
   <table>
     <tr><th>Category</th><th>Value</th><th>Confidence</th><th>Status</th></tr>
-    <tr><td>domain</td><td>banking</td><td>0.90</td><td>applied</td></tr>
-    <tr><td>use_case</td><td>fraud-detection, automation, analytics</td><td>0.80–0.90</td><td>applied</td></tr>
-    <tr><td>technology</td><td>aws, azure, databricks</td><td>0.75–0.80</td><td>applied</td></tr>
-    <tr><td>geography</td><td>na, emea, apac</td><td>0.60 each</td><td><span class="badge partial">flagged</span></td></tr>
-    <tr><td>engagement_type</td><td>advisory</td><td>0.85</td><td>applied</td></tr>
+    <tr><td>domain</td><td><strong>financial-services</strong></td><td>0.95</td><td>confirmed</td></tr>
+    <tr><td>geography</td><td><strong>global</strong></td><td>0.92</td><td>confirmed</td></tr>
+    <tr><td>use_case</td><td>automation, analytics, fraud-detection</td><td>0.72–0.92</td><td>confirmed</td></tr>
+    <tr><td>technology</td><td>azure, databricks, aws</td><td>0.75–0.88</td><td>confirmed</td></tr>
+    <tr><td>engagement_type</td><td>advisory</td><td>0.88</td><td>confirmed</td></tr>
+    <tr><td>technology (proposed)</td><td>generative-ai</td><td>—</td><td><span class="badge partial">pending governance</span></td></tr>
   </table>
-  <p><span class="label">New finding — controlled vocabulary gap, not a classifier bug:</span> the <code>domain</code> vocabulary has no "financial-services" or "asset-management" entry (only <code>banking, energy, healthcare, insurance, manufacturing, public-sector, retail, telecom</code>), and <code>geography</code> has no "global" entry (only <code>apac, emea, india, latam, na, uk, us</code>). Sanitization's own metadata hint said <code>domain: "financial services"</code> and <code>geography: ["global", "multi-jurisdiction"]</code> — but Tagging's classifier can only choose from the approved vocabulary, so it picked the nearest available term ("banking" — technically wrong, this deck is about asset management, not banking specifically) and tried to decompose "global" into regional guesses (na/emea/apac), correctly at low confidence since that decomposition isn't actually stated in the source content.</p>
-  <p><span class="label">Why this matters:</span> a future search for "asset management" engagements would silently miss this document; a search for "banking" would incorrectly surface it. The classifier is behaving reasonably under a real vocabulary constraint — the fix is a governance action (add vocabulary terms), not a code change. Added to §5/§6 below.</p>
+  <p><span class="label">The previous report's P1 vocabulary gap — validated as fixed:</span> last validation, this same document got <code>domain=banking</code> (imprecise) at 0.90 plus three separate low-confidence regional guesses (na/emea/apac at 0.60, all flagged), purely because <code>financial-services</code> and <code>global</code> didn't exist in the vocabulary. After adding them, the classifier's top two picks are exactly those terms, at the run's two <em>highest</em> confidences (0.95 and 0.92), with zero flagged regional guesses. A search for "financial services" engagements now finds this document; a search for "banking" no longer wrongly surfaces it. Cheapest fix in the previous report, and it measurably paid off on the first run.</p>
 </div>
 
 <h2 id="issues"><span class="num">3</span>Everything that went wrong (and why)</h2>
@@ -364,8 +367,9 @@
 
 <div class="issue">
   <h4>13. Killing the worker mid-run orphans that run permanently</h4>
-  <div class="meta"><span class="badge partial">Known limitation</span></div>
-  <p>No stale-run recovery mechanism exists. A run interrupted mid-<code>detect()</code> sits at a non-terminal status forever — indistinguishable from "still working" without manually checking process CPU time. See recommendation in §6.</p>
+  <div class="meta"><span class="badge fixed">Fixed — stale-run reaper + heartbeat</span></div>
+  <p><span class="label">What happened:</span> No stale-run recovery mechanism existed. A run interrupted mid-<code>detect()</code> sat at a non-terminal status forever — indistinguishable from "still working" without manually checking process CPU time.</p>
+  <p><span class="label">Fix:</span> The worker now fails any run stuck at a transient status for over 15 minutes, with a clear "worker crash mid-run, re-run the agent" message. Two correctness details mattered: a new <code>updated_at</code> column is the staleness clock (using <code>created_at</code> would instantly reap a run approved after days at <code>awaiting_review</code>), and a 60-second heartbeat beats while detect/apply is actively executing — so a legitimately slow 150-image scan can never be mistaken for a dead run.</p>
 </div>
 
 <div class="issue">
@@ -377,11 +381,23 @@
 
 <div class="issue">
   <h4>15. Hyperlink target leaks (detect-and-block, no fix path)</h4>
-  <div class="meta"><span class="badge gap">Open — deliberate scope decision</span></div>
-  <p><span class="label">What happened:</span> "NVISION" — a genuine maskable term — appeared as a hyperlink <em>target</em> (the href, not the visible text). Hyperlink scrubbing was explicitly scoped out (detect-and-block only) earlier in the project, so this channel can block a run indefinitely with no way to reach "clean."</p>
-  <p><span class="label">Status:</span> Offered to build hyperlink-target scrubbing (rewrite the href the same way text is masked); not yet actioned. See §5.</p>
+  <div class="meta"><span class="badge fixed">Fixed — hyperlink-target scrubbing built</span></div>
+  <p><span class="label">What happened:</span> "NVISION" — a genuine maskable term — appeared as a hyperlink <em>target</em> (the href, not the visible text). Hyperlink scrubbing was explicitly scoped out (detect-and-block only) earlier in the project, so this channel could block a run indefinitely with no way to reach "clean."</p>
+  <p><span class="label">Fix:</span> Hrefs are now rewritten with the run's masking style (e.g. <code>https://www.acme.com</code> → <code>https://www.[CLIENT_1].com</code>). For Office formats the scrub edits the <code>_rels/*.rels</code> parts directly inside the zip — one uniform implementation for docx/pptx/xlsx that deliberately avoids an openpyxl re-save (which renumbers media partnames and would corrupt already-redacted xlsx images). PDFs go through <code>page.update_link()</code>. Comment/track-changes scrubbing was built in the same round using targeted regex on element text only — a full XML re-serialize of <code>document.xml</code> rewrites namespace prefixes and can make Word reject the file. The verifier still re-checks both channels and blocks anything the scrubbers missed.</p>
 </div>
 
+<div class="issue">
+  <h4>16. openpyxl writes comments to a different partname than classic Excel</h4>
+  <div class="meta"><span class="badge fixed">Fixed — caught by the new regression suite before it ever reached a real run</span></div>
+  <p><span class="label">What happened:</span> The new comment scrubber handled the classic <code>xl/comments1.xml</code> layout, but openpyxl (and newer producers) write <code>xl/comments/comment1.xml</code> — the very first regression-suite run failed its "comments channel clean after scrub" check on the xlsx fixture.</p>
+  <p><span class="label">Why it matters beyond the fix:</span> this is the exact class of bug that previously took a full real-document run (and real Bedrock spend) to discover. The regression suite caught it offline, in seconds, on its first execution — the suite paid for itself immediately.</p>
+</div>
+
+<div class="issue">
+  <h4>17. Perceptual dedup silently broke image-redaction resolution</h4>
+  <div class="meta"><span class="badge fixed">Fixed — caught by the verification layer in a real run, exactly as designed</span></div>
+  <p><span class="label">What happened:</span> The cost optimization that clusters SHA-distinct near-duplicate renditions of the same logo (same image, different compression) into one vision call shipped with a latent mismatch: <code>apply()</code> still resolved "which occurrences to redact" by <em>exact byte-equality with the cluster's sample image</em>. Renditions whose bytes differed from the sample were approved in spirit but never actually swapped — 2 confident logo matches survived into a rendered file. The image verifier flagged both via logo-hash match, turning what would have been a silent leak into a blocked run.</p>
+  <p><span class="label">Fix:</span> The proposal now carries each cluster's full <code>all_indices</code> (every occurrence, including SHA-distinct renditions), and <code>apply()</code> resolves approved images by those indices; byte-equality survives only as a fallback for proposals filed before the fix. The scenario is a standing regression check (same logo at two compressions must cluster, and <em>both</em> media parts must be replaced). The very next real run on the same deck came back clean across all five channels (§2).</p>
 </div>
 
 <h2 id="state"><span class="num">4</span>Current state — what's solid vs. fragile</h2>
@@ -391,38 +407,49 @@
   <li>Text masking across DOCX/PPTX/XLSX/PDF, word-boundary safe, format-agnostic.</li>
   <li>Image enumeration (shape-tree + zip-glob) — genuinely complete, proven against the real deck's 57 images including masters/layouts/thumbnails.</li>
   <li>Own-firm exclusion — three independent, layered signals (text, prompt injection, phash) so no single failure mode reintroduces the bug.</li>
-  <li>Multi-channel verification — a channel this doesn't check is a channel that can silently leak; five channels now re-derive from the rendered file every time.</li>
+  <li>Multi-channel verification — a channel this doesn't check is a channel that can silently leak; five channels re-derive from the rendered file every time. All five now also <em>auto-fix</em>: metadata, hyperlink-target, and comment/track-changes scrubbing joined text masking and image redaction this round.</li>
   <li><code>mandatory_redaction</code> enforcement — the one case where reviewer discretion is deliberately overridden by a governance decision already made (an approved dictionary entity).</li>
+  <li>Targeted remediation — a <code>completed_with_issues</code> run no longer dead-ends: one click fixes the flagged content in place (scoped to the identified slides/pages) and re-verifies, flipping the run to <code>completed</code> when clean.</li>
+  <li>Worker resilience — stale-run reaper + heartbeat means a crash mid-run self-reports as failed instead of hanging forever.</li>
+  <li>Offline regression suite — 43 deterministic checks (fixtures with planted leaks in every channel, across all four formats) runnable in seconds with no Bedrock and no DB; already caught one real bug (issue 16) before it reached production.</li>
 </ul>
 
 <h3>Fragile</h3>
 <ul class="tight">
-  <li><strong>Vision-model non-determinism.</strong> The same image, scanned twice (once at detect time, once at verify time), can get different judgments. This is inherent to LLM vision calls, not a code bug — the verification system exists specifically to catch this, but it means occasional re-runs are expected, not a sign of something broken.</li>
+  <li><strong>Vision-model non-determinism.</strong> The same image, scanned twice (once at detect time, once at verify time), can get different judgments. This is inherent to LLM vision calls, not a code bug — the verification system exists specifically to catch this. Perceptual dedup reduced the surface area (50 clusters instead of 57+ individual scans on the real deck), but didn't eliminate it.</li>
   <li><strong>Reviewer trust in AI-generated commentary.</strong> Free-text descriptions have repeatedly proven unreliable enough to mislead a careful reviewer. Anywhere a deterministic signal exists, it should be load-bearing — description text should be supplementary only.</li>
-  <li><strong>Haiku's structured-output reliability</strong> is measurably worse than Sonnet's for this task (empty fields, schema echoing, boolean/text inconsistency). The guardrails built this session compensate for it but don't eliminate the underlying gap.</li>
+  <li><strong>Haiku's structured-output reliability</strong> is measurably worse than Sonnet's for this task (empty fields, schema echoing, boolean/text inconsistency). The guardrails compensate for it but don't eliminate the underlying gap. That said, the latest fully-clean run (§2) was end-to-end Haiku at $0.058 for both agents combined.</li>
 </ul>
 
 <h2 id="gaps"><span class="num">5</span>Remaining open gaps</h2>
+
+<h3>Closed since the last version of this report</h3>
+<table>
+  <tr><th>Gap (previous priority)</th><th>Resolution — all validated by the live run in §2 or the regression suite</th></tr>
+  <tr>
+    <td><strong>Tag vocabulary missing real terms</strong> (was P1)</td>
+    <td><code>financial-services</code>, <code>asset-management</code> (domain) and <code>global</code> (geography) added to the live DB and the seed list. Validated: the classifier's top two picks on the latest run are exactly those terms, at its two highest confidences.</td>
+  </tr>
+  <tr>
+    <td><strong>Hyperlink target scrubbing</strong> (was P1)</td>
+    <td>Built — hrefs rewritten in the run's masking style via direct <code>_rels</code> editing (OOXML) / <code>update_link</code> (PDF). Channel is now detect-and-fix; verifier still blocks anything missed.</td>
+  </tr>
+  <tr>
+    <td><strong>Comment / track-changes scrubbing</strong> (was P2)</td>
+    <td>Built — Word comments, tracked deletions (<code>w:delText</code>), PowerPoint legacy comments, Excel cell comments (both partname layouts), PDF annotations. Element-text-only regex, never a re-serialize of <code>document.xml</code>.</td>
+  </tr>
+  <tr>
+    <td><strong>No stale/orphaned run recovery</strong> (was P2)</td>
+    <td>Built — 15-minute reaper keyed off a new <code>updated_at</code> column, with a heartbeat so slow-but-alive runs are never reaped.</td>
+  </tr>
+</table>
+
+<h3>Still open</h3>
 <table>
   <tr><th>Gap</th><th>Impact</th><th>Priority</th></tr>
   <tr>
-    <td><strong>Tagging's controlled vocabulary is missing common real terms</strong> ("financial-services"/"asset-management" in domain, "global" in geography)</td>
-    <td>Confirmed via live validation (§2): a real document got tagged <code>domain=banking</code> (imprecise — it's about asset management) and three separate low-confidence regional guesses instead of one clean "global" tag, purely because those terms don't exist in the vocabulary yet.</td>
-    <td><span class="badge p1">P1</span></td>
-  </tr>
-  <tr>
-    <td><strong>Hyperlink target scrubbing</strong> not implemented</td>
-    <td>A run can be permanently blocked with no path to "clean" if a maskable term is genuinely a hyperlink target — has already happened twice with the same term.</td>
-    <td><span class="badge p1">P1</span></td>
-  </tr>
-  <tr>
-    <td><strong>Comment / track-changes scrubbing</strong> not implemented</td>
-    <td>Same detect-and-block ceiling as hyperlinks; lower likelihood of hitting it in practice but the same structural gap.</td>
-    <td><span class="badge p2">P2</span></td>
-  </tr>
-  <tr>
-    <td><strong>No stale/orphaned run recovery</strong> in the worker</td>
-    <td>A crash or restart mid-<code>detect()</code> leaves a run stuck indefinitely with no automatic detection or requeue.</td>
+    <td><strong>Detect-phase blocking flags linger on completed runs</strong></td>
+    <td>Cosmetic but misleading: the latest fully-clean run still shows "31 embedded image(s) appear to reveal the client" — a flag describing the pre-review state, not the verified-clean final file. A reader who only sees the flag list could wrongly conclude the file is unsafe.</td>
     <td><span class="badge p2">P2</span></td>
   </tr>
   <tr>
@@ -435,43 +462,54 @@
     <td>Lower confidence than the OOXML regex path; a pattern-fill or unusual PDF text layout could still slip through.</td>
     <td><span class="badge p3">P3</span></td>
   </tr>
+  <tr>
+    <td><strong>Remediation can't fix body-text residuals</strong></td>
+    <td>Inherent to the design (text masking happens while rendering from the original) and stated in the UI; text has verified clean on every recent run, so exposure is low.</td>
+    <td><span class="badge p3">P3</span></td>
+  </tr>
 </table>
 
 <h2 id="optimize"><span class="num">6</span>Optimization recommendations</h2>
+<p class="muted">Every P1/P2 recommendation from the previous version of this report has been implemented and validated. Shown here with outcomes, followed by what's genuinely still open.</p>
 
 <div class="rec">
-  <div class="title"><h4>Expand the tag controlled vocabulary</h4><span class="badge p1">P1</span></div>
-  <p>Add <code>financial-services</code> (and/or <code>asset-management</code>) to the <code>domain</code> category, and <code>global</code> to <code>geography</code> — both confirmed missing by live validation, both likely to recur given the kind of documents actually being processed. This is a one-line governance action (via the existing tag vocabulary admin UI) with immediate, measurable effect on tag accuracy — the cheapest fix in this entire report relative to its impact.</p>
+  <div class="title"><h4>Expand the tag controlled vocabulary</h4><span class="badge fixed">Implemented &amp; validated</span></div>
+  <p>Terms added to the live DB and the seed list. Outcome on the very next run (§2): <code>domain=financial-services</code> at 0.95 and <code>geography=global</code> at 0.92 — the run's two highest-confidence tags, replacing an imprecise <code>banking</code> and three flagged regional guesses. The classifier also correctly routed <code>generative-ai</code> as a proposed new term through governance, showing the vocabulary-growth loop works end to end.</p>
 </div>
 
 <div class="rec">
-  <div class="title"><h4>Build hyperlink-target scrubbing</h4><span class="badge p1">P1</span></div>
-  <p>Mirror the metadata-scrub approach: rewrite the actual href for any masked surface, using the same masking style already selected for the run, then flip <code>verified_hyperlinks</code> from detect-and-block to detect-and-fix. This closes the only channel that has actually caused repeat, unresolvable blocks in real usage.</p>
+  <div class="title"><h4>Build hyperlink-target scrubbing</h4><span class="badge fixed">Implemented</span></div>
+  <p>Built exactly as recommended (mirroring the metadata-scrub approach), plus comment/track-changes scrubbing in the same round. Both channels flipped from detect-and-block to detect-and-fix; the verifier still independently re-checks the result. Covered by the regression suite for all four formats.</p>
 </div>
 
 <div class="rec">
-  <div class="title"><h4>Add a stale-run reaper to the worker</h4><span class="badge p2">P2</span></div>
-  <p>A background check that requeues (or fails cleanly) any run stuck at a non-terminal status (<code>detecting</code>/<code>working</code>) past a reasonable timeout (e.g. 10 minutes). Removes the need to manually diagnose "is this actually stuck" via process CPU time.</p>
+  <div class="title"><h4>Add a stale-run reaper to the worker</h4><span class="badge fixed">Implemented</span></div>
+  <p>15-minute timeout on a new <code>updated_at</code> clock with an in-flight heartbeat. Stuck runs now self-report as failed with an actionable message instead of requiring manual process inspection.</p>
 </div>
 
 <div class="rec">
-  <div class="title"><h4>Cut vision-scan cost via perceptual, not just exact, deduplication</h4><span class="badge p2">P2</span></div>
-  <p>Images are currently deduped by exact SHA-256 before scanning. Near-identical images (same logo, different compression/resize) are treated as separate Bedrock calls. Grouping by perceptual hash first (with a tight threshold) before falling back to exact-hash for the render-time redaction match would reduce the number of vision calls on decks with repeated, slightly-varying logo instances — directly reduces both cost and the scan-to-scan non-determinism surface area.</p>
+  <div class="title"><h4>Cut vision-scan cost via perceptual deduplication</h4><span class="badge fixed">Implemented — with one lesson</span></div>
+  <p>Near-identical renditions (Hamming distance ≤ 2) now merge into one vision call, and an approval covers every rendition. The lesson: the first version broke redaction resolution for merged renditions (issue 17) — caught by the verification layer in a real run and fixed the same day. The optimization and its bug-fix are both locked in by regression checks.</p>
 </div>
 
 <div class="rec">
-  <div class="title"><h4>Build a fixed regression corpus</h4><span class="badge p2">P2</span></div>
-  <p>Every bug this session was found by re-running the same real document repeatedly. Formalizing 3-5 representative documents (one with grouped shapes, one with masters/layouts, one with a scanned/no-text-layer PDF, one with hyperlinks/comments) as a standing regression suite would catch these classes of bugs before they reach a real run, rather than after.</p>
+  <div class="title"><h4>Build a fixed regression corpus</h4><span class="badge fixed">Implemented — 43 checks</span></div>
+  <p><code>backend/scripts/regression_check.py</code> builds fresh docx/pptx/xlsx/pdf fixtures with planted leaks in every channel (body text, comment, tracked deletion, leaky hyperlink target, metadata property, orphaned no-rels image, the "RIA inside MATERIAL" word-boundary trap, SHA-distinct logo renditions) and runs the real render+scrub+verify functions offline — no Bedrock, no DB, ~10 seconds. It caught a real bug (issue 16) on its first execution. Run it after any masking-pipeline change.</p>
 </div>
 
 <div class="rec">
-  <div class="title"><h4>Periodic dictionary hygiene</h4><span class="badge p3">P3</span></div>
-  <p>The masking dictionary view (built this session) now makes cleanup possible, but nothing prompts it. A lightweight periodic review of <code>pending_approval</code> entries older than N days — auto-flagging candidates for governance attention — would prevent the same "REDACTED gray box" -class of forgotten-decision entities from silently accumulating.</p>
+  <div class="title"><h4>Periodic dictionary hygiene</h4><span class="badge fixed">Implemented (lightweight)</span></div>
+  <p><code>pending_approval</code> entries older than 14 days now carry a red "needs decision" badge in the Admin masking-dictionary view. The decision itself stays with governance — the system just stops letting forgotten entries hide.</p>
 </div>
 
 <div class="rec">
-  <div class="title"><h4>Tune the confidence threshold with real data</h4><span class="badge p3">P3</span></div>
-  <p>0.6 was a reasonable starting default, not a measured one. Once a handful of real documents have gone through the pipeline, look at the distribution of confidences on entities that reviewers subsequently added back manually (should be rare) vs. ones nobody added back (validates the cutoff) to tune it with evidence.</p>
+  <div class="title"><h4>Tune the confidence threshold with real data</h4><span class="badge p3">P3 — still open (by design)</span></div>
+  <p>0.6 remains a reasonable but unmeasured default. This deliberately needs a batch of real reviewed runs to tune against: compare confidences of entities reviewers add back manually vs. ones nobody misses. The latest run's auto-exclusions (TMG, RIA) went unchallenged, which is one early data point in the threshold's favor.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>Clear detect-phase blocking flags once the final file verifies clean</h4><span class="badge p2">P2 — new</span></div>
+  <p>The awareness flag filed at detect time ("N embedded images appear to reveal the client") stays visible after every flagged image has been redacted and verified, making a clean run look scarier than it is. The remediation pass already clears resolved flags — the normal apply path should do the same for detect-phase flags superseded by a fully-clean verification.</p>
 </div>
 
 <h2 id="model"><span class="num">7</span>Model choice: Sonnet vs. Haiku</h2>
@@ -484,6 +522,7 @@
   <tr><td>Net effect with current guardrails</td><td>Fewer edge cases hit at all</td><td>Same eventual correctness, more reliance on deterministic overrides doing the real work</td></tr>
 </table>
 <p class="muted">The deterministic guardrails built this session (own-firm phash, <code>mandatory_redaction</code>, confidence-threshold auto-skip) were specifically designed so correctness doesn't depend on the model's own judgment being reliable — this is what makes Haiku viable for cost-sensitive runs at all. Without them, Haiku's reliability gaps would show up as real, undetected leaks rather than caught-and-corrected ones.</p>
+<p><strong>Empirical answer as of the latest run:</strong> the fully-clean, all-channels-verified run in §2 was end-to-end Haiku — Sanitization $0.0547 + Tagging $0.0032 ≈ <strong>$0.058 for both agents on a 57-image real deck</strong>, roughly 4–5× cheaper than the same document on Sonnet. There is no separate vision model: <code>converse_vision()</code> uses whatever <code>BEDROCK_MODEL_ID</code> is configured. Stay on Haiku; revisit only if future documents rely on vision <em>judgment</em> alone (screenshots with no logo and no dictionary match), where Sonnet's completeness advantage would actually be load-bearing.</p>
 
 <h2 id="appendix"><span class="num">8</span>Appendix: files touched</h2>
 <table>
@@ -496,9 +535,15 @@
   <tr><td class="mono">app/documents/render.py</td><td>Word-boundary masking, PDF isolated-match check, xlsx same-pass image redaction</td></tr>
   <tr><td class="mono">app/documents/verify.py</td><td>Text residual check (word-boundary safe)</td></tr>
   <tr><td class="mono">app/documents/metadata_scan.py / metadata_scrub.py</td><td>Detect and fix docProps leaks (new)</td></tr>
-  <tr><td class="mono">app/documents/comment_scan.py / hyperlink_scan.py</td><td>Detect-only checks (new)</td></tr>
-  <tr><td class="mono">app/agents/sanitization/image_scan.py</td><td>Vision+OCR+phash merge logic, own-firm override, placeholder recognition</td></tr>
-  <tr><td class="mono">app/agents/sanitization/agent.py</td><td>Orchestration: confidence threshold, mandatory_redaction, multi-channel verify</td></tr>
+  <tr><td class="mono">app/documents/comment_scan.py / hyperlink_scan.py</td><td>Detect checks (new)</td></tr>
+  <tr><td class="mono">app/documents/hyperlink_scrub.py / comment_scrub.py</td><td>Auto-fix for hyperlink targets and comments/track-changes (new, optimization round)</td></tr>
+  <tr><td class="mono">app/agents/sanitization/remediate.py</td><td>Targeted in-place remediation of completed_with_issues runs (new, optimization round)</td></tr>
+  <tr><td class="mono">app/documents/image_redact.py</td><td>+ xlsx zip-swap branch, shared placeholder-bytes recognition</td></tr>
+  <tr><td class="mono">app/worker.py + app/models.py + init.sql</td><td>Stale-run reaper, heartbeat, <code>updated_at</code> column (optimization round)</td></tr>
+  <tr><td class="mono">scripts/regression_check.py</td><td>Standing offline regression suite — 43 checks, 4 formats, all channels (new, optimization round)</td></tr>
+  <tr><td class="mono">frontend/.../RunStatusPage.jsx</td><td>"Re-run sanitization on the flagged content" remediation button (optimization round)</td></tr>
+  <tr><td class="mono">app/agents/sanitization/image_scan.py</td><td>Vision+OCR+phash merge logic, own-firm override, placeholder recognition, perceptual dedup clustering, structured residual groups</td></tr>
+  <tr><td class="mono">app/agents/sanitization/agent.py</td><td>Orchestration: confidence threshold, mandatory_redaction, multi-channel verify, index-based redaction resolution, scrub wiring</td></tr>
   <tr><td class="mono">app/llm/bedrock_client.py</td><td>JSON extraction + Haiku schema-echo repair</td></tr>
   <tr><td class="mono">app/runs/background.py</td><td>Failure-path rollback fix</td></tr>
   <tr><td class="mono">app/routers_governance.py</td><td>Masking dictionary view + skip/unskip endpoints (new)</td></tr>
@@ -506,7 +551,7 @@
   <tr><td class="mono">frontend/.../AdminPage.jsx</td><td>Masking dictionary section (new)</td></tr>
   <tr><td class="mono">app/agents/sanitization/summarizer.py</td><td>Prompt fix: domain/engagement_type as single terms, not comma-crammed (feeds Tagging)</td></tr>
   <tr><td class="mono">app/agents/tagging/classifier.py</td><td>Validated, not modified this round — vocabulary gap identified is a data issue, not a code issue</td></tr>
-  <tr><td class="mono">tag_vocabulary (DB table)</td><td>Recommended addition: financial-services/asset-management (domain), global (geography) — see §6</td></tr>
+  <tr><td class="mono">tag_vocabulary (DB table) + app/main.py seed</td><td>Added: financial-services/asset-management (domain), global (geography) — validated in §2</td></tr>
 </table>
 
 <footer>

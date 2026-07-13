@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
+import Brand from "../components/Brand";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -25,24 +26,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="page-narrow">
-      <h1>Log in</h1>
+    <div className="auth-card">
+      <Brand />
+      <h1>Welcome back</h1>
+      <p className="auth-card__sub">Sign in to your NaviKnow workspace.</p>
       <form onSubmit={handleSubmit}>
         <label>
           Email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@navikenz.com" required />
         </label>
         <label>
           Password
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
         </label>
         {error && <p className="error-text">{error}</p>}
         <button type="submit" disabled={submitting}>
-          {submitting ? "Logging in..." : "Log in"}
+          {submitting ? "Signing in…" : "Sign in"}
         </button>
       </form>
-      <p>
-        No account? <Link to="/signup">Sign up</Link>
+      <p className="auth-card__foot">
+        No account? <Link to="/signup">Create one</Link>
       </p>
     </div>
   );

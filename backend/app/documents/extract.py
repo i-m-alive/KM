@@ -80,6 +80,51 @@ def _docx_table_lines(table) -> list[str]:
     return lines
 
 
+def _docx_textbox_lines(root_element) -> list[str]:
+    """Text inside text boxes (w:txbxContent). python-docx's .paragraphs never
+    descends into these - and Word cover pages / callouts put client names in
+    text boxes constantly - so without this walk the text is invisible to
+    detection, masking, AND verification: a silent leak, not a flagged one."""
+    from docx.oxml.ns import qn
+
+    lines = []
+    for txbx in root_element.iter(qn("w:txbxContent")):
+        for p in txbx.iter(qn("w:p")):
+            text = "".join(t.text or "" for t in p.iter(qn("w:t"))).strip()
+            if text:
+                lines.append(text)
+    return lines
+
+
+def _docx_part_text(path: str, partnames: tuple[str, ...]) -> list[str]:
+    """All w:t text from raw zip parts python-docx has no API for
+    (footnotes, endnotes)."""
+    import re as _re
+    import xml.etree.ElementTree as ET
+    import zipfile
+
+    W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    lines: list[str] = []
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = z.namelist()
+            for pattern in partnames:
+                for name in names:
+                    if not _re.match(pattern, name):
+                        continue
+                    try:
+                        root = ET.fromstring(z.read(name))
+                    except ET.ParseError:
+                        continue
+                    for p in root.iter(f"{W}p"):
+                        text = "".join(t.text or "" for t in p.iter(f"{W}t")).strip()
+                        if text:
+                            lines.append(text)
+    except Exception:
+        pass
+    return lines
+
+
 def _extract_docx(path: str) -> list[Chunk]:
     import docx
 
@@ -95,6 +140,11 @@ def _extract_docx(path: str) -> list[Chunk]:
                 if p.text.strip():
                     header_footer_lines.append(p.text.strip())
 
+    # Text boxes anywhere in the body, plus footnotes/endnotes - all outside
+    # python-docx's .paragraphs and previously invisible end to end.
+    textbox_lines = _docx_textbox_lines(document.element.body)
+    note_lines = _docx_part_text(path, (r"^word/footnotes\.xml$", r"^word/endnotes\.xml$"))
+
     # Tables at the document body level (and any tables nested within them).
     table_lines: list[str] = []
     for table in document.tables:
@@ -103,6 +153,10 @@ def _extract_docx(path: str) -> list[Chunk]:
     chunks: list[Chunk] = []
     if header_footer_lines:
         chunks.append(Chunk(chunk_id=-1, kind="header_footer", label="headers & footers", text="\n".join(header_footer_lines)))
+    if textbox_lines:
+        chunks.append(Chunk(chunk_id=-2, kind="text_boxes", label="text boxes", text="\n".join(textbox_lines)))
+    if note_lines:
+        chunks.append(Chunk(chunk_id=-3, kind="notes", label="footnotes & endnotes", text="\n".join(note_lines)))
 
     # Group body paragraphs into chunks so each LLM call sees a coherent block.
     per_chunk = max(1, settings.CHUNK_PARAGRAPHS)
@@ -124,6 +178,21 @@ def _extract_docx(path: str) -> list[Chunk]:
     return chunks
 
 
+def _xlsx_header_footer_lines(ws) -> list[str]:
+    """Print header/footer text - set from Page Layout in Excel, carries
+    'Client X - Confidential'-style lines surprisingly often, and never
+    appears in any cell."""
+    lines = []
+    for hf in (ws.oddHeader, ws.evenHeader, ws.firstHeader, ws.oddFooter, ws.evenFooter, ws.firstFooter):
+        if hf is None:
+            continue
+        for side in (hf.left, hf.center, hf.right):
+            text = (getattr(side, "text", None) or "").strip()
+            if text:
+                lines.append(text)
+    return lines
+
+
 def _extract_xlsx(path: str) -> list[Chunk]:
     import openpyxl
 
@@ -131,7 +200,11 @@ def _extract_xlsx(path: str) -> list[Chunk]:
     chunks: list[Chunk] = []
     for i, sheet_name in enumerate(wb.sheetnames):
         ws = wb[sheet_name]
-        lines: list[str] = []
+        # The sheet TAB NAME itself is content ("Bajaj FY24" as a tab name is
+        # a leak) - include it in the chunk text so detection, masking, and
+        # verification all see it, not just the human-readable label.
+        lines: list[str] = [sheet_name]
+        lines.extend(_xlsx_header_footer_lines(ws))
         for row in ws.iter_rows():
             cells = [str(c.value).strip() for c in row if c.value is not None and str(c.value).strip()]
             if cells:

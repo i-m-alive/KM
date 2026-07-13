@@ -17,6 +17,25 @@ from app.documents.images import ImageRef
 
 PLACEHOLDER_LABEL = "REDACTED"
 
+_PLACEHOLDER_GRAY = (60, 60, 60)
+
+
+def is_placeholder_bytes(data: bytes) -> bool:
+    """True if these image bytes ARE our own synthetic gray placeholder box
+    (see placeholder_png) - the deterministic way to recognize an already-
+    redacted image without depending on any model reading the label."""
+    try:
+        import io as _io
+
+        from PIL import Image
+
+        img = Image.open(_io.BytesIO(data)).convert("RGB")
+        pixels = list(img.resize((20, 20)).getdata())
+        near_gray = sum(1 for p in pixels if all(abs(p[i] - _PLACEHOLDER_GRAY[i]) <= 15 for i in range(3)))
+        return (near_gray / len(pixels)) > 0.85
+    except Exception:
+        return False
+
 
 def placeholder_png(width: int, height: int, label: str = PLACEHOLDER_LABEL) -> bytes:
     from PIL import Image, ImageDraw
@@ -74,6 +93,17 @@ def redact_pptx_images(doc_path: str, approved: list[ImageRef]) -> int:
     return len(partnames)
 
 
+def redact_xlsx_images(doc_path: str, approved: list[ImageRef]) -> int:
+    """Direct zip part swap for xlsx. Only valid AFTER rendering is fully
+    done: openpyxl renumbers media partnames on every save, which is why the
+    render pass does its own position-matched redaction - but a remediation
+    pass mutating an already-rendered file (with no openpyxl save to follow)
+    can swap partnames safely, same as docx/pptx."""
+    partnames = {ref.locator["partname"] for ref in approved if ref.locator.get("kind") == "xlsx"}
+    _redact_zip_package(doc_path, partnames)
+    return len(partnames)
+
+
 def redact_pdf_images(doc_path: str, approved: list[ImageRef]) -> tuple[int, int]:
     """Returns (images_redacted, images_with_no_rects) - the latter is a real,
     silent-no-op risk: PyMuPDF can't locate rects for images painted as tiling
@@ -124,4 +154,6 @@ def redact_images(doc_path: str, content_type: str, filename: str, approved: lis
         return redact_docx_images(doc_path, approved), 0
     if lower.endswith(".pptx") or "presentationml" in content_type:
         return redact_pptx_images(doc_path, approved), 0
+    if lower.endswith(".xlsx") or "spreadsheetml" in content_type:
+        return redact_xlsx_images(doc_path, approved), 0
     return 0, 0

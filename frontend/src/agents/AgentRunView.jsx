@@ -79,10 +79,15 @@ export default function AgentRunView() {
 
   return (
     <div>
-      <h1>{isViewMode ? `Run ${runId}` : agent?.display_name || agentId}</h1>
+      <div className="page-head">
+        <div className="page-head__text">
+          <h1>{isViewMode ? `Run ${runId}` : agent?.display_name || agentId}</h1>
+          {!isViewMode && agent?.description && <p className="page-head__sub">{agent.description}</p>}
+        </div>
+      </div>
 
       {!isViewMode && (
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="card">
           <label>
             Input text
             <textarea
@@ -93,8 +98,8 @@ export default function AgentRunView() {
               placeholder="Paste or type some text for the agent to process..."
             />
           </label>
-          <button type="submit" disabled={submitting}>
-            {submitting ? "Running..." : "Run agent"}
+          <button type="submit" disabled={submitting} style={{ alignSelf: "flex-start" }}>
+            {submitting ? "Running…" : "Run agent"}
           </button>
         </form>
       )}

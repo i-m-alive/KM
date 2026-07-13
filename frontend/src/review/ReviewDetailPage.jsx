@@ -123,261 +123,308 @@ export default function ReviewDetailPage() {
     }
   }
 
-  if (error) return <p className="error-text">{error}</p>;
-  if (!detail) return <p>Loading proposal...</p>;
+  if (error && !detail) return <p className="error-text">{error}</p>;
+  if (!detail)
+    return (
+      <div className="loading-state">
+        <span className="spinner" /> Loading proposal…
+      </div>
+    );
 
   const p = detail.proposal || {};
   const documentId = p.document_id;
   const images = p.images || [];
+  const edited = removed.size > 0 || imageOverrides.size > 0 || addedEntities.length > 0 || Boolean(clientEntitySurface);
 
   return (
     <div>
-      <h1>Review: {detail.agent_id}</h1>
-      <p className="agent-card__meta">{detail.summary}</p>
+      <div className="page-head">
+        <div className="page-head__text">
+          <h1 style={{ textTransform: "capitalize" }}>Review: {detail.agent_id}</h1>
+          <p className="page-head__sub">{detail.summary}</p>
+        </div>
+      </div>
+
       {detail.status !== "awaiting_review" && (
         <div className="callout">This run is now "{detail.status}" — it may already have been reviewed.</div>
       )}
+      {error && <p className="error-text">{error}</p>}
       <FlagList flags={detail.flags} />
 
       {detail.agent_id === "sanitization" && (
         <>
-          <h3>Sanitization style</h3>
-          <div className="agent-grid">
-            {MASKING_STYLES.map((s) => (
-              <label
-                key={s.value}
-                className="agent-card"
-                style={{
-                  display: "block",
-                  cursor: "pointer",
-                  borderColor: maskingStyle === s.value ? "#7c9cff" : undefined,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <input
-                    type="radio"
-                    name="masking-style"
-                    value={s.value}
-                    checked={maskingStyle === s.value}
-                    onChange={() => setMaskingStyle(s.value)}
-                  />
-                  <strong>{s.label}</strong>
-                </div>
-                <p className="agent-card__meta" style={{ margin: "0.35rem 0 0" }}>
-                  e.g. <code>{s.example}</code> &middot; {s.hint}
-                </p>
-              </label>
-            ))}
-          </div>
-
-          <h3 style={{ marginTop: "1.5rem" }}>Proposed masks ({(p.entities || []).length + addedEntities.length})</h3>
-          <p className="agent-card__meta">
-            Untick an entity to exclude it from masking, add any the agent missed, and mark which one is the
-            client — that's the only entity linked to a client account.
-          </p>
-          <table className="run-table">
-            <thead>
-              <tr>
-                <th>Mask</th>
-                <th>Surface</th>
-                <th>Type</th>
-                <th>Conf.</th>
-                <th>Occurrences</th>
-                <th>Known?</th>
-                <th>Include</th>
-                <th>Client?</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {(p.entities || []).map((e, i) => (
-                <tr key={i}>
-                  <td className="agent-card__meta">{e.mask_token || `[new ${e.entity_type}]`}</td>
-                  <td>{e.surface_text}</td>
-                  <td className="agent-card__meta">{e.entity_type}</td>
-                  <td>{Math.round((e.confidence ?? 0) * 100)}%</td>
-                  <td>{e.occurrences}</td>
-                  <td>{e.known ? "yes" : "new"}</td>
-                  <td>
-                    <input type="checkbox" checked={!removed.has(e.surface_text)} onChange={() => toggle(e.surface_text)} />
-                  </td>
-                  <td>
+          <div className="card section">
+            <h3 className="card__title">Sanitization style</h3>
+            <p className="card__sub">How masked text is rendered in the output document.</p>
+            <div className="agent-grid">
+              {MASKING_STYLES.map((s) => (
+                <label
+                  key={s.value}
+                  className="agent-card"
+                  style={{
+                    display: "block",
+                    cursor: "pointer",
+                    borderColor: maskingStyle === s.value ? "var(--brand-500)" : undefined,
+                    boxShadow: maskingStyle === s.value ? "0 0 0 3px var(--brand-100)" : undefined,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <input
                       type="radio"
-                      name="client-entity"
-                      disabled={removed.has(e.surface_text)}
-                      checked={clientEntitySurface.toLowerCase() === e.surface_text.toLowerCase()}
-                      onChange={() => setClientEntitySurface(e.surface_text)}
+                      name="masking-style"
+                      value={s.value}
+                      checked={maskingStyle === s.value}
+                      onChange={() => setMaskingStyle(s.value)}
                     />
-                  </td>
-                  <td />
-                </tr>
-              ))}
-              {addedEntities.map((e, i) => (
-                <tr key={`added-${i}`}>
-                  <td className="agent-card__meta">[new {e.entity_type}]</td>
-                  <td>{e.surface_text}</td>
-                  <td className="agent-card__meta">{e.entity_type}</td>
-                  <td>—</td>
-                  <td>—</td>
-                  <td className="agent-card__meta">reviewer-added</td>
-                  <td>
-                    <input type="checkbox" checked disabled />
-                  </td>
-                  <td>
-                    <input
-                      type="radio"
-                      name="client-entity"
-                      checked={clientEntitySurface.toLowerCase() === e.surface_text.toLowerCase()}
-                      onChange={() => setClientEntitySurface(e.surface_text)}
-                    />
-                  </td>
-                  <td>
-                    <button type="button" onClick={() => removeAddedEntity(e.surface_text)}>
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.75rem" }}>
-            <input
-              type="text"
-              placeholder="Surface text the agent missed (e.g. a client name)"
-              value={newSurface}
-              onChange={(e) => setNewSurface(e.target.value)}
-              style={{ flex: 1 }}
-            />
-            <select value={newType} onChange={(e) => setNewType(e.target.value)}>
-              {ENTITY_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={addEntity} disabled={!newSurface.trim()}>
-              Add entity
-            </button>
-          </div>
-
-          <h3 style={{ marginTop: "1.5rem" }}>
-            Embedded images ({images.length}{p.images_skipped ? `, ${p.images_skipped} not scanned` : ""})
-          </h3>
-          <p className="agent-card__meta">
-            Logos, screenshots, and other pixel content are scanned separately from text — they cannot be
-            edited the same way, so check each one and confirm which should be blacked out.
-          </p>
-          {images.length === 0 && <p className="agent-card__meta">No embedded images found.</p>}
-          <div className="agent-grid">
-            {images.map((g) => {
-              const borderColor = g.needs_human_judgment
-                ? "#D9A441"
-                : g.contains_client_identity
-                  ? "#E3AFAF"
-                  : undefined;
-              return (
-                <div key={g.group_index} className="agent-card" style={{ borderColor }}>
-                  {documentId && (
-                    <AuthImage
-                      src={`/documents/${documentId}/images/${g.sample_index}`}
-                      alt={g.description}
-                      style={{ maxWidth: "100%", maxHeight: "160px", objectFit: "contain", marginBottom: "0.5rem" }}
-                    />
-                  )}
-                  <p style={{ margin: "0 0 0.35rem", fontSize: "0.88rem" }}>{g.description || "(no description)"}</p>
-                  <p className="agent-card__meta">
-                    {g.locations.join(", ")} &middot; {g.occurrence_count} occurrence(s) &middot; conf.{" "}
-                    {Math.round((g.confidence ?? 0) * 100)}%
+                    <strong>{s.label}</strong>
+                  </div>
+                  <p className="agent-card__meta" style={{ margin: "0.35rem 0 0" }}>
+                    e.g. <code>{s.example}</code> · {s.hint}
                   </p>
-                  {g.ocr_text && g.ocr_text.length > 0 && (
-                    <p className="agent-card__meta" style={{ marginTop: "0.35rem" }}>
-                      OCR: <em>{g.ocr_text.join(", ")}</em>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="card section">
+            <h3 className="card__title">Proposed masks ({(p.entities || []).length + addedEntities.length})</h3>
+            <p className="card__sub">
+              Untick an entity to exclude it from masking, add any the agent missed, and mark which one is the client —
+              that's the only entity linked to a client account.
+            </p>
+            <div className="table-scroll">
+              <table className="run-table">
+                <thead>
+                  <tr>
+                    <th>Mask</th>
+                    <th>Surface</th>
+                    <th>Type</th>
+                    <th>Conf.</th>
+                    <th>Occurrences</th>
+                    <th>Known?</th>
+                    <th>Include</th>
+                    <th>Client?</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {(p.entities || []).map((e, i) => (
+                    <tr key={i} style={removed.has(e.surface_text) ? { opacity: 0.45 } : undefined}>
+                      <td><code>{e.mask_token || `[new ${e.entity_type}]`}</code></td>
+                      <td style={{ fontWeight: 550 }}>{e.surface_text}</td>
+                      <td className="agent-card__meta">{e.entity_type}</td>
+                      <td>{Math.round((e.confidence ?? 0) * 100)}%</td>
+                      <td>{e.occurrences}</td>
+                      <td>
+                        <span className={`chip ${e.known ? "" : ""}`}>{e.known ? "known" : "new"}</span>
+                      </td>
+                      <td>
+                        <input type="checkbox" checked={!removed.has(e.surface_text)} onChange={() => toggle(e.surface_text)} />
+                      </td>
+                      <td>
+                        <input
+                          type="radio"
+                          name="client-entity"
+                          disabled={removed.has(e.surface_text)}
+                          checked={clientEntitySurface.toLowerCase() === e.surface_text.toLowerCase()}
+                          onChange={() => setClientEntitySurface(e.surface_text)}
+                        />
+                      </td>
+                      <td />
+                    </tr>
+                  ))}
+                  {addedEntities.map((e, i) => (
+                    <tr key={`added-${i}`}>
+                      <td><code>[new {e.entity_type}]</code></td>
+                      <td style={{ fontWeight: 550 }}>{e.surface_text}</td>
+                      <td className="agent-card__meta">{e.entity_type}</td>
+                      <td>—</td>
+                      <td>—</td>
+                      <td><span className="chip">reviewer-added</span></td>
+                      <td>
+                        <input type="checkbox" checked disabled />
+                      </td>
+                      <td>
+                        <input
+                          type="radio"
+                          name="client-entity"
+                          checked={clientEntitySurface.toLowerCase() === e.surface_text.toLowerCase()}
+                          onChange={() => setClientEntitySurface(e.surface_text)}
+                        />
+                      </td>
+                      <td>
+                        <button type="button" className="btn--ghost btn--sm" onClick={() => removeAddedEntity(e.surface_text)}>
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.9rem", flexWrap: "wrap" }}>
+              <input
+                type="text"
+                placeholder="Surface text the agent missed (e.g. a client name)"
+                value={newSurface}
+                onChange={(e) => setNewSurface(e.target.value)}
+                style={{ flex: 1, minWidth: "220px" }}
+              />
+              <select value={newType} onChange={(e) => setNewType(e.target.value)}>
+                {ENTITY_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="btn--subtle" onClick={addEntity} disabled={!newSurface.trim()}>
+                Add entity
+              </button>
+            </div>
+          </div>
+
+          <div className="card section">
+            <h3 className="card__title">
+              Embedded images ({images.length}
+              {p.images_skipped ? `, ${p.images_skipped} not scanned` : ""})
+            </h3>
+            <p className="card__sub">
+              Logos, screenshots, and other pixel content are scanned separately from text — check each one and confirm
+              which should be blacked out.
+            </p>
+            {images.length === 0 && <p className="agent-card__meta">No embedded images found.</p>}
+            <div className="agent-grid">
+              {images.map((g) => {
+                const borderColor = g.mandatory_redaction
+                  ? "#fca5a5"
+                  : g.needs_human_judgment
+                    ? "#fcd34d"
+                    : g.contains_client_identity
+                      ? "#fda4af"
+                      : undefined;
+                return (
+                  <div key={g.group_index} className="agent-card" style={{ borderColor }}>
+                    {documentId && (
+                      <div style={{ background: "var(--ink-100)", borderRadius: "8px", padding: "0.4rem", marginBottom: "0.6rem", textAlign: "center" }}>
+                        <AuthImage
+                          src={`/documents/${documentId}/images/${g.sample_index}`}
+                          alt={g.description}
+                          style={{ maxWidth: "100%", maxHeight: "150px", objectFit: "contain" }}
+                        />
+                      </div>
+                    )}
+                    <p style={{ margin: "0 0 0.35rem", fontSize: "0.85rem" }}>{g.description || "(no description)"}</p>
+                    <p className="agent-card__meta">
+                      {g.locations.join(", ")} · {g.occurrence_count} occurrence(s) · conf. {Math.round((g.confidence ?? 0) * 100)}%
                     </p>
-                  )}
-                  {g.logo_match_token && (
-                    <p className="agent-card__meta" style={{ marginTop: "0.35rem" }}>
-                      Possible logo match: <strong>{g.logo_match_token}</strong> (distance {g.logo_match_distance})
-                    </p>
-                  )}
-                  {g.needs_human_judgment && (
-                    <p style={{ margin: "0.35rem 0 0", color: "#8a5a00", fontSize: "0.85rem" }}>
-                      Uncertain signal — stylized font, low-contrast mark, or borderline logo similarity. Please inspect manually.
-                    </p>
-                  )}
-                  {g.mandatory_redaction && (
-                    <p style={{ margin: "0.35rem 0 0", color: "#8a1f1f", fontSize: "0.85rem", fontWeight: 600 }}>
-                      Locked: confirmed match to an already-approved masked entity ({g.logo_match_token}) — always
-                      redacted, regardless of the description above.
-                    </p>
-                  )}
-                  <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginTop: "0.4rem" }}>
-                    <input
-                      type="checkbox"
-                      checked={willRedact(g)}
-                      disabled={g.mandatory_redaction}
-                      onChange={() => toggleImage(g.group_index)}
-                    />
-                    Black this image out
-                  </label>
-                </div>
-              );
-            })}
+                    {g.ocr_text && g.ocr_text.length > 0 && (
+                      <p className="agent-card__meta" style={{ marginTop: "0.35rem" }}>
+                        OCR: <em>{g.ocr_text.join(", ")}</em>
+                      </p>
+                    )}
+                    {g.logo_match_token && (
+                      <p className="agent-card__meta" style={{ marginTop: "0.35rem" }}>
+                        Possible logo match: <strong>{g.logo_match_token}</strong> (distance {g.logo_match_distance})
+                      </p>
+                    )}
+                    {g.needs_human_judgment && (
+                      <p style={{ margin: "0.4rem 0 0", color: "var(--warn-fg)", fontSize: "0.8rem" }}>
+                        ⚠ Uncertain signal — stylized font, low-contrast mark, or borderline logo similarity. Please inspect
+                        manually.
+                      </p>
+                    )}
+                    {g.mandatory_redaction && (
+                      <p style={{ margin: "0.4rem 0 0", color: "var(--bad-fg)", fontSize: "0.8rem", fontWeight: 600 }}>
+                        Locked: confirmed match to an already-approved masked entity ({g.logo_match_token}) — always
+                        redacted, regardless of the description above.
+                      </p>
+                    )}
+                    <label
+                      style={{
+                        display: "flex",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: "0.45rem",
+                        marginTop: "0.6rem",
+                        fontWeight: 600,
+                        fontSize: "0.84rem",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={willRedact(g)}
+                        disabled={g.mandatory_redaction}
+                        onChange={() => toggleImage(g.group_index)}
+                      />
+                      Black this image out
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </>
       )}
 
       {detail.agent_id === "tagging" && (
-        <>
-          <h3>Proposed tags ({(p.tags || []).length})</h3>
-          <p className="agent-card__meta">Untick a tag to exclude it. New terms stay pending governance and are not applied.</p>
-          <table className="run-table">
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th>Value</th>
-                <th>Conf.</th>
-                <th>Status</th>
-                <th>Include</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(p.tags || []).map((t, i) => {
-                const key = `${t.category}:${t.value}`;
-                return (
-                  <tr key={i}>
-                    <td className="agent-card__meta">{t.category}</td>
-                    <td>{t.value}</td>
-                    <td>{Math.round((t.confidence ?? 0) * 100)}%</td>
-                    <td>{t.status}</td>
-                    <td>
-                      <input type="checkbox" checked={!removed.has(key)} onChange={() => toggle(key)} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </>
+        <div className="card section">
+          <h3 className="card__title">Proposed tags ({(p.tags || []).length})</h3>
+          <p className="card__sub">Untick a tag to exclude it. New terms stay pending governance and are not applied.</p>
+          <div className="table-scroll">
+            <table className="run-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Value</th>
+                  <th>Conf.</th>
+                  <th>Status</th>
+                  <th>Include</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(p.tags || []).map((t, i) => {
+                  const key = `${t.category}:${t.value}`;
+                  return (
+                    <tr key={i} style={removed.has(key) ? { opacity: 0.45 } : undefined}>
+                      <td className="agent-card__meta">{t.category}</td>
+                      <td style={{ fontWeight: 550 }}>{t.value}</td>
+                      <td>{Math.round((t.confidence ?? 0) * 100)}%</td>
+                      <td>
+                        <span className="chip">{t.status.replace(/_/g, " ")}</span>
+                      </td>
+                      <td>
+                        <input type="checkbox" checked={!removed.has(key)} onChange={() => toggle(key)} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
-      <label>
-        Notes (optional)
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-      </label>
-      <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem" }}>
-        <button onClick={() => decide("approved")} disabled={busy}>
-          Approve
-          {removed.size > 0 || imageOverrides.size > 0 || addedEntities.length > 0 || clientEntitySurface ? " (edited)" : ""}
-        </button>
-        <button onClick={() => decide("rejected")} disabled={busy}>
-          Reject
-        </button>
+      <div className="card section">
+        <h3 className="card__title">Decision</h3>
+        <label>
+          Notes (optional)
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+        </label>
+        <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.9rem" }}>
+          <button onClick={() => decide("approved")} disabled={busy}>
+            {busy ? "Submitting…" : `Approve${edited ? " (edited)" : ""}`}
+          </button>
+          <button className="btn--danger" onClick={() => decide("rejected")} disabled={busy}>
+            Reject
+          </button>
+        </div>
       </div>
 
-      <h3 style={{ marginTop: "1.5rem" }}>Steps</h3>
-      <StepTimeline steps={detail.steps} />
+      <div className="section">
+        <h3>Steps</h3>
+        <StepTimeline steps={detail.steps} />
+      </div>
     </div>
   );
 }

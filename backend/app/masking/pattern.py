@@ -10,4 +10,13 @@ import re
 
 
 def surface_pattern(surface: str) -> str:
-    return r"\b" + re.escape(surface) + r"\b"
+    # Interior spaces match ANY whitespace run (\s+), not just a single
+    # literal space: extracted text preserves line breaks, so a multi-word
+    # name wrapped across a line ("Tata\nCapital") must still match in
+    # masking AND verification - with a literal space, the verifier was
+    # blind to exactly the wrapped occurrences the renderer is most likely
+    # to have missed.
+    # re.escape may render a space as "\ " depending on Python version -
+    # replace the ESCAPED form, not a bare " ", or the substitution corrupts
+    # the pattern instead of loosening it.
+    return r"\b" + re.escape(surface).replace(re.escape(" "), r"\s+") + r"\b"

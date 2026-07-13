@@ -33,7 +33,8 @@ def compute_phash(image_bytes: bytes) -> str | None:
         return None
 
 
-def _distance(a: str, b: str) -> int | None:
+def phash_distance(a: str, b: str) -> int | None:
+    """Hamming distance between two hex phashes; None if either won't parse."""
     try:
         import imagehash
 
@@ -43,6 +44,9 @@ def _distance(a: str, b: str) -> int | None:
         return int(imagehash.hex_to_hash(a) - imagehash.hex_to_hash(b))
     except Exception:
         return None
+
+
+_distance = phash_distance
 
 
 def find_matches(db: Session, phash: str, threshold: int = UNCERTAIN_THRESHOLD) -> list[tuple[uuid.UUID, int]]:

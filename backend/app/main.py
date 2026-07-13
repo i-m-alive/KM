@@ -36,10 +36,10 @@ def _seed_roles() -> None:
 # Starter controlled vocabulary for Tagging (A-02). KM-governance manages it
 # from here via the vocabulary router; this only seeds the initial set.
 SEED_TAG_VOCABULARY: dict[str, list[str]] = {
-    "domain": ["retail", "banking", "healthcare", "public-sector", "telecom", "manufacturing", "insurance", "energy"],
+    "domain": ["retail", "banking", "financial-services", "asset-management", "healthcare", "public-sector", "telecom", "manufacturing", "insurance", "energy"],
     "use_case": ["data-migration", "cloud-modernisation", "fraud-detection", "cx-transformation", "analytics", "automation", "security-uplift"],
     "technology": ["aws", "azure", "gcp", "snowflake", "sap", "salesforce", "react", "kafka", "kubernetes", "databricks"],
-    "geography": ["na", "emea", "apac", "india", "uk", "us", "latam"],
+    "geography": ["na", "emea", "apac", "india", "uk", "us", "latam", "global"],
     "engagement_type": ["assessment", "implementation", "managed-service", "advisory", "migration"],
 }
 
@@ -81,7 +81,9 @@ async def lifespan(app: FastAPI):
     # existing ones, so schema changes don't require wiping the dev volume.
     Base.metadata.create_all(bind=engine)
     _seed_roles()
-    _seed_tag_vocabulary()
+    # Vocabulary seeding intentionally disabled: the taxonomy is now built
+    # entirely through governance (the Tags page), starting from empty.
+    # Re-enable _seed_tag_vocabulary() here to restore the starter set.
     _bootstrap_admin()
     yield
 

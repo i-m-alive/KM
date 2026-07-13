@@ -144,6 +144,9 @@ class MaskingEntityOut(BaseModel):
     client_account_id: uuid.UUID | None
     client_account_name: str | None
     created_at: datetime
+    # pending_approval older than the hygiene window - a forgotten decision
+    # (approve / skip) that will otherwise re-surface on every future run.
+    stale: bool = False
 
 
 # ---- Documents ----

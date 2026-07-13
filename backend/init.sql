@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   output_file_path TEXT,
   created_by UUID REFERENCES users(id) NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),  -- refreshed on every ORM update; the stale-run reaper's clock
   completed_at TIMESTAMPTZ
 );
 

@@ -29,11 +29,17 @@ function UsersSection() {
     }
   }
 
-  if (loading) return <p>Loading users...</p>;
+  if (loading)
+    return (
+      <div className="loading-state">
+        <span className="spinner" /> Loading users…
+      </div>
+    );
 
   return (
-    <div>
-      <h2>Users</h2>
+    <div className="card section">
+      <h3 className="card__title">Users</h3>
+      <p className="card__sub">Assign roles — role determines which capabilities each account has.</p>
       {error && <p className="error-text">{error}</p>}
       <table className="run-table">
         <thead>
@@ -118,14 +124,19 @@ function AccountsSection() {
     }
   }
 
-  if (loading) return <p>Loading accounts...</p>;
+  if (loading)
+    return (
+      <div className="loading-state">
+        <span className="spinner" /> Loading accounts…
+      </div>
+    );
 
   return (
-    <div>
-      <h2>Client accounts &amp; ownership</h2>
-      <p className="agent-card__meta">
-        Placeholder registry - Sanitization will later link real masked documents to these accounts.
-        Ownership here only restricts practice-lead client-name lookups once that endpoint exists.
+    <div className="card section">
+      <h3 className="card__title">Client accounts &amp; ownership</h3>
+      <p className="card__sub">
+        Placeholder registry - Sanitization will later link real masked documents to these accounts. Ownership here only
+        restricts practice-lead client-name lookups once that endpoint exists.
       </p>
       {error && <p className="error-text">{error}</p>}
 
@@ -202,15 +213,20 @@ function MaskingDictionarySection() {
     }
   }
 
-  if (loading) return <p>Loading masking dictionary...</p>;
+  if (loading)
+    return (
+      <div className="loading-state">
+        <span className="spinner" /> Loading masking dictionary…
+      </div>
+    );
 
   return (
-    <div>
-      <h2>Masking dictionary</h2>
-      <p className="agent-card__meta">
-        The global, cross-document mask token registry. "Skip" permanently stops a term from ever being
-        proposed as client-identifying again (in text, OCR, or vision judgment) - use it for recurring
-        false positives (common words, industry acronyms) rather than re-excluding the same term every run.
+    <div className="card section">
+      <h3 className="card__title">Masking dictionary</h3>
+      <p className="card__sub">
+        The global, cross-document mask token registry. "Skip" permanently stops a term from ever being proposed as
+        client-identifying again (in text, OCR, or vision judgment) - use it for recurring false positives (common
+        words, industry acronyms) rather than re-excluding the same term every run.
       </p>
       {error && <p className="error-text">{error}</p>}
       <table className="run-table">
@@ -240,6 +256,15 @@ function MaskingDictionarySection() {
                 <span className={`status-pill status-pill--${e.status === "approved" ? "completed" : e.status === "skipped" ? "failed" : "awaiting_review"}`}>
                   {e.status}
                 </span>
+                {e.stale && (
+                  <span
+                    className="status-pill status-pill--failed"
+                    style={{ marginLeft: "0.4rem" }}
+                    title="Pending approval for over two weeks - it will keep re-surfacing in every run's proposal until someone approves or skips it."
+                  >
+                    needs decision
+                  </span>
+                )}
               </td>
               <td className="agent-card__meta">{e.client_account_name || "—"}</td>
               <td className="agent-card__meta">{new Date(e.created_at).toLocaleDateString()}</td>
@@ -274,7 +299,12 @@ export default function AdminPage() {
 
   return (
     <div>
-      <h1>Admin</h1>
+      <div className="page-head">
+        <div className="page-head__text">
+          <h1>Admin</h1>
+          <p className="page-head__sub">Users, client accounts, and the global masking dictionary.</p>
+        </div>
+      </div>
       {canManageUsers && <UsersSection />}
       {canManageAccounts && <AccountsSection />}
       {canViewMaskingDictionary && <MaskingDictionarySection />}

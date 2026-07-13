@@ -59,6 +59,55 @@ def _docx_mask_table(table, surface_to_token: dict[str, str], style: str) -> Non
                 _docx_mask_table(nested, surface_to_token, style)
 
 
+def _docx_mask_textboxes(root_element, parent, surface_to_token: dict[str, str], style: str) -> None:
+    """Mask paragraphs inside text boxes (w:txbxContent) - python-docx's
+    .paragraphs never descends into these, so cover-page callouts and shape
+    labels were previously rendered UNMASKED even when the same name was
+    masked everywhere else. Wrapping each w:p in a Paragraph proxy reuses the
+    exact run-joining masking the normal body path gets (a surface split
+    across runs still matches)."""
+    from docx.oxml.ns import qn
+    from docx.text.paragraph import Paragraph
+
+    for txbx in root_element.iter(qn("w:txbxContent")):
+        for p_el in txbx.iter(qn("w:p")):
+            _mask_paragraph_runs(Paragraph(p_el, parent), surface_to_token, style)
+
+
+def _scrub_docx_note_parts(path: str, surface_to_token: dict[str, str], style: str) -> None:
+    """Footnotes/endnotes: python-docx has no API for these parts at all, so
+    they're scrubbed in the saved zip via element-text-only substitution (the
+    same mechanism comment_scrub uses, with the same limitation: a surface
+    split across two runs inside a footnote isn't fixable here - extraction
+    still sees it joined, so verification will flag it rather than pass it)."""
+    import re as _re
+    import shutil
+    import zipfile
+
+    from app.documents.comment_scrub import _scrub_element_text
+
+    targets = (r"^word/footnotes\.xml$", r"^word/endnotes\.xml$")
+    tmp_path = path + ".notetmp"
+    with zipfile.ZipFile(path, "r") as zin:
+        replacements: dict[str, bytes] = {}
+        for name in zin.namelist():
+            if not any(_re.match(t, name) for t in targets):
+                continue
+            try:
+                text = zin.read(name).decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            new_text, changed = _scrub_element_text(text, ["w:t", "w:delText"], surface_to_token, style)
+            if changed:
+                replacements[name] = new_text.encode("utf-8")
+        if not replacements:
+            return
+        with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                zout.writestr(item, replacements.get(item.filename, zin.read(item.filename)))
+    shutil.move(tmp_path, path)
+
+
 def _render_docx(src: str, dst: str, surface_to_token: dict[str, str], style: str) -> None:
     import docx
 
@@ -69,6 +118,9 @@ def _render_docx(src: str, dst: str, surface_to_token: dict[str, str], style: st
     for table in document.tables:
         _docx_mask_table(table, surface_to_token, style)
 
+    # Text boxes anywhere in the body (cover pages, callouts, shape labels).
+    _docx_mask_textboxes(document.element.body, document, surface_to_token, style)
+
     # Headers/footers - letterhead-style templates often carry the client
     # name here, and this was previously never touched at all.
     for section in document.sections:
@@ -77,8 +129,14 @@ def _render_docx(src: str, dst: str, surface_to_token: dict[str, str], style: st
                 _mask_paragraph_runs(p, surface_to_token, style)
             for table in part.tables:
                 _docx_mask_table(table, surface_to_token, style)
+            # Text boxes inside headers/footers too.
+            _docx_mask_textboxes(part._element, part, surface_to_token, style)
 
     document.save(dst)
+
+    # Footnotes/endnotes live in parts python-docx can't reach - scrub the
+    # saved zip directly.
+    _scrub_docx_note_parts(dst, surface_to_token, style)
 
 
 # ---- PPTX ----
@@ -114,6 +172,47 @@ def _render_pptx(src: str, dst: str, surface_to_token: dict[str, str], style: st
 
 
 # ---- XLSX ----
+_SHEET_NAME_FORBIDDEN = re.compile(r"[\[\]:*?/\\]")
+
+
+def _safe_sheet_title(masked: str, existing: set[str]) -> str:
+    """Excel forbids []:*?/\\ in sheet names (so a raw '[CLIENT_1]' token is
+    invalid) and caps them at 31 chars; also must be unique per workbook."""
+    title = _SHEET_NAME_FORBIDDEN.sub("", masked).strip() or "Sheet"
+    title = title[:31]
+    base, n = title, 2
+    while title in existing:
+        suffix = f" ({n})"
+        title = base[: 31 - len(suffix)] + suffix
+        n += 1
+    return title
+
+
+def _mask_xlsx_sheet_names_and_headers(wb, surface_to_token: dict[str, str], style: str) -> None:
+    """Sheet tab names and print headers/footers are real content channels
+    ('Bajaj FY24' as a tab name is a leak) that no cell iteration ever sees.
+    NOTE: renaming a sheet does not rewrite formulas that reference it by its
+    old name - but those formula strings are themselves masked by the cell
+    pass (a formula's text is cell.value on a non-data_only load), so the old
+    name doesn't survive there either."""
+    existing = set(wb.sheetnames)
+    for ws in wb.worksheets:
+        masked = _replace_text(ws.title, surface_to_token, style)
+        if masked != ws.title:
+            existing.discard(ws.title)
+            ws.title = _safe_sheet_title(masked, existing)
+            existing.add(ws.title)
+        for hf in (ws.oddHeader, ws.evenHeader, ws.firstHeader, ws.oddFooter, ws.evenFooter, ws.firstFooter):
+            if hf is None:
+                continue
+            for side in (hf.left, hf.center, hf.right):
+                text = getattr(side, "text", None)
+                if text:
+                    masked_text = _replace_text(text, surface_to_token, style)
+                    if masked_text != text:
+                        side.text = masked_text
+
+
 def _render_xlsx(
     src: str, dst: str, surface_to_token: dict[str, str], style: str, approved_image_refs: list | None = None
 ) -> int:
@@ -136,6 +235,7 @@ def _render_xlsx(
                     masked = _replace_text(cell.value, surface_to_token, style)
                     if masked != cell.value:
                         cell.value = masked
+    _mask_xlsx_sheet_names_and_headers(wb, surface_to_token, style)
 
     images_redacted = 0
     if approved_image_refs:
@@ -162,17 +262,53 @@ def _render_xlsx(
 
 
 # ---- PDF (redaction) ----
-def _is_isolated_match(page, rect, surface: str) -> bool:
-    """page.search_for() is a plain substring search - it would happily match
-    "RIA" inside "Variance". Grab a couple points of surrounding context
-    around the matched rect and confirm the surface actually sits at a word
-    boundary there, the same check the OOXML paths get via regex \\b."""
+def _norm_pdf_word(w: str) -> str:
+    """Word-comparison key: casefolded, punctuation stripped from both ends
+    (a doc word 'BAJAJ,' must match the surface 'BAJAJ')."""
+    return re.sub(r"^[\W_]+|[\W_]+$", "", w).casefold()
+
+
+def _word_token_match(doc_norm: str, token: str) -> bool:
+    # Possessives are the one common interior-punctuation case: "BAJAJ's"
+    # ends in a word char so end-stripping can't remove it.
+    return doc_norm == token or doc_norm == token + "'s" or doc_norm == token + "’s"
+
+
+def _pdf_surface_sequences(page, surface: str) -> list[list]:
+    """True word-level occurrences of `surface` on the page. Replaces the old
+    page.search_for() + context-padding heuristic, which had two real failure
+    modes: (a) a multi-word name wrapped across a line break never matched at
+    all (search_for is a single-line substring search), and (b) in tight
+    table/column layouts the padded-context word-boundary check could glue an
+    adjacent cell's text onto the match and wrongly REJECT a legitimate
+    occurrence - leaving it unmasked while verification (which re-extracts
+    text with different word segmentation) didn't always catch it.
+
+    Matching is done on page.get_text("words"): consecutive words within the
+    same text block (so unrelated columns are never stitched together) whose
+    normalized forms equal the surface's tokens. Word-boundary safety is by
+    construction - whole words only, so "RIA" can never match inside
+    "MATERIAL". Returns a list of matched sequences, each a list of
+    fitz.Rect (one per word, possibly spanning lines)."""
     import fitz
 
-    pad = 2
-    expanded = fitz.Rect(rect.x0 - pad, rect.y0 - pad, rect.x1 + pad, rect.y1 + pad)
-    context = page.get_textbox(expanded)
-    return re.search(surface_pattern(surface), context, flags=re.IGNORECASE) is not None
+    tokens = [t for t in (_norm_pdf_word(t) for t in surface.split()) if t]
+    if not tokens:
+        return []
+    # (x0, y0, x1, y1, text, block_no, line_no, word_no); punctuation-only
+    # words are dropped from matching so "Johnson & Johnson" still matches
+    # when '&' is its own word.
+    words = [(fitz.Rect(w[:4]), _norm_pdf_word(w[4]), w[5]) for w in page.get_text("words")]
+    words = [w for w in words if w[1]]
+
+    sequences: list[list] = []
+    n = len(tokens)
+    for i in range(len(words) - n + 1):
+        window = words[i : i + n]
+        if all(_word_token_match(w[1], tok) for w, tok in zip(window, tokens)):
+            if len({w[2] for w in window}) == 1:  # same block only
+                sequences.append([w[0] for w in window])
+    return sequences
 
 
 def _render_pdf(src: str, dst: str, surface_to_token: dict[str, str], style: str) -> None:
@@ -183,18 +319,21 @@ def _render_pdf(src: str, dst: str, surface_to_token: dict[str, str], style: str
         # Longest first so "Acme Corp" is redacted before "Acme".
         for surface in sorted(surface_to_token.keys(), key=len, reverse=True):
             token = surface_to_token[surface]
-            for rect in page.search_for(surface, quads=False):
-                if not _is_isolated_match(page, rect, surface):
-                    continue
-                if style == "black":
-                    # Solid black redaction bar - no replacement text, nothing readable survives.
-                    page.add_redact_annot(rect, fill=(0, 0, 0))
-                elif style == "remove":
-                    # Blank the region out entirely - no marker left behind.
-                    page.add_redact_annot(rect, fill=(1, 1, 1))
-                else:
-                    # White-out the original text and overlay the traceable mask token.
-                    page.add_redact_annot(rect, text=token, fill=(1, 1, 1), text_color=(0, 0, 0), fontsize=8)
+            for sequence in _pdf_surface_sequences(page, surface):
+                for j, rect in enumerate(sequence):
+                    if style == "black":
+                        # Solid black redaction bar - no replacement text, nothing readable survives.
+                        page.add_redact_annot(rect, fill=(0, 0, 0))
+                    elif style == "remove":
+                        # Blank the region out entirely - no marker left behind.
+                        page.add_redact_annot(rect, fill=(1, 1, 1))
+                    elif j == 0:
+                        # White-out the original text and overlay the traceable
+                        # mask token - on the FIRST word of the sequence only,
+                        # so a multi-word name yields one token, not one per word.
+                        page.add_redact_annot(rect, text=token, fill=(1, 1, 1), text_color=(0, 0, 0), fontsize=8)
+                    else:
+                        page.add_redact_annot(rect, fill=(1, 1, 1))
         page.apply_redactions()
     doc.save(dst, garbage=4, deflate=True)
     doc.close()

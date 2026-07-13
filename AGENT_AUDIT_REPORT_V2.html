@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sanitization &amp; Tagging — Process Audit V2</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --card: #ffffff; --text: #1c2733; --muted: #5b6b7b;
+    --border: #dde4ec; --accent: #0b5fa5;
+    --pass-bg: #e2f5e9; --pass: #146c2e;
+    --fail-bg: #fde7e9; --fail: #a11224;
+    --warn-bg: #fff4d6; --warn: #8a6100;
+    --info-bg: #e7f0fb; --info: #0b5fa5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; }
+  .hero { background: linear-gradient(135deg, #10263f 0%, #0b5fa5 100%); color: #fff; padding: 2.5rem 1.5rem 2rem; }
+  .hero h1 { margin: 0 0 0.4rem; font-size: 1.6rem; }
+  .hero p { margin: 0.2rem 0; color: #cfd8e3; font-size: 0.95rem; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.8rem; margin-top: 1.4rem; max-width: 1000px; }
+  .stat { background: rgba(255,255,255,0.09); border-radius: 8px; padding: 0.8rem 1rem; }
+  .stat .n { display: block; font-size: 1.5rem; font-weight: 700; }
+  .stat .l { font-size: 0.8rem; color: #cfd8e3; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 1.5rem; }
+  h2 { margin-top: 2.6rem; font-size: 1.3rem; border-bottom: 2px solid var(--border); padding-bottom: 0.4rem; }
+  h2 .num { display: inline-block; background: var(--accent); color: #fff; border-radius: 6px; font-size: 0.85rem; padding: 0.1rem 0.55rem; margin-right: 0.6rem; vertical-align: 2px; }
+  h3 { font-size: 1.05rem; margin-top: 1.8rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9rem; background: var(--card); }
+  th, td { border: 1px solid var(--border); padding: 0.55rem 0.7rem; text-align: left; vertical-align: top; }
+  th { background: #eef2f7; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86em; background: #eef2f7; border-radius: 4px; padding: 0.05em 0.35em; }
+  .badge { display: inline-block; border-radius: 20px; font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.65rem; white-space: nowrap; }
+  .badge.pass { background: var(--pass-bg); color: var(--pass); }
+  .badge.fail { background: var(--fail-bg); color: var(--fail); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .badge.info { background: var(--info-bg); color: var(--info); }
+  .finding { border: 1px solid var(--border); border-left: 5px solid var(--accent); border-radius: 8px; background: var(--card); padding: 1rem 1.25rem; margin: 1rem 0; }
+  .finding.critical { border-left-color: var(--fail); }
+  .finding.warning { border-left-color: #d99e00; }
+  .finding h4 { margin: 0 0 0.3rem; font-size: 1rem; }
+  .finding .meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
+  .label { font-weight: 700; }
+  .muted { color: var(--muted); }
+  .check-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; margin: 0.8rem 0; }
+  .check { border-radius: 6px; padding: 0.45rem 0.6rem; font-size: 0.82rem; font-weight: 600; text-align: center; }
+  .check.pass { background: var(--pass-bg); color: var(--pass); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.1rem 1.3rem; margin: 1rem 0; }
+  ul.tight li { margin-bottom: 0.4rem; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+  .toc { columns: 2; gap: 2rem; padding-left: 1.2rem; }
+  .toc a { color: var(--accent); text-decoration: none; font-size: 0.92rem; }
+  .toc li { margin-bottom: 0.4rem; }
+  @media (max-width: 640px) { .toc { columns: 1; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>Sanitization &amp; Tagging — Process Audit V2</h1>
+  <p>NaviKnow · fresh end-to-end audit of both agents against the two newest real runs</p>
+  <p>Sanitization <code style="background:rgba(255,255,255,0.15);">72f44588</code> + Tagging <code style="background:rgba(255,255,255,0.15);">01f2fadd</code> on the Fidelity deck, compared against the immediately preceding pair on the same document</p>
+  <div class="summary-grid">
+    <div class="stat"><span class="n">1</span><span class="l">Critical leak-class bug found &amp; fixed during this audit</span></div>
+    <div class="stat"><span class="n">6+2</span><span class="l">Approved names + client systems that survived a "clean" run</span></div>
+    <div class="stat"><span class="n">8</span><span class="l">Further findings (governance + quality)</span></div>
+    <div class="stat"><span class="n">$0.060</span><span class="l">Full pipeline cost, both agents (Haiku)</span></div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="card">
+  <h3 style="margin-top:0;">Contents</h3>
+  <ul class="toc">
+    <li><a href="#method">1. What this audit did</a></li>
+    <li><a href="#critical">2. The critical finding (fixed)</a></li>
+    <li><a href="#findings">3. All other findings</a></li>
+    <li><a href="#working">4. What's confirmed working</a></li>
+    <li><a href="#plan">5. Optimization plan, prioritized</a></li>
+    <li><a href="#numbers">6. Run-by-run numbers</a></li>
+  </ul>
+</div>
+
+<h2 id="method"><span class="num">1</span>What this audit did</h2>
+<p>Rather than re-checking the pass/fail channels (which all read green), this audit went after the question the channels <em>can't</em> answer: <strong>is the green actually trustworthy, and is the output quality consistent?</strong> Method:</p>
+<ul class="tight">
+  <li>Pulled the two newest real runs of each agent from the database and compared them against the immediately preceding pair — <strong>same document, 27 minutes apart</strong>, giving a natural A/B of run-to-run consistency.</li>
+  <li>Diffed the actual masked surfaces between the two Sanitization runs (from <code>masking_occurrences</code>), then swept the second run's rendered file for anything the first run masked but the second didn't.</li>
+  <li>Read the full Tagging agent code path (untouched in previous audits) against its observed database rows.</li>
+  <li>Inspected the masking dictionary's real contents (68 entities) for quality, not just count.</li>
+</ul>
+
+<h2 id="critical"><span class="num">2</span>The critical finding — a "clean" run that wasn't</h2>
+
+<div class="finding critical">
+  <h4>Approved dictionary entities silently went unmasked when the LLM had a weak run</h4>
+  <div class="meta"><span class="badge pass">FIXED during this audit</span> · severity: leak-class · found by diffing two runs of the same document</div>
+  <p><span class="label">The observation:</span> run <code>9bd3c579</code> masked 13 text occurrences on the Fidelity deck; run <code>72f44588</code> — same document, 27 minutes later — masked only 7, and <em>both</em> reported <code>verified_text: true</code>. Diffing the masked surfaces and sweeping run 2's rendered file found <strong>6 company names present in the output that run 1 had masked</strong>: BlackRock, GSK, Siemens, Tata Capital, Arvind Fashions, VFS — plus client system names (Aladdin, SHERPA X) also missed. All of these are <strong>approved</strong> entities in the global masking dictionary.</p>
+  <p><span class="label">The three-link failure chain:</span></p>
+  <ul class="tight">
+    <li><strong>Haiku detector variance:</strong> the LLM proposed 11 entities in run 1 but only 3 in run 2 — the same variance §7 of the previous report predicted, now measured on identical input.</li>
+    <li><strong>The dictionary pass was hostage to the candidate list:</strong> it only ran <code>dictionary.lookup()</code> on strings the NER pre-pass happened to surface (8 candidates). If nothing re-proposed "BlackRock" this run, the dictionary — which <em>knew</em> BlackRock — was never asked.</li>
+    <li><strong>Verification only checks proposed surfaces:</strong> <code>verified_text</code> re-checks that the surfaces <em>in this run's proposal</em> are gone. It structurally cannot catch what detection never proposed. The green channel was honest about what it checked, but what it checked was too narrow.</li>
+  </ul>
+  <p><span class="label">The fix (shipped and live):</span> a <strong>full-text dictionary sweep</strong> in <code>detect()</code> — every approved entity's aliases are regex-scanned (word-boundary, case-insensitive) against the entire document text, and any hit joins the proposal deterministically at confidence 1.0, regardless of what NER or the LLM did that run. Once an entity is approved in the global dictionary, its masking never again depends on per-run model behavior. A second latent bug was fixed in the same pass: known entities were masked using <code>aliases[0]</code> rather than the alias actually matched in the document — an entity whose first alias is a different variant would have masked the wrong string.</p>
+  <p><span class="label">Validation:</span> the sweep, run offline against the original deck, finds <strong>18 approved entities</strong> — including all 6 survivors and both client system names. The 43-check regression suite still passes; both servers restarted with the fix.</p>
+  <p><span class="label">Residual risk (honest):</span> the sweep protects anything <em>ever approved</em>. A <strong>first-time</strong> document with never-before-seen third-party names still gets only the LLM's variable recall on those names. See the double-pass recommendation in §5.</p>
+</div>
+
+<h2 id="findings"><span class="num">3</span>All other findings</h2>
+
+<div class="finding warning">
+  <h4>F2 — Junk OCR-split entities in the masking dictionary now mask generic English words</h4>
+  <div class="meta"><span class="badge warn">Governance action needed — deliberately NOT auto-fixed</span></div>
+  <p>The dictionary contains approved entities that are OCR fragments of real names: <code>[CLIENT_44] "ARVIND"</code>, <code>[CLIENT_45] "FASHIONS"</code>, <code>[CLIENT_46] "TATA"</code>, <code>[CLIENT_47] "CAPITAL"</code>, and <code>[CLIENT_LOCATION_1] "Global Controlling Leadership"</code>. Run 2 actually masked the standalone word "Capital" — over-masking that corrupts innocuous text like "capital markets". Longest-first ordering means "Tata Capital" wins where the full phrase appears, but standalone occurrences of the bare words still get hit. <strong>The new full-text sweep makes these fire consistently on every future document</strong>, so cleanup is now urgent rather than cosmetic: open Admin → Masking dictionary and <em>Skip</em> the fragment entities (the skip mechanism built earlier exists for exactly this). Skipped entities are excluded from the sweep. This is a reviewer decision — which fragments are junk vs. genuinely maskable (e.g. "TATA" alone arguably is) — which is why it wasn't done unilaterally.</p>
+</div>
+
+<div class="finding warning">
+  <h4>F3 — Run-level approval blanket-confirms flagged tags</h4>
+  <div class="meta"><span class="badge warn">Tagging · semantics bug</span> · <code>app/agents/tagging/agent.py</code></div>
+  <p>The latest Tagging run flagged <code>use_case=fraud-detection</code> at 0.65 (below the 0.7 threshold) for reviewer confirmation — but its database row reads <code>status=confirmed</code>. Cause: on approval, <code>apply()</code> sets <em>every</em> surviving tag to "confirmed", including ones the reviewer never individually looked at. The per-tag "flagged" state exists only until approval, then is erased. "Confirmed" should mean a human confirmed <em>that tag</em>; flagged tags not explicitly acted on should stay distinguishable (e.g. keep <code>flagged</code>, or a <code>confirmed_bulk</code> status), or the review UI should require per-tag confirmation for below-threshold tags.</p>
+</div>
+
+<div class="finding warning">
+  <h4>F4 — "domain is single-valued" is stated in the prompt but not enforced anywhere</h4>
+  <div class="meta"><span class="badge info">Tagging · policy drift</span></div>
+  <p>The classifier prompt says domain and engagement_type are single-valued; the latest run applied <strong>two</strong> domain tags (<code>financial-services</code> 0.95 + <code>asset-management</code> 0.85) and nothing objected. Here the result was arguably <em>better</em> for search — which is exactly why this needs a deliberate policy decision rather than silent drift: either allow multi-domain (update the prompt and the summarizer's matching instruction), or enforce single-valued in code (keep the highest-confidence one). Currently the model decides per-run, which is the worst option for consistency.</p>
+</div>
+
+<div class="finding warning">
+  <h4>F5 — Detect-phase blocking flag lingers on verified-clean runs (recurring)</h4>
+  <div class="meta"><span class="badge warn">Sanitization · UX/trust</span> · now observed on 3 consecutive completed runs</div>
+  <p>"30 embedded image(s) appear to reveal the client — review before treating this document as sanitized" still shows on a run where all 30 were subsequently redacted and all five channels verified clean. Anyone reading the flags list concludes the file is unsafe when it isn't. The remediation path already clears superseded flags; the normal apply path should do the same when verification passes clean.</p>
+</div>
+
+<div class="finding">
+  <h4>F6 — use_case vocabulary is still too coarse for the documents actually flowing through</h4>
+  <div class="meta"><span class="badge info">Tagging · vocabulary coverage</span></div>
+  <p>Sanitization's metadata hints listed 10 concrete finance use-cases (record-to-report automation, regulatory reporting, reconciliation automation, consolidation and close, cash application matching, …). The classifier could only map them to <code>automation</code> + <code>analytics</code> + <code>fraud-detection</code> — the searchable granularity is being flattened at the last step. Meanwhile <code>technology=generative-ai</code> and <code>technology=ai</code> sit at <code>pending_approval</code> in the existing Tag Vocabulary page's queue with nobody having approved them (which is also why this run's <code>pending_new_terms</code> is empty — the term exists, it's just stuck). Approve/curate the queue and seed the use_case category with the recurring finance-transformation terms.</p>
+</div>
+
+<div class="finding">
+  <h4>F7 — Output reporting conflates text-masked and image-only entities</h4>
+  <div class="meta"><span class="badge info">Sanitization · reporting clarity</span></div>
+  <p>The run output says "29 entities masked" but only 7 text occurrences across 6 entities — the other 23 are image/OCR-derived identities that were redacted as pixels, not text. Nothing distinguishes them in <code>entities_masked</code>, which makes every run look like it over-reports. Split the output into <code>text_entities</code> / <code>image_entities</code> (or add a <code>source</code> field) so the numbers reconcile at a glance.</p>
+</div>
+
+<div class="finding">
+  <h4>F8 — The sanitized summary names the own firm, inconsistently</h4>
+  <div class="meta"><span class="badge info">Sanitization · policy decision</span></div>
+  <p>Run 1's summary began "A global consulting firm presents…"; run 2's begins "<strong>Navikenz</strong> presents…". Not a client-identity leak (own-firm is deliberately unmasked), but it's run-to-run inconsistent and adds zero search signal when every document is the firm's own. Pick a policy — probably "refer to the delivery firm generically in summaries" — and put it in the summarizer prompt.</p>
+</div>
+
+<div class="finding">
+  <h4>F9 — Run confidence = the single weakest tag</h4>
+  <div class="meta"><span class="badge info">Tagging · metric</span></div>
+  <p>The Tagging run's confidence is <code>min()</code> over all tags, so one 0.65 tag among twelve strong ones labels the whole run 0.65. Twelve-tag runs will almost always contain one weak tag, so the run-level number trends meaninglessly low. A mean (or the count of below-threshold tags) would describe the run honestly.</p>
+</div>
+
+<h2 id="working"><span class="num">4</span>What's confirmed working — validated this audit, not assumed</h2>
+<ul class="tight">
+  <li><strong>All five verification channels green on both Sanitization runs</strong>, and the raw-XML sweep of every package part confirms zero occurrences of the client name in both rendered files.</li>
+  <li><strong>Hyperlink-target scrubbing fired in production for the first time</strong> — step 8 of run <code>72f44588</code>: "1 hyperlink target(s) rewritten", and the hyperlinks channel verified clean. The feature built last round works on real documents, not just fixtures.</li>
+  <li><strong>Perceptual dedup + index-based redaction</strong>: 50 unique clusters scanned (not 57+ raw images), 39 images blacked out, no survivors of the resolution bug fixed last round.</li>
+  <li><strong>The vocabulary expansion keeps paying off</strong>: <code>domain=financial-services</code> (0.95), <code>asset-management</code> (0.85), <code>geography=global</code> (0.88) all applied — the exact terms that were unavailable two audits ago.</li>
+  <li><strong>Own-firm exclusion held</strong>: Navikenz appears in the summary (see F8) but was never proposed as a maskable client entity in either run.</li>
+  <li><strong>Cost discipline</strong>: ~$0.057 Sanitization + ~$0.003 Tagging per full pipeline on Haiku.</li>
+</ul>
+
+<h2 id="plan"><span class="num">5</span>Optimization plan, prioritized</h2>
+<table>
+  <tr><th>#</th><th>Action</th><th>Type</th><th>Priority</th><th>Status</th></tr>
+  <tr><td>1</td><td>Full-text dictionary sweep in <code>detect()</code> + matched-alias masking</td><td>Code</td><td>P0</td><td><span class="badge pass">Done — this audit</span></td></tr>
+  <tr><td>2</td><td>Skip the junk OCR-fragment entities (CLIENT_44–47, CLIENT_LOCATION_1) in Admin → Masking dictionary — urgent now that the sweep fires them on every document</td><td>Governance (you)</td><td>P0</td><td><span class="badge warn">Waiting on reviewer</span></td></tr>
+  <tr><td>3</td><td>Approve/curate the pending tag terms (<code>generative-ai</code>, <code>ai</code>) in the Tag Vocabulary page; seed use_case with recurring finance terms (regulatory-reporting, record-to-report, reconciliation, close-automation)</td><td>Governance (you)</td><td>P1</td><td><span class="badge warn">Waiting on reviewer</span></td></tr>
+  <tr><td>4</td><td>Clear detect-phase blocking flags when apply's verification passes clean (F5)</td><td>Code</td><td>P1</td><td>Open</td></tr>
+  <tr><td>5</td><td>Per-tag confirm semantics: flagged tags keep a distinguishable status through run-level approval (F3)</td><td>Code</td><td>P1</td><td>Open</td></tr>
+  <tr><td>6</td><td>First-run recall insurance: for documents with no dictionary history, run the LLM detector twice and union the proposals (~$0.01 extra) — directly attacks the 11-vs-3 variance on the docs the sweep can't protect</td><td>Code</td><td>P2</td><td>Open</td></tr>
+  <tr><td>7</td><td>Decide the multi-domain policy and align prompt + enforcement (F4)</td><td>Policy + code</td><td>P2</td><td>Open</td></tr>
+  <tr><td>8</td><td>Split <code>entities_masked</code> into text vs. image-derived in run output (F7)</td><td>Code</td><td>P2</td><td>Open</td></tr>
+  <tr><td>9</td><td>Summarizer: refer to the delivery firm generically (F8); Tagging run confidence as mean, not min (F9)</td><td>Code</td><td>P3</td><td>Open</td></tr>
+</table>
+
+<h2 id="numbers"><span class="num">6</span>Run-by-run numbers (same document, 27 minutes apart)</h2>
+<table>
+  <tr><th></th><th>Run 1 — <code>9bd3c579</code></th><th>Run 2 — <code>72f44588</code></th><th>Reading</th></tr>
+  <tr><td>LLM entities proposed</td><td>11</td><td>3</td><td>Detector variance — the trigger for the critical finding</td></tr>
+  <tr><td>Text occurrences masked</td><td>13</td><td>7</td><td>Run 2 left 6 approved names unmasked (now impossible post-fix)</td></tr>
+  <tr><td>Entities in output</td><td>39</td><td>29</td><td>Mostly image-derived; see F7</td></tr>
+  <tr><td>Image clusters scanned / flagged</td><td>50 / 31</td><td>50 / 30</td><td>Perceptual dedup stable; vision variance minor</td></tr>
+  <tr><td>Images redacted</td><td>39</td><td>39</td><td>Consistent</td></tr>
+  <tr><td>Channels verified</td><td>5 / 5</td><td>5 / 5</td><td>Green — but see §2 for what green does and doesn't mean</td></tr>
+  <tr><td>Hyperlink targets rewritten</td><td>0</td><td>1</td><td>New scrubber's first production fire</td></tr>
+  <tr><td>Cost (Sanitization)</td><td>$0.0547</td><td>$0.0571</td><td>Haiku, stable</td></tr>
+  <tr><td>Tags applied (Tagging run)</td><td>9 + 1 proposed</td><td>12</td><td>Vocabulary fix visible in both</td></tr>
+  <tr><td>Weakest tag</td><td>fraud-detection 0.72</td><td>fraud-detection 0.65</td><td>Confirmed despite flag — F3</td></tr>
+</table>
+
+<div class="check-grid">
+  <div class="check pass">verified_text ✓ (both)</div>
+  <div class="check pass">verified_images ✓ (both)</div>
+  <div class="check pass">verified_metadata ✓ (both)</div>
+  <div class="check pass">verified_comments ✓ (both)</div>
+  <div class="check pass">verified_hyperlinks ✓ (both)</div>
+</div>
+
+<footer>
+  Process Audit V2 — generated from a fresh code-and-data audit of the NaviKnow Sanitization (A-01) and Tagging (A-02) agents, using the two most recent real run pairs in the database. The critical fix (full-text dictionary sweep) is live in both backend processes as of this report; items 2–3 in §5 are governance actions only you can take. The previous report (SANITIZATION_AGENT_REPORT.html) remains the historical record of the original debugging session and first optimization round.
+</footer>
+
+</div>
+</body>
+</html>

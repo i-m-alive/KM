@@ -172,3 +172,27 @@ def get_run(run_id: uuid.UUID, user: User = Depends(get_current_user), db: Sessi
     if run is None or (run.created_by != user.id and not has_capability(user, "review_queue_manage")):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found")
     return _to_run_out(run)
+
+
+@router.post("/{run_id}/remediate", response_model=RunOut)
+async def remediate(run_id: uuid.UUID, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> RunOut:
+    """Targeted fix-up of a completed_with_issues Sanitization run: redact the
+    images the verification flagged (scoped to those slides/pages, in place on
+    the rendered file), re-scrub metadata/comments/hyperlinks, and re-verify -
+    without re-running the whole pipeline on the original document."""
+    from app.agents.sanitization.remediate import RemediationError, remediate_run
+
+    run = (
+        db.query(AgentRun)
+        .options(joinedload(AgentRun.steps), joinedload(AgentRun.flags))
+        .filter(AgentRun.id == run_id)
+        .first()
+    )
+    if run is None or (run.created_by != user.id and not has_capability(user, "review_queue_manage")):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found")
+    try:
+        await remediate_run(db, run)
+    except RemediationError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    db.refresh(run)
+    return _to_run_out(run)

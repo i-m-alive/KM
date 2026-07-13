@@ -4,12 +4,46 @@ detect() -> proposal -> (human review unless auto-apply) -> apply() -> completed
 Shared by the worker (detection) and the review endpoint (application).
 """
 
+import asyncio
+import contextlib
 from datetime import datetime
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.agents.base import AgentResult, BackgroundAgent, ReviewProposal
+from app.db import SessionLocal
 from app.models import AgentRun, RunFlag, RunStep
+
+_HEARTBEAT_INTERVAL_SECONDS = 60.0
+
+
+@contextlib.asynccontextmanager
+async def _heartbeat(run_id):
+    """Touch the run's updated_at while a phase is actively executing, on its
+    own session so it can't disturb the caller's transaction. The stale-run
+    reaper keys off updated_at - without a beat, a legitimately slow phase
+    (e.g. a 150-image deck's vision scans) would look identical to a dead one."""
+
+    async def _beat():
+        while True:
+            await asyncio.sleep(_HEARTBEAT_INTERVAL_SECONDS)
+            beat_db = SessionLocal()
+            try:
+                beat_db.execute(text("UPDATE agent_runs SET updated_at = now() WHERE id = :id"), {"id": str(run_id)})
+                beat_db.commit()
+            except Exception:
+                beat_db.rollback()
+            finally:
+                beat_db.close()
+
+    task = asyncio.create_task(_beat())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 def _persist_steps(db: Session, run: AgentRun, steps, base_order: int = 0) -> int:
@@ -57,7 +91,8 @@ def _finalize_completed(db: Session, run: AgentRun, result: AgentResult) -> None
 
 async def run_detection(db: Session, run: AgentRun, agent: BackgroundAgent) -> None:
     """Phase 1. On auto-apply proposals, chains straight into apply()."""
-    proposal: ReviewProposal = await agent.detect(db, run)
+    async with _heartbeat(run.id):
+        proposal: ReviewProposal = await agent.detect(db, run)
 
     run.status = proposal.working_status  # transient label already used during detect; re-affirm
     run.input_tokens = (run.input_tokens or 0) + proposal.input_tokens
@@ -74,7 +109,8 @@ async def run_detection(db: Session, run: AgentRun, agent: BackgroundAgent) -> N
 
     # Auto-apply path (no human needed).
     db.commit()
-    result = await agent.apply(db, run, decision={"auto": True, "proposal": proposal.proposal})
+    async with _heartbeat(run.id):
+        result = await agent.apply(db, run, decision={"auto": True, "proposal": proposal.proposal})
     _finalize_completed(db, run, result)
 
 
@@ -82,7 +118,8 @@ async def run_application(db: Session, run: AgentRun, agent: BackgroundAgent, de
     """Phase 2 — reviewer approved (or edited). Commit the masks/tags."""
     run.status = "applying"
     db.commit()
-    result = await agent.apply(db, run, decision)
+    async with _heartbeat(run.id):
+        result = await agent.apply(db, run, decision)
     _finalize_completed(db, run, result)
 
 

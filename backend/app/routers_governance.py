@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
@@ -147,7 +148,16 @@ def get_full_audit_log(
     ]
 
 
+# A pending_approval entry older than this is a forgotten decision: it keeps
+# re-surfacing in every run's proposal until someone approves or skips it,
+# which is exactly how a stray "[REDACTED] gray box"-class entity silently
+# accumulated before the dictionary view existed. Surfaced as a badge, not
+# auto-actioned - the decision itself still belongs to governance.
+DICTIONARY_STALE_AFTER_DAYS = 14
+
+
 def _to_entity_out(entity: MaskingEntity) -> MaskingEntityOut:
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(days=DICTIONARY_STALE_AFTER_DAYS)
     return MaskingEntityOut(
         id=entity.id,
         mask_token=entity.mask_token,
@@ -157,6 +167,7 @@ def _to_entity_out(entity: MaskingEntity) -> MaskingEntityOut:
         client_account_id=entity.client_account_id,
         client_account_name=entity.client_account.name if entity.client_account else None,
         created_at=entity.created_at,
+        stale=entity.status == "pending_approval" and entity.created_at < stale_cutoff,
     )
 
 

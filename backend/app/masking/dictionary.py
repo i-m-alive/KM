@@ -49,6 +49,29 @@ def lookup(db: Session, raw_value: str) -> MaskingEntity | None:
     return alias.entity if alias else None
 
 
+def find_in_text(db: Session, text: str) -> list[tuple[MaskingEntity, str]]:
+    """Every APPROVED entity whose alias appears (word-boundary, case-
+    insensitive) anywhere in `text`, as (entity, matched_alias) pairs - one
+    per entity, first matching alias wins. Unlike lookup(), this doesn't
+    depend on anything having proposed the string first - so an already-
+    approved global entity can never silently go unmasked just because one
+    run's detector had a weak pass (observed: 6 approved third-party names
+    survived a run whose LLM proposed 3 entities instead of the prior run's 11)."""
+    from app.masking.pattern import surface_pattern
+
+    matches: list[tuple[MaskingEntity, str]] = []
+    entities = db.query(MaskingEntity).filter(MaskingEntity.status == "approved").all()
+    for entity in entities:
+        for alias in entity.aliases:
+            surface = (alias.raw_value or "").strip()
+            if len(surface) < 3 or is_own_firm(surface):
+                continue
+            if re.search(surface_pattern(surface), text, flags=re.IGNORECASE):
+                matches.append((entity, surface))
+                break
+    return matches
+
+
 def is_skipped(db: Session, raw_value: str) -> bool:
     """True if a reviewer has explicitly marked this surface as never worth
     proposing again (governance decision via the masking dictionary view) -

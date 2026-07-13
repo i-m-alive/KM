@@ -16,12 +16,19 @@ from sqlalchemy.orm import Session
 from app.agents.base import AgentFlag, AgentResult, AgentStep, BackgroundAgent, ReviewProposal
 from app.agents.sanitization import detector, summarizer
 from app.agents.sanitization.apply_masks import apply_masks
-from app.agents.sanitization.image_scan import MAX_IMAGES_SCANNED, find_residual_images, scan_document_images
+from app.agents.sanitization.image_scan import (
+    MAX_IMAGES_SCANNED,
+    find_residual_image_groups,
+    residual_image_messages,
+    scan_document_images,
+)
 from app.agents.sanitization.ner_prepass import extract_candidates, presidio_available
 from app.config import get_settings
 from app.documents.comment_scan import find_residual_comments
+from app.documents.comment_scrub import scrub_comments
 from app.documents.extract import extract_chunks
 from app.documents.hyperlink_scan import find_residual_hyperlinks
+from app.documents.hyperlink_scrub import scrub_hyperlinks
 from app.documents.image_redact import redact_images
 from app.documents.images import extract_images
 from app.documents.metadata_scan import find_residual_metadata
@@ -75,15 +82,59 @@ class SanitizationAgent(BackgroundAgent):
                                detail=f"{len(chunks)} chunks; {len(candidates)} distinct candidate strings",
                                duration_ms=int((time.monotonic() - t) * 1000)))
 
+        # A scanned PDF (no text layer) makes the ENTIRE text channel blind -
+        # extraction sees nothing, so detection, masking, and text
+        # verification all trivially "pass" while every word on the page sits
+        # in pixels. The image scan still covers it (each scanned page is one
+        # big image), but the reviewer must know the text channel's green
+        # checkmark means "nothing to check", not "checked and clean".
+        is_pdf = doc.content_type == "application/pdf" or doc.filename.lower().endswith(".pdf")
+        if is_pdf and chunks:
+            total_text = sum(len(c.text.strip()) for c in chunks)
+            if total_text < 50 * len(chunks):
+                flags.append(AgentFlag(
+                    message=(
+                        f"This PDF has little or no extractable text ({total_text} chars across {len(chunks)} page(s)) - "
+                        "likely a scan. The text channel cannot see or mask anything here; coverage relies entirely on "
+                        "the image scan. Review the rendered output page by page before distributing."
+                    ),
+                    severity="warning",
+                ))
+
         # Step 2: deterministic dictionary pass (known clients, free).
+        # `known` maps the surface AS IT APPEARS IN THIS DOCUMENT -> entity;
+        # apply() masks exactly that surface string, so it must be the form
+        # actually present in the text, never just aliases[0] of the entity.
         t = time.monotonic()
         known: dict[str, object] = {}
         for c in candidates:
             entity = dictionary.lookup(db, c.surface_text)
             if entity is not None and entity.status == "approved" and not is_own_firm(c.surface_text):
-                known[c.surface_text.lower()] = entity
+                known[c.surface_text] = entity
+
+        # Full-text sweep of the ENTIRE approved dictionary - the candidate
+        # loop above only asks about strings the NER pre-pass happened to
+        # surface, which made deterministic coverage hostage to that pass's
+        # recall. Observed consequence: a weak LLM run proposed 3 entities
+        # instead of the prior run's 11, and 6 already-APPROVED third-party
+        # names (BlackRock, GSK, Siemens, ...) silently survived in a file
+        # whose text channel still verified "clean", because verification
+        # only checks proposed surfaces. Once an entity is approved in the
+        # global dictionary, its masking must never again depend on any
+        # per-run model behavior.
+        full_text = "\n".join(c.text for c in chunks)
+        swept = 0
+        already = {e.mask_token for e in known.values()}
+        for entity, matched_surface in dictionary.find_in_text(db, full_text):
+            if entity.mask_token in already:
+                continue
+            known[matched_surface] = entity
+            already.add(entity.mask_token)
+            swept += 1
         steps.append(AgentStep(order=2, name="dictionary pass", tool="masking_dictionary",
-                               detail=f"{len(known)} candidate(s) already known", duration_ms=int((time.monotonic() - t) * 1000)))
+                               detail=f"{len(known)} entit{'y' if len(known) == 1 else 'ies'} already known "
+                                      f"({swept} via full-text dictionary sweep, beyond the candidate pass)",
+                               duration_ms=int((time.monotonic() - t) * 1000)))
 
         # Step 3: LLM Detector via MCP tool-use loop.
         t = time.monotonic()
@@ -95,9 +146,13 @@ class SanitizationAgent(BackgroundAgent):
 
         # Merge known (deterministic) + LLM entities, dedupe by normalized surface.
         merged: dict[str, dict] = {}
-        for surface_l, entity in known.items():
-            merged[dictionary.normalize(surface_l)] = {
-                "surface_text": entity.aliases[0].raw_value if entity.aliases else surface_l,
+        for surface, entity in known.items():
+            merged[dictionary.normalize(surface)] = {
+                # The surface as found in THIS document (candidate string or
+                # full-text-sweep match) - apply() masks exactly this string,
+                # so aliases[0] (which may be a different variant of the same
+                # entity) would mask the wrong form and miss the real one.
+                "surface_text": surface,
                 "entity_type": entity.entity_type,
                 "confidence": 1.0,
                 "known": True,
@@ -219,6 +274,11 @@ class SanitizationAgent(BackgroundAgent):
             {
                 "group_index": g.group_index,
                 "sample_index": g.sample_ref.index,
+                # Every occurrence in the cluster, INCLUDING SHA-distinct
+                # near-duplicate renditions merged by perceptual dedup - their
+                # bytes differ from the sample's, so apply() cannot re-derive
+                # this set from the sample image alone.
+                "all_indices": g.all_indices,
                 "locations": g.locations,
                 "occurrence_count": len(g.all_indices),
                 "contains_client_identity": g.contains_client_identity,
@@ -387,8 +447,19 @@ class SanitizationAgent(BackgroundAgent):
             if not (recommended or opted_in or g.get("mandatory_redaction")):
                 continue
             approved_groups.append(g)
+            # Redact every occurrence in the cluster. all_indices is
+            # authoritative: perceptual dedup merges SHA-DISTINCT renditions
+            # of the same logo (different compression/resize) into one group,
+            # and those renditions are NOT byte-equal to the sample - a
+            # byte-equality sweep alone silently leaves them in the rendered
+            # file (observed: 2 confident logo matches surviving apply).
+            indices = g.get("all_indices")
+            if indices:
+                approved_refs.extend(by_index[i] for i in indices if i in by_index)
+                continue
+            # Fallback for proposals filed before all_indices existed:
+            # byte-equality with the sample (correct for exact-SHA groups).
             sample_idx = g.get("sample_index")
-            # redact every occurrence sharing this image's content, not just the sample
             sample_bytes = by_index[sample_idx].image_bytes if sample_idx in by_index else None
             for ref in all_image_refs:
                 if sample_bytes is not None and ref.image_bytes == sample_bytes:
@@ -450,20 +521,35 @@ class SanitizationAgent(BackgroundAgent):
             if metadata_scrubbed:
                 steps.append(AgentStep(order=8, name="scrub metadata", tool=None, detail=f"{metadata_scrubbed} propert{'y' if metadata_scrubbed == 1 else 'ies'} rewritten"))
 
+        # Scrub hyperlink targets and comments/track-changes - the two channels
+        # that used to be detect-and-block only (a genuine href like
+        # https://www.<client>.com permanently blocked a run with no path to
+        # clean). Both now self-heal; verification below still re-checks the
+        # result and blocks anything these missed.
+        hyperlinks_scrubbed = comments_scrubbed = 0
+        if rendered_natively:
+            hyperlinks_scrubbed = scrub_hyperlinks(masked_doc_path, doc.content_type, doc.filename, surface_to_token, masking_style)
+            if hyperlinks_scrubbed:
+                steps.append(AgentStep(order=8, name="scrub hyperlink targets", tool=None, detail=f"{hyperlinks_scrubbed} hyperlink target(s) rewritten"))
+            comments_scrubbed = scrub_comments(masked_doc_path, doc.content_type, doc.filename, surface_to_token, masking_style)
+            if comments_scrubbed:
+                steps.append(AgentStep(order=8, name="scrub comments/track-changes", tool=None, detail=f"{comments_scrubbed} comment/tracked-change fragment(s) rewritten"))
+
         # Multi-channel verification: re-derive each answer from the RENDERED
         # file rather than trusting any earlier computation - a channel this
         # never checks is a channel that can silently leak, which is exactly
         # how the logo bug slipped through when only text was ever checked.
-        # Comments/hyperlinks are still DETECT-AND-BLOCK ONLY (no automated
-        # scrubbing for those two yet) - a hit there blocks the run just as
-        # hard as a text, image, or metadata hit, it just can't self-heal yet.
         verified_text = verified_images = verified_metadata = verified_comments = verified_hyperlinks = None
         native_masking_verified = None
+        residual_image_groups = []
         if rendered_natively:
             surfaces = list(surface_to_token.keys())
             t = time.monotonic()
             residual_text = find_residual_surfaces(masked_doc_path, doc.content_type, doc.filename, surfaces)
-            residual_images = await find_residual_images(masked_doc_path, doc.content_type, doc.filename, db)
+            residual_image_groups, residual_images_skipped, _, _, _ = await find_residual_image_groups(
+                masked_doc_path, doc.content_type, doc.filename, db
+            )
+            residual_images = residual_image_messages(residual_image_groups, residual_images_skipped)
             residual_metadata = find_residual_metadata(masked_doc_path, doc.content_type, doc.filename, surfaces)
             residual_comments = find_residual_comments(masked_doc_path, doc.content_type, doc.filename, surfaces)
             residual_hyperlinks = find_residual_hyperlinks(masked_doc_path, doc.content_type, doc.filename, surfaces)
@@ -513,6 +599,14 @@ class SanitizationAgent(BackgroundAgent):
             "verified_metadata": verified_metadata,
             "verified_comments": verified_comments,
             "verified_hyperlinks": verified_hyperlinks,
+            # Structured leftovers from the image verify scan (locations +
+            # extraction indices INTO THE MASKED FILE) - lets a remediation
+            # pass redact exactly these images later with zero new vision
+            # scans. Empty when the images channel verified clean.
+            "residual_image_groups": [
+                {"locations": g.locations, "all_indices": g.all_indices, "phash": g.phash}
+                for g in residual_image_groups
+            ],
             "entities_masked": [{"mask_token": t_, "entity_type": next((e["entity_type"] for e in entities if e["surface_text"] == s), None)} for s, t_ in surface_to_token.items()],
             "occurrence_count": len(occurrences),
             "images_redacted": images_redacted,

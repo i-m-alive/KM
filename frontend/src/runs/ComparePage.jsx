@@ -62,18 +62,37 @@ export default function ComparePage() {
   }
 
   if (error.general) return <p className="error-text">{error.general}</p>;
-  if (!run) return <p>Loading...</p>;
+  if (!run)
+    return (
+      <div className="loading-state">
+        <span className="spinner" /> Loading…
+      </div>
+    );
+
+  const paneStyle = {
+    width: "100%",
+    height: "78vh",
+    border: "1px solid var(--ink-200)",
+    borderRadius: "10px",
+    background: "#fff",
+  };
 
   return (
     <div>
-      <h1>Compare original vs. sanitized</h1>
-      <p className="agent-card__meta">
-        {run.output?.filename} &middot; look closely at logos, screenshots, and any pixel content — text
-        masking cannot edit images (see the flags on the run for what was found).
-      </p>
-      <button onClick={resanitize} disabled={rerunning} style={{ margin: "0.75rem 0" }}>
-        {rerunning ? "Starting..." : "Not sanitized properly? Re-run Sanitization →"}
-      </button>
+      <div className="page-head">
+        <div className="page-head__text">
+          <h1>Compare original vs. sanitized</h1>
+          <p className="page-head__sub">
+            {run.output?.filename} — look closely at logos, screenshots, and any pixel content; text masking cannot edit
+            images (the run's flags list what was found).
+          </p>
+        </div>
+        <div className="page-head__actions">
+          <button className="btn--ghost" onClick={resanitize} disabled={rerunning}>
+            {rerunning ? "Starting…" : "Re-run Sanitization"}
+          </button>
+        </div>
+      </div>
 
       <div
         style={{
@@ -84,21 +103,33 @@ export default function ComparePage() {
         }}
       >
         <div>
-          <h3>Original</h3>
+          <h3 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            Original <span className="status-pill status-pill--failed">contains client identity</span>
+          </h3>
           {error.original && <p className="error-text">{error.original}</p>}
           {originalUrl ? (
-            <iframe title="original" src={originalUrl} style={{ width: "100%", height: "80vh", border: "1px solid var(--line)" }} />
+            <iframe title="original" src={originalUrl} style={paneStyle} />
           ) : (
-            !error.original && <p className="agent-card__meta">Loading preview…</p>
+            !error.original && (
+              <div className="loading-state">
+                <span className="spinner" /> Loading preview…
+              </div>
+            )
           )}
         </div>
         <div>
-          <h3>Sanitized</h3>
+          <h3 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            Sanitized <span className="status-pill status-pill--completed">safe to share</span>
+          </h3>
           {error.masked && <p className="error-text">{error.masked}</p>}
           {maskedUrl ? (
-            <iframe title="masked" src={maskedUrl} style={{ width: "100%", height: "80vh", border: "1px solid var(--line)" }} />
+            <iframe title="masked" src={maskedUrl} style={paneStyle} />
           ) : (
-            !error.masked && <p className="agent-card__meta">Loading preview… (run must be completed)</p>
+            !error.masked && (
+              <div className="loading-state">
+                <span className="spinner" /> Loading preview… (run must be completed)
+              </div>
+            )
           )}
         </div>
       </div>

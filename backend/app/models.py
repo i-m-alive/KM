@@ -51,6 +51,10 @@ class AgentRun(Base):
     output_file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+    # Refreshed on every ORM update (status transitions included) - the
+    # stale-run reaper keys off this, NOT created_at, so a run that sat at
+    # awaiting_review for days isn't reaped the moment apply() starts.
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     steps: Mapped[list["RunStep"]] = relationship(

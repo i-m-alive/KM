@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     # Tagging
     TAG_CONFIDENCE_THRESHOLD: float = 0.7  # below this, flag for reviewer instead of auto-applying
 
+    # Worker stale-run reaper: a run stuck at a non-terminal working status
+    # (crash or restart mid-detect leaves it there forever, with no way to
+    # tell "stuck" from "slow" in the UI) is failed cleanly after this long.
+    # Generous vs. the observed 2-5 min real detect times, so a legitimately
+    # slow run isn't reaped mid-flight.
+    STALE_RUN_TIMEOUT_MINUTES: int = 15
+
     # Sanitization guardrails
     # Your own delivery firm's name(s) - never proposed/masked as a CLIENT_NAME,
     # in text, OCR'd image text, or the vision-scan judgment itself. Matched as
