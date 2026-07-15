@@ -16,7 +16,6 @@ python-pptx>=1.0.2
 openpyxl>=3.1.2
 Pillow>=10.0.0
 imagehash>=4.3.1
-mcp>=1.2.0
 # NER pre-pass for Sanitization. Optional at runtime (the agent degrades to
 # regex-only if these or the spaCy model are missing), but recommended.
 # After install run: python -m spacy download en_core_web_lg

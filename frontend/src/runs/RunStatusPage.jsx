@@ -5,7 +5,7 @@ import ConfidenceBadge from "../components/ConfidenceBadge";
 import FlagList from "../components/FlagList";
 import StepTimeline from "../components/StepTimeline";
 
-const POLLING = new Set(["pending", "working", "detecting", "tagging", "applying"]);
+const POLLING = new Set(["pending", "working", "detecting", "tagging", "applying", "orchestrating"]);
 
 const CHANNELS = [
   ["verified_text", "Text"],
@@ -59,6 +59,13 @@ export default function RunStatusPage() {
       try {
         const r = await apiGet(`/runs/${runId}`);
         if (cancelled) return;
+        // The Coordinator's own run page has nothing worth showing - hop
+        // straight to the Sanitization run it started, the moment that run
+        // id is known, so the user lands on the real (rich) run page.
+        if (r.agent_id === "coordinator" && r.output?.sanitization_run_id) {
+          navigate(`/runs/${r.output.sanitization_run_id}`, { replace: true });
+          return;
+        }
         setRun(r);
         if (r.agent_id === "tagging" && r.status === "completed") {
           apiGet(`/tags/runs/${runId}`).then(setTags).catch(() => {});
@@ -120,6 +127,8 @@ export default function RunStatusPage() {
 
   const isPolling = POLLING.has(run.status);
   const filename = run.output?.filename;
+  const autoChaining = run.agent_id === "sanitization" && run.input?.auto_chain_to === "tagging";
+  const autoTaggingRunId = run.output?.auto_tagging_run_id;
 
   return (
     <div>
@@ -151,6 +160,13 @@ export default function RunStatusPage() {
       {run.status === "awaiting_review" && (
         <div className="callout">
           This run is awaiting human review. <Link to={`/review/${run.id}`}>Open in the review queue →</Link>
+          {autoChaining && " Tagging will start automatically once it's approved and verifies clean."}
+        </div>
+      )}
+
+      {autoChaining && autoTaggingRunId && (
+        <div className="callout callout--success">
+          Verified clean — Tagging started automatically. <Link to={`/runs/${autoTaggingRunId}`}>View Tagging run →</Link>
         </div>
       )}
 
@@ -162,6 +178,7 @@ export default function RunStatusPage() {
         <div className="callout callout--warning">
           Verification found masked content still present in this file (see the flags above) — the run finished, but the
           output is NOT safe to distribute as-is.
+          {autoChaining && " Tagging is paused until this is resolved and re-verifies clean."}
           {run.agent_id === "sanitization" && (
             <div style={{ marginTop: "0.6rem" }}>
               <button onClick={remediate} disabled={remediating}>
@@ -186,7 +203,7 @@ export default function RunStatusPage() {
           <button className="btn--ghost" onClick={() => apiDownload(`/runs/${runId}/masked/download`).catch((e) => setError(e.message))}>
             Download sanitized {run.output?.filename?.split(".").pop()?.toUpperCase() || "file"}
           </button>
-          {run.status === "completed" && <button onClick={runTagging}>Run Tagging on this run →</button>}
+          {run.status === "completed" && !autoChaining && <button onClick={runTagging}>Run Tagging on this run →</button>}
         </div>
       )}
 

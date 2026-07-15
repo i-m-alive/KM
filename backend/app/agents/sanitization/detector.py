@@ -1,15 +1,14 @@
-"""Detector — the LLM pass. Uses the Bedrock tool-use loop with the MCP
-fs_read_document tool: the model reads the document via naviknow-mcp and returns
-the client-identifying SURFACE STRINGS (not spans — spans are found
+"""Detector — the LLM pass. Uses the Bedrock tool-use loop with a direct,
+in-process fs_read_document tool: the model reads the document via a plain
+Python function call (no MCP subprocess/JSON-RPC) and returns the
+client-identifying SURFACE STRINGS (not spans — spans are found
 deterministically by agent code afterwards, since LLMs are unreliable at exact
 offsets). Seeded with the free NER candidates so it rarely re-reads.
 """
 
-import json
-
 from app.agents.sanitization.ner_prepass import Candidate
+from app.agents.sanitization.tools import FS_READ_DOCUMENT_SPEC, sanitization_tool_executor
 from app.llm import bedrock_client
-from app.mcp_client import TOOL_READ_DOCUMENT, call_tool_text, list_tool_schemas, mcp_session
 
 ENTITY_TYPES = [
     "CLIENT_NAME",
@@ -70,21 +69,11 @@ async def detect_entities(document_id: str, total_chunks: int, candidates: list[
         "Read the document with fs_read_document and return the client-identifying entities as JSON."
     )
 
-    async with mcp_session() as session:
-        all_specs = await list_tool_schemas(session)
-        # Expose ONLY fs_read_document to the detector.
-        specs = [s for s in all_specs if s["toolSpec"]["name"] == TOOL_READ_DOCUMENT]
-
-        async def tool_executor(name: str, arguments: dict) -> str:
-            if name == TOOL_READ_DOCUMENT:
-                return await call_tool_text(session, name, arguments)
-            return json.dumps({"error": f"tool {name} not available"})
-
-        return await bedrock_client.converse_with_tools(
-            system_prompt=SYSTEM_PROMPT,
-            user_message=user_message,
-            tool_specs=specs,
-            tool_executor=tool_executor,
-            response_schema=DETECT_SCHEMA,
-            max_iterations=max(4, min(total_chunks + 3, 16)),
-        )
+    return await bedrock_client.converse_with_tools(
+        system_prompt=SYSTEM_PROMPT,
+        user_message=user_message,
+        tool_specs=[FS_READ_DOCUMENT_SPEC],
+        tool_executor=sanitization_tool_executor,
+        response_schema=DETECT_SCHEMA,
+        max_iterations=max(4, min(total_chunks + 3, 16)),
+    )

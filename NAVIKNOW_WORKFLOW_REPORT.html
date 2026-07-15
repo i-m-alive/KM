@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NaviKnow — Complete Workflow, Agents &amp; Optimization Research</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --card: #ffffff; --text: #1c2733; --muted: #5b6b7b;
+    --border: #dde4ec; --accent: #0b5fa5; --accent2: #7c3aed;
+    --pass-bg: #e2f5e9; --pass: #146c2e;
+    --fail-bg: #fde7e9; --fail: #a11224;
+    --warn-bg: #fff4d6; --warn: #8a6100;
+    --info-bg: #e7f0fb; --info: #0b5fa5;
+    --human-bg: #f3e8ff; --human: #6d28d9;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; }
+  .hero { background: linear-gradient(135deg, #10263f 0%, #0b5fa5 60%, #4438a8 100%); color: #fff; padding: 2.6rem 1.5rem 2.1rem; }
+  .hero h1 { margin: 0 0 0.4rem; font-size: 1.65rem; }
+  .hero p { margin: 0.2rem 0; color: #cfd8e3; font-size: 0.95rem; max-width: 900px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.8rem; margin-top: 1.4rem; max-width: 1050px; }
+  .stat { background: rgba(255,255,255,0.09); border-radius: 8px; padding: 0.8rem 1rem; }
+  .stat .n { display: block; font-size: 1.45rem; font-weight: 700; }
+  .stat .l { font-size: 0.78rem; color: #cfd8e3; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 1.5rem; }
+  h2 { margin-top: 2.8rem; font-size: 1.35rem; border-bottom: 2px solid var(--border); padding-bottom: 0.4rem; }
+  h2 .num { display: inline-block; background: var(--accent); color: #fff; border-radius: 6px; font-size: 0.85rem; padding: 0.1rem 0.55rem; margin-right: 0.6rem; vertical-align: 2px; }
+  h3 { font-size: 1.08rem; margin-top: 1.9rem; }
+  h4 { font-size: 0.98rem; margin: 1.3rem 0 0.4rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.88rem; background: var(--card); }
+  th, td { border: 1px solid var(--border); padding: 0.55rem 0.7rem; text-align: left; vertical-align: top; }
+  th { background: #eef2f7; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86em; background: #eef2f7; border-radius: 4px; padding: 0.05em 0.35em; }
+  .badge { display: inline-block; border-radius: 20px; font-size: 0.73rem; font-weight: 700; padding: 0.15rem 0.65rem; white-space: nowrap; }
+  .badge.pass { background: var(--pass-bg); color: var(--pass); }
+  .badge.fail { background: var(--fail-bg); color: var(--fail); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .badge.info { background: var(--info-bg); color: var(--info); }
+  .badge.human { background: var(--human-bg); color: var(--human); }
+  .badge.p1 { background: var(--fail-bg); color: var(--fail); }
+  .badge.p2 { background: var(--warn-bg); color: var(--warn); }
+  .badge.p3 { background: var(--info-bg); color: var(--info); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.1rem 1.3rem; margin: 1rem 0; }
+  .flow { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 1rem 0; }
+  .flow .step { background: var(--info-bg); color: var(--info); border-radius: 6px; padding: 0.5rem 0.8rem; font-size: 0.84rem; font-weight: 600; }
+  .flow .step.human { background: var(--human-bg); color: var(--human); }
+  .flow .step.auto { background: var(--pass-bg); color: var(--pass); }
+  .flow .step.stop { background: var(--fail-bg); color: var(--fail); }
+  .flow .arrow { color: var(--muted); font-weight: 700; }
+  .agentcard { border: 1px solid var(--border); border-left: 5px solid var(--accent); border-radius: 10px; background: var(--card); padding: 1.1rem 1.35rem; margin: 1.2rem 0; }
+  .agentcard.a2 { border-left-color: #1F7A66; }
+  .agentcard.a4 { border-left-color: var(--accent2); }
+  .agentcard h3 { margin-top: 0; }
+  .rec { border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.25rem; margin: 0.9rem 0; background: var(--card); }
+  .rec .title { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+  .rec h4 { margin: 0; font-size: 1rem; }
+  ul.tight li { margin-bottom: 0.4rem; }
+  ol.steps { counter-reset: s; list-style: none; padding-left: 0; }
+  ol.steps > li { position: relative; padding: 0.45rem 0 0.65rem 2.4rem; border-left: 2px solid var(--border); margin-left: 0.85rem; }
+  ol.steps > li::before { counter-increment: s; content: counter(s); position: absolute; left: -0.95rem; top: 0.5rem; width: 1.7rem; height: 1.7rem; border-radius: 50%; background: var(--accent); color: #fff; font-size: 0.8rem; font-weight: 700; display: grid; place-items: center; }
+  ol.steps > li.human::before { background: var(--human); }
+  ol.steps > li:last-child { border-left-color: transparent; }
+  .muted { color: var(--muted); }
+  .label { font-weight: 700; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+  .toc { columns: 2; gap: 2rem; padding-left: 1.2rem; }
+  .toc a { color: var(--accent); text-decoration: none; font-size: 0.92rem; }
+  .toc li { margin-bottom: 0.4rem; }
+  @media (max-width: 640px) { .toc { columns: 1; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>NaviKnow — Complete Workflow, Agents &amp; Optimization Research</h1>
+  <p>Every implemented agent, its exact process, its tools, its human-in-the-loop checkpoints, its measured performance — and an in-depth optimization plan for each. All facts verified against the live code and database, not recalled.</p>
+  <div class="summary-grid">
+    <div class="stat"><span class="n">3 + 1</span><span class="l">Live agents (Sanitization, Tagging, Coordinator) + demo</span></div>
+    <div class="stat"><span class="n">7</span><span class="l">Human-in-the-loop checkpoints</span></div>
+    <div class="stat"><span class="n">5</span><span class="l">Independent verification channels, all auto-fix</span></div>
+    <div class="stat"><span class="n">~$0.06</span><span class="l">Full pipeline cost per document (Haiku)</span></div>
+    <div class="stat"><span class="n">47</span><span class="l">Offline regression checks, all passing</span></div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="card">
+  <h3 style="margin-top:0;">Contents</h3>
+  <ul class="toc">
+    <li><a href="#arch">1. System architecture</a></li>
+    <li><a href="#pipeline">2. The end-to-end pipeline</a></li>
+    <li><a href="#a01">3. A-01 Sanitization — deep dive</a></li>
+    <li><a href="#a02">4. A-02 Tagging — deep dive</a></li>
+    <li><a href="#a04">5. A-04 Coordinator — deep dive</a></li>
+    <li><a href="#hitl">6. Human-in-the-loop map</a></li>
+    <li><a href="#tools">7. Tools inventory &amp; how they perform</a></li>
+    <li><a href="#perf">8. Measured performance &amp; cost</a></li>
+    <li><a href="#optimize">9. Optimization research — prioritized</a></li>
+    <li><a href="#appendix">10. Appendix: config, statuses, files</a></li>
+  </ul>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="arch"><span class="num">1</span>System architecture</h2>
+<p>NaviKnow is deliberately simple infrastructure carrying deliberately careful agents. Four processes, one database, one LLM provider:</p>
+<table>
+  <tr><th>Component</th><th>What it is</th><th>Role</th></tr>
+  <tr><td><b>API server</b></td><td><code>uvicorn app.main:app</code> (FastAPI, port 8000)</td><td>Auth (JWT + roles), uploads, run creation, review decisions, remediation, governance endpoints. Reviewer-approved <code>apply()</code> phases execute here, synchronously in the request.</td></tr>
+  <tr><td><b>Background worker</b></td><td><code>python -m app.worker</code></td><td>Polls Postgres every 2s for <code>pending</code> runs and executes <code>detect()</code>. Also runs the stale-run reaper (fails any run stuck at a transient status &gt;15 min, with a 60s heartbeat so slow-but-alive runs are never reaped). <b>Both processes must be restarted together after backend changes.</b></td></tr>
+  <tr><td><b>Postgres</b></td><td>localhost:5433 (Docker)</td><td>The only queue and the only state store — runs, steps, flags, review items, masking dictionary, logo references, tag vocabulary, audit log. No Redis/Celery, appropriate at current scale.</td></tr>
+  <tr><td><b>AWS Bedrock</b></td><td>Converse API, model from <code>BEDROCK_MODEL_ID</code></td><td>Currently <code>global.anthropic.claude-haiku-4-5</code> for <em>everything</em> — text detection, vision/OCR, summarization, tag classification. There is no separate vision model.</td></tr>
+  <tr><td><b>Frontend</b></td><td>React + Vite (port 5173)</td><td>Sidebar app shell; Documents, Runs (with verification panel), Review queue/detail, Tags governance, Admin (users, accounts, masking dictionary).</td></tr>
+</table>
+<p class="muted">A design decision worth recording: the platform originally exposed agent tools through an MCP server (<code>naviknow-mcp</code>, stdio subprocess + JSON-RPC). That layer was removed — tools are now plain in-process Python functions passed directly into the Bedrock tool-use loop. Same guardrail (protected calls are simply never in the model's dispatch table), zero subprocess overhead, one less dependency.</p>
+
+<!-- ================================================================ -->
+<h2 id="pipeline"><span class="num">2</span>The end-to-end pipeline</h2>
+<p>One click on <em>"Run full pipeline"</em> drives a document through the whole flow. Purple = a human decides; green = automatic; red = hard stop.</p>
+<div class="flow">
+  <span class="step">Upload document</span><span class="arrow">→</span>
+  <span class="step">Coordinator starts Sanitization<br><span class="muted" style="font-weight:400">(with auto-chain marker)</span></span><span class="arrow">→</span>
+  <span class="step">detect(): NER → dictionary sweep → LLM → vision scan</span><span class="arrow">→</span>
+  <span class="step human">Human review: entities, images, style, client</span><span class="arrow">→</span>
+  <span class="step">apply(): mask → render → redact → scrub ×3 → verify ×5</span>
+</div>
+<div class="flow">
+  <span class="arrow" style="margin-left:2rem">↳</span>
+  <span class="step auto">All 5 channels clean → status <b>completed</b> → Tagging auto-starts</span>
+  <span class="arrow">or</span>
+  <span class="step stop">Anything survives → <b>completed_with_issues</b> → Tagging withheld</span><span class="arrow">→</span>
+  <span class="step human">One-click remediation fixes flagged content in place, re-verifies — if clean, auto-chain fires</span>
+</div>
+<div class="flow">
+  <span class="arrow" style="margin-left:2rem">↳</span>
+  <span class="step">Tagging classifies the sanitized summary against the controlled vocabulary</span><span class="arrow">→</span>
+  <span class="step human">Review low-confidence tags &amp; new-term proposals</span><span class="arrow">→</span>
+  <span class="step auto">Tags applied — document is searchable</span>
+</div>
+<div class="card">
+  <p style="margin:0"><span class="label">The core safety property of the whole pipeline:</span> Tagging can only ever receive a Sanitization run whose status is exactly <code>completed</code> — which by construction means post-render verification passed on all five channels with zero blocking flags. "Analyse whether the approved selections were properly masked, then proceed" is not a policy anyone follows; it is the only path that exists. This is enforced twice: the Tagging agent itself refuses any source run that isn't <code>completed</code>, and the Coordinator's auto-chain hook only fires on <code>completed</code>.</p>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="a01"><span class="num">3</span>A-01 Sanitization — deep dive</h2>
+<div class="agentcard">
+  <h3>Purpose</h3>
+  <p>Remove or replace every client-identifying string and image in a document — consistently (the same client gets the same global mask token in every document, forever) — and prove it did so by re-checking its own output. Two-phase: <code>detect()</code> proposes, a human reviews, <code>apply()</code> commits deterministically.</p>
+
+  <h4>Phase 1 — detect() (runs on the worker)</h4>
+  <ol class="steps">
+    <li><b>Extract + NER pre-pass</b> <span class="muted">(~2s, free)</span> — the document is split into structural chunks (PDF pages, DOCX paragraph groups + headers/footers + <em>text boxes</em> + footnotes, PPTX slides with recursive group-shape traversal + speaker notes, XLSX sheets including <em>tab names</em> and print headers). Regex + Presidio surface candidate entity strings. A scanned PDF with no text layer raises a warning flag — the text channel is honestly blind there, and the reviewer is told so.</li>
+    <li><b>Deterministic dictionary pass + full-text sweep</b> <span class="muted">(&lt;0.1s, free)</span> — every candidate is looked up in the global masking dictionary; then, independently of what any model surfaced, <em>every approved entity's aliases are regex-swept against the entire document text</em>. Once an entity is approved, its masking never again depends on per-run model recall. (This sweep exists because a weak LLM run once left 6 already-approved names unmasked in a "clean" file — the dictionary knew them; nothing had asked it.)</li>
+    <li><b>LLM Detector</b> <span class="muted">(~8s, ~9k tokens)</span> — a Bedrock tool-use loop where the model may call <code>fs_read_document</code> (a plain in-process function, the agent's only model-callable tool) to read chunk ranges, then returns client-identifying surface strings with type + confidence. Surfaces only — exact spans are found deterministically afterward, because LLMs are unreliable at offsets. Candidates below the 60% confidence threshold are auto-excluded with an info flag (visible, re-addable, never silently dropped).</li>
+    <li><b>Image scan: vision + OCR + logo hash</b> <span class="muted">(~93s — the dominant cost; see §9)</span> — every embedded image is enumerated via a raw zip glob (masters, layouts, orphaned media included), deduplicated by SHA-256 and then <em>perceptually</em> (Hamming ≤ 2 clusters near-identical renditions into one scan). Each cluster gets one Bedrock vision call (OCR text + client-identity judgment), one perceptual hash matched against the logo-reference library, and three deterministic overrides: a confirmed OCR/dictionary hit or a confident logo-hash match (distance ≤ 4) forces the flag on regardless of the model's own judgment; an own-firm hit (name or logo phash) forces it off; distances 5–10 or mid-band confidence mark <code>needs_human_judgment</code>. A confident match to an already-<em>approved</em> entity becomes <code>mandatory_redaction</code> — a governance decision the reviewer's checkbox cannot re-open.</li>
+    <li><b>Summarize + file review</b> <span class="muted">(~7s)</span> — a sanitized, identity-free summary and metadata hints (domain, use cases, technologies, geography, engagement type) are generated for Tagging, and a review item is filed. The run parks at <code>awaiting_review</code>. Detect never mutates the approved dictionary — new entities enter as <code>pending_approval</code>.</li>
+  </ol>
+
+  <h4>Phase 2 — apply() (runs on approval, in the API server)</h4>
+  <ol class="steps">
+    <li class="human"><b>Consume the reviewer's decision</b> — removed surfaces, reviewer-added entities, per-image include/exclude flips (except mandatory redactions), the masking style (token / black-out / remove), and the single explicit "this is the client" designation for account linkage. The raw edits payload is persisted for audit.</li>
+    <li><b>Resolve global mask tokens</b> — each approved surface gets (or reuses) its permanent <code>[CLIENT_N]</code> token; approval here is what admits an entity into the global dictionary and future full-text sweeps.</li>
+    <li><b>Mask text + render in the original format</b> — word-boundary-safe, longest-surface-first, whitespace-tolerant regex across DOCX runs/tables/headers/text boxes, PPTX shapes (recursive)/tables/notes, XLSX cells/sheet names/print headers, and PDF via a true word-level matcher (consecutive-word matching within a text block — handles names wrapped across lines, immune to substring false-positives). XLSX image redaction happens inside this same render pass because openpyxl renumbers media partnames on save.</li>
+    <li><b>Redact approved images</b> — media-part byte swap (docx/pptx/xlsx) or redaction rects (PDF), resolved by each cluster's full occurrence index list so every rendition of a merged near-duplicate is covered.</li>
+    <li><b>Scrub the side channels</b> — document properties (core/app/custom + PDF XMP), hyperlink <em>targets</em> (rewritten in the run's masking style, via direct <code>_rels</code> editing), and comments/track-changes/annotations (element-text-only substitution — never a full XML re-serialize, which can corrupt Word files).</li>
+    <li><b>Verify — 5 independent channels</b> <span class="muted">(~62s, dominated by re-scanning images)</span> — each channel re-derives its answer from the <em>rendered file</em>, sharing no state with the step it checks: text (re-extract + regex), images (full re-scan with placeholder recognition; structured residuals persisted for remediation), metadata, comments, hyperlinks. Any residual → a named blocking flag → <code>completed_with_issues</code>. All clean → <code>completed</code>, and the auto-chain fires if a Coordinator started this run. Approved image redactions also feed the logo-reference library, so future documents get deterministic logo matches.</li>
+  </ol>
+
+  <h4>The remediation path</h4>
+  <p>A <code>completed_with_issues</code> run shows a one-click <em>"Re-run sanitization on the flagged content"</em> button. It fixes the already-rendered file <em>in place</em>, scoped to exactly the flagged slides/pages (zero new vision calls when structured residuals were persisted), re-scrubs the side channels, re-verifies everything, clears superseded flags, and — since it is a second path to <code>completed</code> — triggers the same auto-chain hook. The one honest limitation, stated in the UI: body-text residuals can't be fixed in place and need a full re-run.</p>
+
+  <h4>Guardrails (structural, not prompt-based)</h4>
+  <ul class="tight">
+    <li>The model can call exactly one tool. The masking dictionary, review filing, source registry, and audit log are plain agent-code calls it cannot reach.</li>
+    <li>Own-firm names/logos are excluded by three independent signals (normalized text check, prompt injection, perceptual hash) — no single failure re-masks your own brand.</li>
+    <li><code>mandatory_redaction</code>: a reviewer cannot un-redact a confirmed match to an already-approved entity — that governance decision was already made once.</li>
+    <li>Every run files a review item; there is no confidence level that skips the human.</li>
+    <li>Real client identity is captured into a protected registry before masking and never appears in <code>output_json</code>.</li>
+  </ul>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="a02"><span class="num">4</span>A-02 Tagging — deep dive</h2>
+<div class="agentcard a2">
+  <h3>Purpose</h3>
+  <p>Classify a completed Sanitization run's <em>sanitized</em> output against the controlled tag vocabulary (domain, use_case, technology, geography, engagement_type) so documents become searchable by topic — never by client.</p>
+  <h4>Process</h4>
+  <ol class="steps">
+    <li><b>Load source</b> — hard gate: the referenced Sanitization run must have status exactly <code>completed</code>. The agent only ever sees the sanitized summary + metadata hints; it has no path to the original document, the masking dictionary, or the source registry — it could not reconstruct client identity even if instructed to.</li>
+    <li><b>Classify (LLM)</b> <span class="muted">(~3s, ~1.5k tokens, ~$0.004)</span> — one Bedrock call: vocabulary + sanitized summary + hints in, tags with confidence out. The prompt instructs "prefer existing vocabulary verbatim; propose new lowercase terms only when nothing fits".</li>
+    <li><b>Validate (deterministic hard gate)</b> — every proposed tag is checked against the approved vocabulary in the database. In-vocabulary + confidence ≥ 0.7 → auto-applicable. In-vocabulary but below 0.7 → flagged for reviewer confirmation. Unknown term → recorded as a <code>pending_approval</code> vocabulary proposal, never applied to the document. The model <em>physically cannot</em> attach an out-of-vocabulary tag.</li>
+    <li class="human"><b>Conditional review</b> — if everything was confident and in-vocabulary, the run auto-applies with no human step; any flagged tag or new-term proposal parks it at <code>awaiting_review</code> where the reviewer can untick tags.</li>
+    <li><b>Apply</b> — surviving tags are written to <code>run_tags</code>; pending new terms stay in the governance queue on the Tags page.</li>
+  </ol>
+  <h4>The vocabulary loop</h4>
+  <p>The vocabulary is currently governance-built from empty (startup seeding was deliberately disabled at your request). Practice-leads propose; KM-governance/admin approve, add directly, or reject on the Tags page. <b>35 proposed terms are sitting in that pending queue right now</b> — approving the good ones is the single highest-leverage action available (§9, R3).</p>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="a04"><span class="num">5</span>A-04 Coordinator — deep dive</h2>
+<div class="agentcard a4">
+  <h3>Purpose</h3>
+  <p>No content work of its own — it turns two manual actions into one. Deliberately minimal against the full design-doc spec: no eligibility-rule engine yet, no separate pipeline table. Its entire mechanism is one marker plus one hook:</p>
+  <ol class="steps">
+    <li><b>Start Sanitization with the marker</b> — the Coordinator creates a child Sanitization run whose input carries <code>auto_chain_to: "tagging"</code> and drives it through the <em>same</em> <code>run_detection()</code> the worker uses. Zero duplicated logic; every Sanitization guardrail applies unchanged. Its own run completes immediately (the UI hops straight to the child run).</li>
+    <li class="human"><b>Pause-and-resume</b> — if Sanitization needs review, it parks at <code>awaiting_review</code> like any other run. The reviewer uses the normal Review UI; nothing new to learn. The run page notes that Tagging will follow automatically.</li>
+    <li><b>The auto-chain hook</b> — when any Sanitization run finalizes at exactly <code>completed</code> and carries the marker, a Tagging run is enqueued (idempotent — a re-fire can never create a duplicate). The hook sits in the one function both completion paths share, <em>and</em> in the remediation path (a gap found and fixed during live testing: a document fixed via remediation rather than approved-clean-first-try would otherwise never have chained).</li>
+  </ol>
+  <p><span class="label">Verified live, end-to-end:</span> Coordinator → Sanitization → paused for review → approved → landed <code>completed_with_issues</code> (3 flagged images) → chain correctly withheld → remediated → <code>completed</code> → Tagging auto-enqueued → the live worker picked it up unaided and produced a 15-tag proposal.</p>
+  <h4>What it deliberately does not do yet</h4>
+  <ul class="tight">
+    <li><code>eligibility.check</code> (deterministic contract-restriction gate) — no rules table or UI exists to configure it against; building it now would be speculation.</li>
+    <li>Orchestrating A-03/A-05/A-06 — those agents don't exist yet.</li>
+  </ul>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="hitl"><span class="num">6</span>Human-in-the-loop map</h2>
+<p>Seven distinct places a human decides. The design principle throughout: the model proposes, deterministic code enforces, a person owns every consequential judgment — and anything a reviewer approves is <em>still</em> re-verified mechanically afterward.</p>
+<table>
+  <tr><th>#</th><th>Checkpoint</th><th>Where</th><th>What the human decides</th><th>What the system does with it</th></tr>
+  <tr><td>1</td><td><span class="badge human">Sanitization review</span></td><td>Review queue → detail page</td><td>Include/exclude each proposed entity; add missed entities; flip image redactions (previews shown, OCR text + logo-match evidence attached); choose masking style (token / black-out / remove); designate which single entity is "the client".</td><td>Approval admits new entities into the global dictionary; edits are persisted verbatim for audit; <code>mandatory_redaction</code> images are locked against un-ticking.</td></tr>
+  <tr><td>2</td><td><span class="badge human">Post-verification gate</span></td><td>Run page</td><td>On <code>completed_with_issues</code>: remediate in place, or re-run from the original.</td><td>Tagging stays withheld until a verified-clean state is reached.</td></tr>
+  <tr><td>3</td><td><span class="badge human">Tagging review</span></td><td>Review queue</td><td>Confirm/untick low-confidence tags; new terms are visible but never appliable from here.</td><td>Only surviving, in-vocabulary tags are written.</td></tr>
+  <tr><td>4</td><td><span class="badge human">Tag vocabulary governance</span></td><td>Tags page</td><td>Approve/reject proposed terms; add terms directly (governance) or propose (practice-lead).</td><td>The classifier's entire output space is this list — approving a term is what makes it usable.</td></tr>
+  <tr><td>5</td><td><span class="badge human">Masking dictionary governance</span></td><td>Admin page</td><td>Skip/un-skip entities (kill recurring false positives like OCR fragments permanently); a "needs decision" badge surfaces proposals pending &gt;14 days.</td><td>Skipped entities are excluded from every future proposal <em>and</em> the full-text sweep.</td></tr>
+  <tr><td>6</td><td><span class="badge human">Separation of duty</span></td><td>Review endpoint</td><td>—</td><td>Enforced, not chosen: the identity that produced a run cannot approve it (admin exempt as the testing superuser).</td></tr>
+  <tr><td>7</td><td><span class="badge human">Account &amp; role administration</span></td><td>Admin page</td><td>Assign roles; manage client accounts and practice-lead ownership.</td><td>Role gates every agent trigger and every governance surface (RBAC per the catalog design).</td></tr>
+</table>
+
+<!-- ================================================================ -->
+<h2 id="tools"><span class="num">7</span>Tools inventory &amp; how they perform</h2>
+
+<h3>Model-callable tools (what the LLM can actually invoke)</h3>
+<table>
+  <tr><th>Tool</th><th>Agent</th><th>Implementation</th><th>Performance notes</th></tr>
+  <tr><td><code>fs_read_document</code></td><td>Sanitization detector</td><td>Plain in-process Python function + hand-written Bedrock toolSpec (<code>app/agents/sanitization/tools.py</code>) — the MCP subprocess layer was removed</td><td>Sub-second per call; the detector typically reads 1–3 chunk ranges because the NER candidates seed it. This is the <em>only</em> tool in the model's dispatch table, by design.</td></tr>
+</table>
+
+<h3>Protected calls (agent code the model can never reach)</h3>
+<p class="muted"><code>masking_dictionary</code> (lookup / get_or_create / approve / skip / full-text sweep) · <code>tags.validate</code> / <code>propose_term</code> · review filing · source registry capture · audit log. The guardrail is structural: these are ordinary function calls that are simply never registered in any tool executor.</p>
+
+<h3>Bedrock LLM surfaces</h3>
+<table>
+  <tr><th>Call</th><th>Used by</th><th>Reliability observed (Haiku 4.5)</th></tr>
+  <tr><td><code>converse</code> (single-shot + JSON schema)</td><td>Summarizer, Tagging classifier, demo agent</td><td>Solid. One recurring Haiku quirk — echoing the schema then gluing the real answer on as a second JSON object — is auto-repaired in the client.</td></tr>
+  <tr><td><code>converse_with_tools</code> (tool-use loop)</td><td>Sanitization detector</td><td>Works, but recall <b>varies run-to-run</b>: measured 11 vs 3 entities proposed on the identical document 27 minutes apart. The dictionary sweep makes this harmless for anything ever approved; first-seen names still ride the variance (§9, R2). Prompt caching is implemented in this loop but <b>no caller enables it</b> (§9, R4).</td></tr>
+  <tr><td><code>converse_vision</code> (image + OCR judgment)</td><td>Image scan, image verification</td><td>The weakest model surface: sometimes empty OCR/description on real logos, and its boolean occasionally contradicts its own description. Every load-bearing decision therefore has a deterministic override (dictionary OCR match, logo phash, own-firm hash). Calls run <b>sequentially</b> — the pipeline's dominant latency (§9, R1).</td></tr>
+</table>
+
+<h3>Deterministic libraries (where correctness actually lives)</h3>
+<table>
+  <tr><th>Library</th><th>Used for</th><th>Notes from real usage</th></tr>
+  <tr><td>pdfplumber / PyMuPDF</td><td>PDF extract / render+redact+verify</td><td>Masking uses a word-level matcher over <code>get_text("words")</code> (line-wrap safe, boundary-safe by construction). Verification deliberately uses the <em>other</em> library — disagreement fails safe (blocked, not silent).</td></tr>
+  <tr><td>python-docx / python-pptx / openpyxl</td><td>OOXML extract + render</td><td>Each needed gap-closing beyond its public API: text boxes and footnotes (docx), recursive group shapes and speaker notes (pptx), sheet names, print headers and same-pass image redaction (xlsx — openpyxl renumbers media parts on save).</td></tr>
+  <tr><td>Raw <code>zipfile</code> surgery</td><td>Image enumeration/redaction, metadata/hyperlink/comment scrubbing, footnote scrubbing</td><td>More complete than any library's object model (orphaned media, <code>_rels</code>, docProps, delText) and avoids library re-save side effects.</td></tr>
+  <tr><td>imagehash (perceptual)</td><td>Logo matching, near-duplicate clustering, own-firm logo exclusion</td><td>Thresholds: ≤2 = same image (dedup), ≤4 = confident entity match, 5–10 = human judgment. The library grows automatically from approved redactions.</td></tr>
+  <tr><td>Presidio + spaCy (optional)</td><td>NER pre-pass</td><td>Free candidate seeding; agent degrades to regex-only if absent.</td></tr>
+  <tr><td>LibreOffice headless</td><td>Preview PDFs, vector-image rasterization</td><td>Subprocess, cached.</td></tr>
+</table>
+
+<!-- ================================================================ -->
+<h2 id="perf"><span class="num">8</span>Measured performance &amp; cost</h2>
+<p>Real step timings from the most recent full run of the real 57-image client deck (Haiku, all five channels verified clean after one remediation pass):</p>
+<table>
+  <tr><th>Step</th><th>Wall time</th><th>Share</th><th>Character</th></tr>
+  <tr><td>Extract + NER pre-pass</td><td>1.8s</td><td>~1%</td><td>Deterministic</td></tr>
+  <tr><td>Dictionary pass + full-text sweep</td><td>&lt;0.1s</td><td>—</td><td>Deterministic (17 entities recovered, 15 of them via the sweep alone)</td></tr>
+  <tr><td>LLM detect (tool loop)</td><td>8.3s</td><td>~5%</td><td>1 Bedrock text call chain</td></tr>
+  <tr><td><b>Image scan (50 clusters)</b></td><td><b>92.9s</b></td><td><b>~53%</b></td><td>50 sequential vision calls</td></tr>
+  <tr><td>Summarize</td><td>6.9s</td><td>~4%</td><td>1 Bedrock call</td></tr>
+  <tr><td>Mask + render + redact + scrub</td><td>&lt;5s</td><td>~3%</td><td>Deterministic</td></tr>
+  <tr><td><b>Verify (5 channels)</b></td><td><b>62.2s</b></td><td><b>~35%</b></td><td>Dominated by re-scanning images (sequential vision again)</td></tr>
+  <tr><td>Tagging classify</td><td>3.2s</td><td>—</td><td>1 Bedrock call</td></tr>
+</table>
+<table>
+  <tr><th>Cost item</th><th>Measured</th></tr>
+  <tr><td>Sanitization full run (57-image deck, detect + apply + verify)</td><td>~$0.055–0.060, ~30k in / ~5.5k out tokens</td></tr>
+  <tr><td>Tagging run</td><td>~$0.003–0.004</td></tr>
+  <tr><td>Coordinator</td><td>$0 (pure orchestration)</td></tr>
+  <tr><td><b>Full pipeline per document</b></td><td><b>~$0.06 on Haiku</b> (~4–5× cheaper than the same runs measured on Sonnet; correctness is carried by the deterministic layer either way)</td></tr>
+</table>
+<p class="muted">Reading: <b>~88% of wall-clock is vision calls executed one at a time.</b> Everything else is already fast. That single fact drives the top optimization below.</p>
+
+<!-- ================================================================ -->
+<h2 id="optimize"><span class="num">9</span>Optimization research — prioritized</h2>
+<p>Ordered by measured impact ÷ effort. R1–R4 are code changes; R3 is a governance action only you can take.</p>
+
+<div class="rec">
+  <div class="title"><h4>R1 — Parallelize the vision scans (bounded concurrency)</h4><span class="badge p1">P1 · ~4× faster runs</span></div>
+  <p>Both the detect-phase scan (92.9s) and the verification re-scan (62.2s) await one Bedrock vision call at a time inside a loop. The calls are independent per image cluster. Running them with <code>asyncio.gather</code> under a semaphore of ~6–8 concurrent calls would take the measured ~155s of vision time to roughly 20–30s — a 4.5-minute run becomes ~1.5 minutes, with zero cost change and zero quality change. Watch Bedrock throttling (429s) and add simple retry-with-backoff; the existing per-call error handling already degrades a failed scan to "flag for human review" rather than failing the run. <em>This is the single biggest experience improvement available.</em></p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>R2 — First-run recall insurance: double-pass detection union</h4><span class="badge p1">P1 · closes the remaining leak surface</span></div>
+  <p>The measured 11-vs-3 detector variance is fully neutralized for <em>known</em> entities by the full-text dictionary sweep — but a document's <b>first</b> pass through the system has no dictionary history for its never-seen names. For documents where the sweep contributes zero known entities, run the LLM detector twice and union the proposals. Cost: ~$0.01 and ~8s (parallelizable with R1's machinery). The union can only add candidates for the reviewer to see — the human gate means over-proposal is cheap and under-proposal is a leak. Skip the second pass when the sweep already found entities (repeat documents), keeping steady-state cost unchanged.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>R3 — Curate the 35 pending vocabulary terms (you, ~10 minutes)</h4><span class="badge p1">P1 · governance, highest leverage per minute</span></div>
+  <p>The vocabulary was rebuilt from empty, so the classifier's recent runs proposed everything as new terms — 35 now sit at <code>pending_approval</code> on the Tags page (finance domain, a rich set of finance use-cases, generative/agentic AI technologies, global/multi-jurisdiction geographies). Until approved, Tagging applies <em>nothing</em> and every run needs review. Approve the good ones once and: tags start auto-applying at high confidence, review load drops, and search granularity jumps. Also worth merging near-duplicates while you're there (<code>scenario modelling</code>/<code>scenario modeling</code>, <code>reconciliation</code>/<code>reconciliation automation</code>, <code>multi-jurisdiction</code>/<code>multi-jurisdictional</code>) — duplicates fragment search.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>R4 — Turn on prompt caching (it's already built)</h4><span class="badge p2">P2 · ~30–40% detector input-cost cut</span></div>
+  <p><code>converse_with_tools</code> supports a <code>cachePoint</code> after the stable system prompt (cached reads bill ~0.1×), but no caller passes <code>cache_system_prompt=True</code>. The detector's system prompt + schema (~1.5k tokens) is resent on every loop iteration and every document. One-line changes in the detector, summarizer, and classifier calls; savings compound with R2's second pass and grow with volume.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>R5 — Clear detect-phase blocking flags once verification passes clean</h4><span class="badge p2">P2 · trust/UX</span></div>
+  <p>Recurring on every clean run: the detect-time awareness flag ("N embedded images appear to reveal the client") stays visible after all N were redacted and verified, making verified-clean runs look unsafe to anyone reading the flag list. The remediation path already clears superseded flags — <code>_finalize_completed</code> should do the same when all five channels pass. Small change; disproportionate credibility gain in demos.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>R6 — Honest tag-review semantics</h4><span class="badge p2">P2 · Tagging quality</span></div>
+  <p>Three related fixes: (a) run-level approval currently blanket-marks every tag <code>confirmed</code>, including below-threshold ones the reviewer never individually touched — flagged tags should keep a distinguishable status through approval; (b) run confidence is <code>min()</code> over tags, so one weak tag mislabels a strong twelve-tag run — report mean + count-below-threshold instead; (c) "domain is single-valued" is stated in the prompt but unenforced (recent runs applied two domains, which was actually <em>better</em> for search) — make multi-domain the explicit policy or enforce single in code; either beats per-run model whim.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>R7 — Output reporting: split text-masked vs image-derived entities</h4><span class="badge p3">P3 · reporting clarity</span></div>
+  <p>"29 entities masked / 7 text occurrences" reads like over-reporting until you know 22 were image-only identities redacted as pixels. Add a <code>source</code> field (text / ocr / logo) to <code>entities_masked</code> so run outputs reconcile at a glance. Same spirit: the detector step label still says "detect (LLM + MCP)" — MCP is gone; relabel.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>R8 — Summarizer policy: refer to the delivery firm generically</h4><span class="badge p3">P3 · consistency</span></div>
+  <p>Summaries alternate between "Navikenz presents…" and "A global consulting firm presents…" run to run. Not a leak (own-firm is deliberately unmasked), but inconsistent and zero search signal when every document is your own. One sentence in the summarizer prompt fixes it.</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>R9 — Tune thresholds with accumulated evidence</h4><span class="badge p3">P3 · needs data, not code</span></div>
+  <p>The 0.6 sanitization auto-exclude and 0.7 tag threshold are reasoned defaults, not measured ones. Once ~20 reviewed runs exist, compare confidences of entities/tags reviewers added back vs. ones nobody missed, and tune. Early signal so far favors the current cutoffs (auto-excluded candidates have gone unchallenged).</p>
+</div>
+
+<div class="rec">
+  <div class="title"><h4>R10 — Roadmap: the remaining catalog agents, in dependency order</h4><span class="badge p3">Next builds</span></div>
+  <p><b>A-05 Search/Retrieval</b> is the natural next build: it needs only what already exists (sanitized summaries + tags in Postgres) — start with SQL/keyword + tag filtering over <code>document_metadata</code> + <code>run_tags</code> before reaching for embeddings, and inherit the structural guardrail for free (it simply never gets the dictionary or registry in reach; client-name-shaped queries decline gracefully). <b>A-06 Deck Drafting</b> waits for a slide-level index, which itself waits on real sanitized volume — correct to defer. <b>A-03 SharePoint Cleanup</b> is blocked only on a Microsoft Graph app registration; per its own design it should be built against a mocked <code>graph.list_sites</code> first, so it can be developed any time without access. The Coordinator's <code>eligibility.check</code> gate becomes worth building when the first real contract restriction needs encoding — as a rules table + deterministic check, never an LLM judgment.</p>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="appendix"><span class="num">10</span>Appendix: configuration, statuses, files</h2>
+
+<h3>Key configuration (current values)</h3>
+<table>
+  <tr><th>Setting</th><th>Value</th><th>Meaning</th></tr>
+  <tr><td><code>BEDROCK_MODEL_ID</code></td><td>global.anthropic.claude-haiku-4-5</td><td>One model for text, vision, everything</td></tr>
+  <tr><td><code>SANITIZATION_CONFIDENCE_THRESHOLD</code></td><td>0.6</td><td>Below this, unknown candidates auto-excluded (with info flag)</td></tr>
+  <tr><td><code>TAG_CONFIDENCE_THRESHOLD</code></td><td>0.7</td><td>Below this, in-vocabulary tags flag for review instead of auto-applying</td></tr>
+  <tr><td><code>MAX_IMAGES_SCANNED</code></td><td>150 clusters</td><td>Vision-scan cap; overflow is flagged, never silent</td></tr>
+  <tr><td><code>PERCEPTUAL_DEDUP_THRESHOLD</code> / <code>MATCH_THRESHOLD</code> / <code>UNCERTAIN_THRESHOLD</code></td><td>2 / 4 / 10</td><td>phash Hamming: same-image dedup / confident entity match / needs-human band</td></tr>
+  <tr><td><code>OWN_FIRM_NAMES</code> + logo phashes</td><td>navikenz, navicade, spend + 1 hash</td><td>Never proposed as client identity, three-layer enforcement</td></tr>
+  <tr><td><code>MIN_OCR_ENTITY_LENGTH</code></td><td>4</td><td>Shorter OCR fragments are confidence-capped (collision-prone)</td></tr>
+  <tr><td><code>STALE_RUN_TIMEOUT_MINUTES</code></td><td>15</td><td>Reaper window, on the <code>updated_at</code> heartbeat clock</td></tr>
+</table>
+
+<h3>Run status lifecycle</h3>
+<p class="mono" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0.8rem 1rem;">pending → working → detecting/tagging/orchestrating → awaiting_review → applying → completed | completed_with_issues | failed | rejected<br>completed_with_issues —(remediation, verified clean)→ completed</p>
+
+<h3>Where things live</h3>
+<table>
+  <tr><th>Concern</th><th>Files</th></tr>
+  <tr><td>Agents</td><td><code>app/agents/{sanitization,tagging,coordinator}/agent.py</code>; detector, image_scan, summarizer, remediate, tools under sanitization/</td></tr>
+  <tr><td>Orchestration</td><td><code>app/worker.py</code> (poll + reaper), <code>app/runs/background.py</code> (detect/apply drivers, heartbeat, auto-chain hook)</td></tr>
+  <tr><td>Document engine</td><td><code>app/documents/</code> — extract, render, verify, images, image_redact, metadata/comment/hyperlink scan+scrub, convert</td></tr>
+  <tr><td>Masking core</td><td><code>app/masking/</code> — dictionary (+ full-text sweep), pattern (shared word-boundary regex), logo_reference, style</td></tr>
+  <tr><td>LLM client</td><td><code>app/llm/bedrock_client.py</code> — converse / converse_vision / converse_with_tools, JSON repair, cost metering</td></tr>
+  <tr><td>Regression suite</td><td><code>scripts/regression_check.py</code> — 47 offline checks: planted leaks in every channel across all four formats, word-boundary traps, line-wrap, near-duplicate redaction, remediation idempotency. Run after any masking-pipeline change.</td></tr>
+</table>
+
+<footer>
+  NaviKnow workflow &amp; optimization report — generated from a live audit of the running code and database (agent step records, real run timings, current configuration). The two earlier reports remain the historical record: SANITIZATION_AGENT_REPORT.html (original debugging session + first optimization round) and AGENT_AUDIT_REPORT_V2.html (the dictionary-sweep audit). Re-verify specifics against the code before relying on them beyond this document's generation date.
+</footer>
+
+</div>
+</body>
+</html>

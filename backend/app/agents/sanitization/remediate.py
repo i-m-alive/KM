@@ -228,6 +228,15 @@ async def remediate_run(db: Session, run: AgentRun) -> dict:
     run.status = "completed" if native_masking_verified else "completed_with_issues"
     db.commit()
 
+    # Remediation is a second path to "completed" alongside the normal
+    # apply()->_finalize_completed flow - it must trigger the SAME auto-chain
+    # hook, or a document fixed via remediation (rather than approved clean
+    # on the first pass) would silently never hand off to Tagging under
+    # Coordinator-started runs.
+    from app.runs.background import _maybe_auto_chain_to_tagging
+
+    _maybe_auto_chain_to_tagging(db, run)
+
     return {
         "native_masking_verified": native_masking_verified,
         "images_redacted": images_redacted,

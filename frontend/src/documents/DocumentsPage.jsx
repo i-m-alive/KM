@@ -52,6 +52,21 @@ export default function DocumentsPage() {
     }
   }
 
+  async function runFullPipeline(documentId) {
+    setError(null);
+    setStartingId(documentId);
+    try {
+      // The Coordinator starts Sanitization, then auto-starts Tagging the
+      // moment it's reviewed/approved and verifies clean - one click instead
+      // of two. Its own run page immediately hops to the Sanitization run.
+      const run = await apiPost("/runs", { agent_id: "coordinator", input: { document_id: documentId } });
+      navigate(`/runs/${run.id}`);
+    } catch (err) {
+      setError(err.message);
+      setStartingId(null);
+    }
+  }
+
   return (
     <div>
       <div className="page-head">
@@ -101,9 +116,19 @@ export default function DocumentsPage() {
                     </td>
                     <td className="agent-card__meta">{new Date(d.uploaded_at).toLocaleString()}</td>
                     <td style={{ textAlign: "right" }}>
-                      <button className="btn--sm" onClick={() => sanitize(d.id)} disabled={startingId === d.id}>
-                        {startingId === d.id ? "Starting…" : "Run Sanitization"}
-                      </button>
+                      <div style={{ display: "inline-flex", gap: "0.4rem" }}>
+                        <button className="btn--ghost btn--sm" onClick={() => sanitize(d.id)} disabled={startingId === d.id}>
+                          {startingId === d.id ? "Starting…" : "Run Sanitization"}
+                        </button>
+                        <button
+                          className="btn--sm"
+                          onClick={() => runFullPipeline(d.id)}
+                          disabled={startingId === d.id}
+                          title="Sanitize, then automatically Tag once reviewed and verified clean"
+                        >
+                          {startingId === d.id ? "Starting…" : "Run full pipeline →"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -21,13 +21,19 @@ def _load_background() -> None:
 
         _BACKGROUND.append(SanitizationAgent())
     except Exception:
-        log.exception("Sanitization agent failed to load (check deps: mcp, presidio, pdfplumber)")
+        log.exception("Sanitization agent failed to load (check deps: presidio, pdfplumber)")
     try:
         from app.agents.tagging.agent import TaggingAgent
 
         _BACKGROUND.append(TaggingAgent())
     except Exception:
         log.exception("Tagging agent failed to load")
+    try:
+        from app.agents.coordinator.agent import CoordinatorAgent
+
+        _BACKGROUND.append(CoordinatorAgent())
+    except Exception:
+        log.exception("Coordinator agent failed to load")
 
 
 def _all() -> dict[str, object]:

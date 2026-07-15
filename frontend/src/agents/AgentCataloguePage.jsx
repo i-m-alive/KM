@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../api/client";
-import { BotIcon, CheckShieldIcon, TagIcon } from "../components/Icons";
+import { BotIcon, CheckShieldIcon, PlayIcon, TagIcon } from "../components/Icons";
 
 const AGENT_ICONS = {
   sanitization: CheckShieldIcon,
   tagging: TagIcon,
+  coordinator: PlayIcon,
 };
 
 export default function AgentCataloguePage() {
@@ -40,6 +41,12 @@ export default function AgentCataloguePage() {
         <span className="agent-card__meta" style={{ marginTop: "auto" }}>
           Launched from a completed Sanitization run — see <Link to="/runs">Runs</Link>.
         </span>
+      );
+    if (agent.agent_id === "coordinator")
+      return (
+        <Link to="/documents" style={{ marginTop: "auto" }}>
+          <button className="btn--subtle" style={{ width: "100%" }}>Run full pipeline from Documents →</button>
+        </Link>
       );
     return (
       <Link to={`/agents/${agent.agent_id}/run`} style={{ marginTop: "auto" }}>

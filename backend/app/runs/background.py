@@ -68,6 +68,39 @@ def _persist_flags(db: Session, run: AgentRun, flags) -> None:
         db.add(RunFlag(run_id=run.id, message=flag.message, severity=flag.severity))
 
 
+def _maybe_auto_chain_to_tagging(db: Session, run: AgentRun) -> None:
+    """The Coordinator's actual mechanism: a Sanitization run started with
+    input_json.auto_chain_to == "tagging" gets a Tagging run enqueued
+    automatically the moment IT reaches "completed" - i.e. only after
+    apply()'s post-render verification has already passed with no blocking
+    flags. This fires identically whether the run got there via reviewer
+    approval (run_application) or a high-confidence auto-apply
+    (run_detection) - both paths call _finalize_completed, so "review once,
+    everything downstream happens automatically" doesn't need its own
+    polling/waiting logic; it rides the same commit that already gates
+    "is this file actually safe to hand to Tagging"."""
+    if run.agent_id != "sanitization" or run.status != "completed":
+        return
+    if (run.input_json or {}).get("auto_chain_to") != "tagging":
+        return
+    if (run.output_json or {}).get("auto_tagging_run_id"):
+        return  # already chained - defends against this ever running twice
+
+    tagging_run = AgentRun(
+        agent_id="tagging",
+        status="pending",
+        input_json={"sanitization_run_id": str(run.id)},
+        created_by=run.created_by,
+    )
+    db.add(tagging_run)
+    db.commit()
+    db.refresh(tagging_run)
+    # The worker's normal poll loop picks this up within ~2s - no different
+    # from a human clicking "Run Tagging on this run", just triggered by code.
+    run.output_json = {**(run.output_json or {}), "auto_tagging_run_id": str(tagging_run.id)}
+    db.commit()
+
+
 def _finalize_completed(db: Session, run: AgentRun, result: AgentResult) -> None:
     # A "blocking" flag exists to stop a run from being silently treated as
     # done - e.g. the masking verifier finding a client logo still sitting in
@@ -87,6 +120,7 @@ def _finalize_completed(db: Session, run: AgentRun, result: AgentResult) -> None
     _persist_steps(db, run, result.steps, base_order=existing)
     _persist_flags(db, run, result.flags)
     db.commit()
+    _maybe_auto_chain_to_tagging(db, run)
 
 
 async def run_detection(db: Session, run: AgentRun, agent: BackgroundAgent) -> None:

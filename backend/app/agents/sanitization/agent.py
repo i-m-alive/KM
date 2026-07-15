@@ -39,8 +39,7 @@ from app.masking import dictionary, registry
 from app.masking.dictionary import is_own_firm
 from app.masking.logo_reference import MATCH_THRESHOLD, store_reference
 from app.masking.style import resolve_style
-from app.mcp_client import TOOL_CREATE_REVIEW, call_tool_text, mcp_session
-from app.models import AgentRun, DocumentMetadata, MaskingEntity, MaskingOccurrence, UploadedDocument
+from app.models import AgentRun, DocumentMetadata, MaskingEntity, MaskingOccurrence, ReviewItem, UploadedDocument
 from app.storage.local_store import save_masked_document, save_run_output
 
 settings = get_settings()
@@ -58,7 +57,7 @@ class SanitizationAgent(BackgroundAgent):
         "Removes client-identifying information from a document using a global masking dictionary, "
         "then files the proposed masks for human review before applying them."
     )
-    tools = ["bedrock", "naviknow-mcp", "presidio"]
+    tools = ["bedrock", "presidio"]
     allowed_roles = ["admin", "km_governance", "km_reviewer", "practice_lead", "delivery"]
 
     async def detect(self, db: Session, run: AgentRun) -> ReviewProposal:
@@ -261,14 +260,18 @@ class SanitizationAgent(BackgroundAgent):
                 severity="info",
             ))
 
-        # Step 5: file the review via the MCP review_create_task tool.
+        # Step 5: file the review. Direct write, not a model-callable tool -
+        # this was never actually reachable from the LLM tool-use loop even
+        # under the old MCP setup (agent code called it directly), so it's
+        # a "protected call" by the same guardrail sanitization/tools.py
+        # documents: never put in a TOOLS dict the model can invoke.
         summary = (
             f"Sanitization proposes masking {len(entities)} client entit{'y' if len(entities) == 1 else 'ies'}"
             f" in '{doc.filename}'" + (f", and flags {len(flagged_groups)} image(s) for review" if flagged_groups else "") + "."
         )
-        async with mcp_session() as session:
-            await call_tool_text(session, TOOL_CREATE_REVIEW, {"run_id": str(run.id), "summary": summary})
-        steps.append(AgentStep(order=5, name="file review", tool="naviknow-mcp", detail=summary))
+        db.add(ReviewItem(run_id=run.id, notes=summary))
+        db.commit()
+        steps.append(AgentStep(order=5, name="file review", tool=None, detail=summary))
 
         images_proposal = [
             {

@@ -1,113 +1,72 @@
-2026-07-13 00:45:48,527 worker INFO worker started; polling every 2.0s, reaping runs stuck >15 min
-2026-07-13 00:46:56,934 worker INFO detecting run a781bbd4-dd7a-4d64-9b78-356a6fe658de (sanitization)
-2026-07-13 00:46:57,045 worker INFO Using device of type: cpu
-2026-07-13 00:46:57,491 worker INFO nlp_engine not provided, creating default.
-2026-07-13 00:46:57,995 worker INFO Created NLP engine: spacy. Loaded models: ['en']
-2026-07-13 00:46:57,995 worker INFO registry not provided, creating default.
-2026-07-13 00:46:58,005 worker INFO Loaded recognizer: CreditCardRecognizer
-2026-07-13 00:46:58,005 worker INFO Loaded recognizer: CreditCardRecognizer
-2026-07-13 00:46:58,005 worker INFO Loaded recognizer: CreditCardRecognizer
-2026-07-13 00:46:58,005 worker INFO Loaded recognizer: CreditCardRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: UsBankRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: UsLicenseRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: UsItinRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: UsPassportRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: UsSsnRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: NhsRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: EsNifRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: EsNieRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: ItDriverLicenseRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: ItFiscalCodeRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: ItVatCodeRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: ItIdentityCardRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: ItPassportRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: PlPeselRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: CryptoRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: DateRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: EmailRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: IbanRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: IpRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: MedicalLicenseRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: MacAddressRecognizer
-2026-07-13 00:46:58,006 worker INFO Loaded recognizer: PhoneRecognizer
-2026-07-13 00:46:58,007 worker INFO Loaded recognizer: UrlRecognizer
-2026-07-13 00:46:58,007 worker WARNING Recognizer not added to registry because language is not supported by registry - CreditCardRecognizer supported languages: es, registry supported languages: en
-2026-07-13 00:46:58,007 worker WARNING Recognizer not added to registry because language is not supported by registry - CreditCardRecognizer supported languages: it, registry supported languages: en
-2026-07-13 00:46:58,007 worker WARNING Recognizer not added to registry because language is not supported by registry - CreditCardRecognizer supported languages: pl, registry supported languages: en
-2026-07-13 00:46:58,007 worker WARNING Recognizer not added to registry because language is not supported by registry - EsNifRecognizer supported languages: es, registry supported languages: en
-2026-07-13 00:46:58,007 worker WARNING Recognizer not added to registry because language is not supported by registry - EsNieRecognizer supported languages: es, registry supported languages: en
-2026-07-13 00:46:58,007 worker WARNING Recognizer not added to registry because language is not supported by registry - ItDriverLicenseRecognizer supported languages: it, registry supported languages: en
-2026-07-13 00:46:58,007 worker WARNING Recognizer not added to registry because language is not supported by registry - ItFiscalCodeRecognizer supported languages: it, registry supported languages: en
-2026-07-13 00:46:58,007 worker WARNING Recognizer not added to registry because language is not supported by registry - ItVatCodeRecognizer supported languages: it, registry supported languages: en
-2026-07-13 00:46:58,007 worker WARNING Recognizer not added to registry because language is not supported by registry - ItIdentityCardRecognizer supported languages: it, registry supported languages: en
-2026-07-13 00:46:58,007 worker WARNING Recognizer not added to registry because language is not supported by registry - ItPassportRecognizer supported languages: it, registry supported languages: en
-2026-07-13 00:46:58,007 worker WARNING Recognizer not added to registry because language is not supported by registry - PlPeselRecognizer supported languages: pl, registry supported languages: en
-2026-07-13 00:46:58,007 worker INFO Loaded recognizer: SpacyRecognizer
-2026-07-13 00:46:58,007 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,064 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,075 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,106 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,131 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,139 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,149 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,164 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,193 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,201 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,243 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,254 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,273 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,307 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,334 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,361 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,370 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,382 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,383 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,416 worker INFO Fetching all recognizers for language en
-2026-07-13 00:46:58,419 worker INFO Fetching all recognizers for language en
-[07/13/26 00:46:58] INFO     Processing request of type            server.py:733
-                             ListToolsRequest                                   
-2026-07-13 00:46:58,832 worker INFO Found credentials in environment variables.
-[07/13/26 00:47:01] INFO     Processing request of type            server.py:733
-                             CallToolRequest                                    
+2026-07-13 11:33:28,830 worker INFO worker started; polling every 2.0s, reaping runs stuck >15 min
+2026-07-13 18:11:35,796 worker INFO detecting run 3a08d7d3-3a8f-4ad1-a881-b76b04a90710 (sanitization)
+2026-07-13 18:11:35,994 worker INFO Using device of type: cpu
+2026-07-13 18:11:37,060 worker INFO nlp_engine not provided, creating default.
+2026-07-13 18:11:37,700 worker INFO Created NLP engine: spacy. Loaded models: ['en']
+2026-07-13 18:11:37,700 worker INFO registry not provided, creating default.
+2026-07-13 18:11:37,712 worker INFO Loaded recognizer: CreditCardRecognizer
+2026-07-13 18:11:37,712 worker INFO Loaded recognizer: CreditCardRecognizer
+2026-07-13 18:11:37,712 worker INFO Loaded recognizer: CreditCardRecognizer
+2026-07-13 18:11:37,712 worker INFO Loaded recognizer: CreditCardRecognizer
+2026-07-13 18:11:37,712 worker INFO Loaded recognizer: UsBankRecognizer
+2026-07-13 18:11:37,712 worker INFO Loaded recognizer: UsLicenseRecognizer
+2026-07-13 18:11:37,712 worker INFO Loaded recognizer: UsItinRecognizer
+2026-07-13 18:11:37,712 worker INFO Loaded recognizer: UsPassportRecognizer
+2026-07-13 18:11:37,712 worker INFO Loaded recognizer: UsSsnRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: NhsRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: EsNifRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: EsNieRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: ItDriverLicenseRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: ItFiscalCodeRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: ItVatCodeRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: ItIdentityCardRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: ItPassportRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: PlPeselRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: CryptoRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: DateRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: EmailRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: IbanRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: IpRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: MedicalLicenseRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: MacAddressRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: PhoneRecognizer
+2026-07-13 18:11:37,713 worker INFO Loaded recognizer: UrlRecognizer
+2026-07-13 18:11:37,713 worker WARNING Recognizer not added to registry because language is not supported by registry - CreditCardRecognizer supported languages: es, registry supported languages: en
+2026-07-13 18:11:37,713 worker WARNING Recognizer not added to registry because language is not supported by registry - CreditCardRecognizer supported languages: it, registry supported languages: en
+2026-07-13 18:11:37,713 worker WARNING Recognizer not added to registry because language is not supported by registry - CreditCardRecognizer supported languages: pl, registry supported languages: en
+2026-07-13 18:11:37,713 worker WARNING Recognizer not added to registry because language is not supported by registry - EsNifRecognizer supported languages: es, registry supported languages: en
+2026-07-13 18:11:37,713 worker WARNING Recognizer not added to registry because language is not supported by registry - EsNieRecognizer supported languages: es, registry supported languages: en
+2026-07-13 18:11:37,713 worker WARNING Recognizer not added to registry because language is not supported by registry - ItDriverLicenseRecognizer supported languages: it, registry supported languages: en
+2026-07-13 18:11:37,713 worker WARNING Recognizer not added to registry because language is not supported by registry - ItFiscalCodeRecognizer supported languages: it, registry supported languages: en
+2026-07-13 18:11:37,713 worker WARNING Recognizer not added to registry because language is not supported by registry - ItVatCodeRecognizer supported languages: it, registry supported languages: en
+2026-07-13 18:11:37,713 worker WARNING Recognizer not added to registry because language is not supported by registry - ItIdentityCardRecognizer supported languages: it, registry supported languages: en
+2026-07-13 18:11:37,713 worker WARNING Recognizer not added to registry because language is not supported by registry - ItPassportRecognizer supported languages: it, registry supported languages: en
+2026-07-13 18:11:37,713 worker WARNING Recognizer not added to registry because language is not supported by registry - PlPeselRecognizer supported languages: pl, registry supported languages: en
+2026-07-13 18:11:37,714 worker INFO Loaded recognizer: SpacyRecognizer
+2026-07-13 18:11:37,714 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:37,780 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:37,792 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:37,825 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:37,853 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:37,861 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:37,874 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:37,890 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:37,921 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:37,930 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:37,978 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:37,990 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:38,012 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:38,049 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:38,080 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:38,111 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:38,121 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:38,134 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:38,136 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:38,172 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:38,176 worker INFO Fetching all recognizers for language en
+2026-07-13 18:11:38,223 worker INFO Found credentials in environment variables.
 /Users/kumarshivrajbhakat/Desktop/Naviknow/backend/.venv/lib/python3.14/site-packages/PIL/Image.py:1136: UserWarning: Palette images with Transparency expressed in bytes should be converted to RGBA images
   warnings.warn(
-[07/13/26 00:48:43] INFO     Processing request of type            server.py:733
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:733
-                             ListToolsRequest                                   
-2026-07-13 00:48:43,120 worker INFO run a781bbd4-dd7a-4d64-9b78-356a6fe658de -> awaiting_review
-2026-07-13 00:51:21,644 worker INFO detecting run 8eae3037-588b-432d-9783-222c4a49a821 (tagging)
-2026-07-13 00:51:25,826 worker INFO run 8eae3037-588b-432d-9783-222c4a49a821 -> awaiting_review
-2026-07-13 00:52:07,954 worker INFO detecting run bb0bc9e0-6bf7-4fc8-ad67-7b25faf38b98 (sanitization)
-2026-07-13 00:52:08,020 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,027 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,038 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,066 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,088 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,096 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,105 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,118 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,142 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,150 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,185 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,195 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,213 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,243 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,266 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,290 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,298 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,309 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,310 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,341 worker INFO Fetching all recognizers for language en
-2026-07-13 00:52:08,344 worker INFO Fetching all recognizers for language en
-[07/13/26 00:52:08] INFO     Processing request of type            server.py:733
-                             ListToolsRequest                                   
-[07/13/26 00:52:11] INFO     Processing request of type            server.py:733
-                             CallToolRequest                                    
-[07/13/26 00:53:48] INFO     Processing request of type            server.py:733
-                             CallToolRequest                                    
-                    INFO     Processing request of type            server.py:733
-                             ListToolsRequest                                   
-2026-07-13 00:53:49,004 worker INFO run bb0bc9e0-6bf7-4fc8-ad67-7b25faf38b98 -> awaiting_review
-2026-07-13 00:56:21,527 worker INFO detecting run 17f0f69d-058c-4822-9561-b61c5429cf79 (tagging)
-2026-07-13 00:56:24,846 worker INFO run 17f0f69d-058c-4822-9561-b61c5429cf79 -> awaiting_review
+2026-07-13 18:13:21,131 worker INFO run 3a08d7d3-3a8f-4ad1-a881-b76b04a90710 -> awaiting_review
+2026-07-13 18:15:41,596 worker INFO detecting run 89e32bed-d3eb-417b-ab45-311b0e191941 (tagging)
+2026-07-13 18:15:44,856 worker INFO run 89e32bed-d3eb-417b-ab45-311b0e191941 -> awaiting_review
