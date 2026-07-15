@@ -370,6 +370,6 @@ def render_masked_document(
     elif lower.endswith(".xlsx") or "spreadsheetml" in content_type:
         xlsx_images_redacted = _render_xlsx(src_path, dst, surface_to_token, style, approved_image_refs)
     else:
-        with open(dst, "w") as f:
+        with open(dst, "w", encoding="utf-8") as f:
             f.write("\n".join(f"{k} -> {v}" for k, v in surface_to_token.items()))
     return dst, xlsx_images_redacted
