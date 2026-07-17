@@ -69,11 +69,16 @@ async def detect_entities(document_id: str, total_chunks: int, candidates: list[
         "Read the document with fs_read_document and return the client-identifying entities as JSON."
     )
 
+    # Cap was too tight for real-sized decks/reports: at 16 max_iterations a
+    # document with >13 chunks could exhaust its budget before the model ever
+    # read every chunk, silently missing entities that only appear once, late
+    # in the document. Raised so total_chunks + 3 has room to actually cover
+    # documents up to ~30 chunks before hitting the ceiling.
     return await bedrock_client.converse_with_tools(
         system_prompt=SYSTEM_PROMPT,
         user_message=user_message,
         tool_specs=[FS_READ_DOCUMENT_SPEC],
         tool_executor=sanitization_tool_executor,
         response_schema=DETECT_SCHEMA,
-        max_iterations=max(4, min(total_chunks + 3, 16)),
+        max_iterations=max(4, min(total_chunks + 3, 32)),
     )

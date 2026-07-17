@@ -38,6 +38,7 @@ from app.documents.verify import find_residual_surfaces
 from app.masking import dictionary, registry
 from app.masking.dictionary import is_own_firm
 from app.masking.logo_reference import MATCH_THRESHOLD, store_reference
+from app.masking.pattern import surface_pattern
 from app.masking.style import resolve_style
 from app.models import AgentRun, DocumentMetadata, MaskingEntity, MaskingOccurrence, ReviewItem, UploadedDocument
 from app.storage.local_store import save_masked_document, save_run_output
@@ -46,7 +47,12 @@ settings = get_settings()
 
 
 def _count_occurrences(surface: str, chunks) -> int:
-    pat = re.compile(re.escape(surface), re.IGNORECASE)
+    # Must use the SAME pattern apply_masks() actually masks with (word
+    # boundaries + \s+ for wrapped whitespace) - a bare re.escape() literal
+    # undercounts real occurrences whenever the surface is line-wrapped in
+    # extracted text, which desyncs the reviewer-visible count from what
+    # actually gets masked.
+    pat = re.compile(surface_pattern(surface), re.IGNORECASE)
     return sum(len(pat.findall(c.text)) for c in chunks)
 
 
@@ -208,14 +214,26 @@ class SanitizationAgent(BackgroundAgent):
         # SAME entity pipeline as text - so a name read off a logo gets a
         # proper mask token, reviewer sign-off, and (via apply()) a logo
         # reference for future icon-only matches, exactly like any other entity.
+        #
+        # Also track how many times each such surface's SOURCE IMAGE recurs
+        # (image_occurrences_by_key) - _count_occurrences below only ever
+        # counts regex hits in extracted body TEXT, which is structurally
+        # blind to pixel content. A name that's read off a logo and appears
+        # nowhere in body text isn't a 0-occurrence entity, it's an
+        # N-occurrence entity where the count lives in the image channel
+        # instead of the text channel; reporting 0 there misleads the
+        # reviewer into thinking nothing was actually found.
+        image_occurrences_by_key: dict[str, int] = {}
         for g in image_groups:
             if not (g.contains_client_identity or g.needs_human_judgment):
                 continue
+            group_keys: set[str] = set()
             for s in g.ocr_text:
                 s = s.strip()
                 if len(s) < 2 or s.isdigit() or is_own_firm(s) or dictionary.is_skipped(db, s):
                     continue
                 key = dictionary.normalize(s)
+                group_keys.add(key)
                 if key in merged:
                     continue
                 # A logo-OCR'd fragment shorter than MIN_OCR_ENTITY_LENGTH is
@@ -234,28 +252,41 @@ class SanitizationAgent(BackgroundAgent):
                     "mask_token": None,
                     "source": "image_ocr",
                 }
+            # Every distinct surface OCR'd off THIS image counts this image's
+            # own occurrence total once - not once per OCR fragment, so three
+            # strings read off the same picture don't triple-count it - and
+            # accumulates across separate image groups that name the same
+            # entity (the same client's logo appearing in two visually
+            # different renditions elsewhere in the document).
+            for key in group_keys:
+                image_occurrences_by_key[key] = image_occurrences_by_key.get(key, 0) + len(g.all_indices)
 
-        # Below-threshold candidates are excluded from the proposal entirely
-        # rather than surfaced as a per-term warning - without this, the same
-        # borderline OCR fragments (short acronyms, common-word collisions)
-        # resurface on every single run of the same document forever. A
-        # reviewer can still add one back manually via "add entity" if it
-        # genuinely matters; this only changes the default.
+        # Below-threshold candidates are excluded from the auto-included
+        # proposal, but NOT dropped entirely - they're still returned as
+        # structured "excluded_entities" data so the reviewer can see and
+        # include them with one click, rather than the previous behavior of
+        # naming them only in a flag's free text and requiring the reviewer
+        # to retype the exact surface string via "add entity" to recover one
+        # (the actual cause of low-occurrence companies effectively vanishing
+        # in practice - reviewers don't retype names from a paragraph of flag
+        # text). This only changes the DEFAULT (excluded unless opted in);
+        # a borderline OCR fragment still won't auto-pollute the mask list.
         entities = []
         skipped_low_confidence = []
-        for ent in merged.values():
-            ent["occurrences"] = _count_occurrences(ent["surface_text"], chunks)
+        for key, ent in merged.items():
+            ent["occurrences"] = _count_occurrences(ent["surface_text"], chunks) + image_occurrences_by_key.get(key, 0)
             if not ent["known"] and ent["confidence"] < settings.SANITIZATION_CONFIDENCE_THRESHOLD:
-                skipped_low_confidence.append(ent["surface_text"])
+                skipped_low_confidence.append(ent)
                 continue
             entities.append(ent)
         if skipped_low_confidence:
+            names = [e["surface_text"] for e in skipped_low_confidence]
             flags.append(AgentFlag(
                 message=(
                     f"{len(skipped_low_confidence)} low-confidence candidate(s) excluded from the proposal "
                     f"(below {settings.SANITIZATION_CONFIDENCE_THRESHOLD:.0%} confidence): "
-                    f"{', '.join(skipped_low_confidence[:10])}{'…' if len(skipped_low_confidence) > 10 else ''}. "
-                    "Add manually via 'add entity' if any of these should be masked."
+                    f"{', '.join(names[:10])}{'…' if len(names) > 10 else ''}. "
+                    "See 'Excluded candidates' below to include any that matter."
                 ),
                 severity="info",
             ))
@@ -318,6 +349,7 @@ class SanitizationAgent(BackgroundAgent):
             proposal={
                 "document_id": str(document_id), "filename": doc.filename, "total_chunks": len(chunks),
                 "entities": entities, "images": images_proposal, "images_skipped": skipped,
+                "excluded_entities": skipped_low_confidence,
             },
             steps=steps,
             flags=flags,

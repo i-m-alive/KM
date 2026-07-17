@@ -7,16 +7,29 @@ Deleted-but-still-present text in a tracked change lives in <w:delText>, not
 pipeline) never sees it at all, so this is a genuinely separate channel, not
 redundant with the text verifier.
 
-Known, deliberate gaps (unverified schemas, not worth guessing at): PowerPoint
-modern/cloud coauthoring comments, and Excel threaded comments. Only legacy
-comments are checked for pptx/xlsx.
+PowerPoint modern/cloud (threaded) comments are checked alongside legacy
+ones (see _modern_comment_parts / _modern_author_part) - per the MS-PPTX
+spec, the modern Comment part's relationship type and content type are
+normatively fixed (schemas.microsoft.com/office/2018/10/relationships/
+comments), but its on-disk PATH is a producer choice, unlike legacy comments'
+fixed ppt/comments/commentN.xml naming - so it's resolved via the
+relationship graph, not a filename guess. Comment AUTHOR display names
+(legacy ppt/commentAuthors.xml and its modern equivalent) are themselves PII
+and are checked too.
+
+Known, deliberate gap: Excel threaded comments (only legacy xlsx cell
+comments are checked).
 """
 
+import posixpath
 import re
 import xml.etree.ElementTree as ET
 import zipfile
 
 from app.masking.pattern import surface_pattern
+
+_MODERN_COMMENTS_RELTYPE = "http://schemas.microsoft.com/office/2018/10/relationships/comments"
+_MODERN_AUTHORS_RELTYPE = "http://schemas.microsoft.com/office/2018/10/relationships/authors"
 
 
 def _find_in_text(text: str, surfaces: list[str], where: str) -> list[str]:
@@ -35,6 +48,67 @@ def _part_text(z: zipfile.ZipFile, partname: str) -> str:
     except ET.ParseError:
         return ""
     return " ".join(el.text.strip() for el in root.iter() if el.text and el.text.strip())
+
+
+def _author_attr_text(z: zipfile.ZipFile, partname: str) -> str:
+    """Author display names/initials in a commentAuthors-shaped part - stored
+    as XML ATTRIBUTES (name=, initials=), not element text, on both the
+    legacy (p:cmAuthor) and modern (2018-schema) author element - so this
+    reads attribute values instead of _part_text's element-text walk.
+    Generic over the child element's exact tag name (deliberately not
+    hardcoded), since only the relationship type/content type of the modern
+    Author part are spec-guaranteed, not its internal element names."""
+    if partname not in z.namelist():
+        return ""
+    try:
+        root = ET.fromstring(z.read(partname))
+    except ET.ParseError:
+        return ""
+    values = []
+    for el in root.iter():
+        for attr in ("name", "initials"):
+            v = el.get(attr)
+            if v and v.strip():
+                values.append(v.strip())
+    return " ".join(values)
+
+
+def _rels_targets(z: zipfile.ZipFile, rels_partname: str, reltype: str, base_dir: str) -> list[str]:
+    """Every internal relationship target of `reltype` declared in a .rels
+    part, resolved to an absolute in-zip path relative to `base_dir` (the
+    folder the part described by the .rels belongs to, per OPC convention)."""
+    if rels_partname not in z.namelist():
+        return []
+    try:
+        root = ET.fromstring(z.read(rels_partname))
+    except ET.ParseError:
+        return []
+    targets = []
+    for rel in root:
+        if rel.get("Type") == reltype and rel.get("TargetMode") != "External":
+            target = rel.get("Target")
+            if target:
+                targets.append(posixpath.normpath(posixpath.join(base_dir, target)))
+    return targets
+
+
+def _modern_comment_parts(z: zipfile.ZipFile) -> list[str]:
+    """Modern (2018-schema) per-slide comment parts, resolved via each
+    slide's OWN relationships."""
+    parts = []
+    for slide_name in z.namelist():
+        if not re.match(r"^ppt/slides/slide\d+\.xml$", slide_name):
+            continue
+        rels_name = f"ppt/slides/_rels/{posixpath.basename(slide_name)}.rels"
+        parts.extend(_rels_targets(z, rels_name, _MODERN_COMMENTS_RELTYPE, "ppt/slides"))
+    return parts
+
+
+def _modern_author_part(z: zipfile.ZipFile) -> str | None:
+    """At most one modern Author part per package, target of an implicit
+    relationship from the Presentation part."""
+    targets = _rels_targets(z, "ppt/_rels/presentation.xml.rels", _MODERN_AUTHORS_RELTYPE, "ppt")
+    return targets[0] if targets else None
 
 
 def _deltext_only(z: zipfile.ZipFile, partname: str) -> str:
@@ -68,6 +142,13 @@ def _scan_pptx(path: str, surfaces: list[str]) -> list[str]:
             for name in z.namelist():
                 if re.match(r"ppt/comments/comment\d*\.xml$", name):
                     hits.extend(_find_in_text(_part_text(z, name), surfaces, "comment"))
+            if "ppt/commentAuthors.xml" in z.namelist():
+                hits.extend(_find_in_text(_author_attr_text(z, "ppt/commentAuthors.xml"), surfaces, "comment author"))
+            for name in _modern_comment_parts(z):
+                hits.extend(_find_in_text(_part_text(z, name), surfaces, "comment"))
+            author_part = _modern_author_part(z)
+            if author_part:
+                hits.extend(_find_in_text(_author_attr_text(z, author_part), surfaces, "comment author"))
     except Exception:
         pass
     return hits

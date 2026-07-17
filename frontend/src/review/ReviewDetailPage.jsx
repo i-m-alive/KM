@@ -74,6 +74,23 @@ export default function ReviewDetailPage() {
     if (clientEntitySurface.toLowerCase() === surface.toLowerCase()) setClientEntitySurface("");
   }
 
+  function isIncluded(surface) {
+    return addedEntities.some((e) => e.surface_text.toLowerCase() === surface.toLowerCase());
+  }
+
+  // Excluded candidates share the SAME added-entity path as manually-typed
+  // ones (apply() merges edits.added_entities identically regardless of
+  // where the surface came from) - ticking one here is just a pre-filled
+  // "add entity" rather than a separate mechanism.
+  function toggleExcluded(candidate) {
+    setAddedEntities((prev) => {
+      if (isIncluded(candidate.surface_text)) {
+        return prev.filter((e) => e.surface_text.toLowerCase() !== candidate.surface_text.toLowerCase());
+      }
+      return [...prev, { surface_text: candidate.surface_text, entity_type: candidate.entity_type }];
+    });
+  }
+
   function willRedact(group) {
     if (group.mandatory_redaction) return true;
     const flipped = imageOverrides.has(group.group_index);
@@ -283,6 +300,43 @@ export default function ReviewDetailPage() {
               </button>
             </div>
           </div>
+
+          {(p.excluded_entities || []).length > 0 && (
+            <div className="card section">
+              <h3 className="card__title">Excluded candidates ({p.excluded_entities.length})</h3>
+              <p className="card__sub">
+                Below the confidence bar, so left out of the mask list above by default — often true for a name that
+                only appears once. Tick "Include" for any that are real; this adds it exactly like a manually-typed
+                entity above.
+              </p>
+              <div className="table-scroll">
+                <table className="run-table">
+                  <thead>
+                    <tr>
+                      <th>Surface</th>
+                      <th>Type</th>
+                      <th>Conf.</th>
+                      <th>Occurrences</th>
+                      <th>Include</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {p.excluded_entities.map((e, i) => (
+                      <tr key={`excluded-${i}`}>
+                        <td style={{ fontWeight: 550 }}>{e.surface_text}</td>
+                        <td className="agent-card__meta">{e.entity_type}</td>
+                        <td>{Math.round((e.confidence ?? 0) * 100)}%</td>
+                        <td>{e.occurrences}</td>
+                        <td>
+                          <input type="checkbox" checked={isIncluded(e.surface_text)} onChange={() => toggleExcluded(e)} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="card section">
             <h3 className="card__title">

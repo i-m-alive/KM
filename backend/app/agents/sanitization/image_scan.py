@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.sanitization.ner_prepass import regex_candidates_for_text
 from app.config import get_settings
-from app.documents.images import VECTOR_FORMATS, ImageRef, extract_images
+from app.documents.images import ImageRef, extract_images, guess_image_format
 from app.llm import bedrock_client
 from app.masking import dictionary
 from app.masking.dictionary import is_own_firm
@@ -36,6 +36,7 @@ from app.masking.logo_reference import (
     compute_phash,
     find_matches,
     is_own_firm_logo,
+    load_all_references,
     phash_distance,
 )
 
@@ -109,19 +110,95 @@ class ImageGroup:
 MAX_IMAGES_SCANNED = 150
 
 
-def _raster_bytes(ref: ImageRef) -> bytes | None:
-    """Bytes Bedrock vision / imagehash can actually open. Vector formats need
-    rasterizing first (LibreOffice); if that fails, we degrade to no
-    OCR/vision/phash for this image rather than failing the whole scan -
-    callers must still flag it for human review since it went unscanned."""
-    if ref.image_format not in VECTOR_FORMATS:
-        return ref.image_bytes
-    try:
-        from app.documents.convert import rasterize_image_to_png
+_VISION_MAX_DIM = 4096  # comfortably under Bedrock's accepted dimensions
+_VISION_MIN_DIM = 32  # tiny spacer/tracking-pixel-style images get upscaled, not rejected
 
-        return rasterize_image_to_png(ref.image_bytes, ref.image_format)
+
+def _normalize_for_vision(data: bytes) -> tuple[bytes, str] | None:
+    """Round-trip every raster image through Pillow before it ever reaches
+    Bedrock, even ones already in a nominally Bedrock-native format. Converse
+    vision rejects images for reasons the raw bytes never reveal locally -
+    CMYK-encoded JPEGs, indexed/16-bit-depth PNGs, animated GIFs, embedded ICC
+    profiles, or images only a few pixels wide - all of which pass the local
+    magic-byte sniff just fine and then fail server-side with
+    "ValidationException: ... Could not process image". Re-encoding to a
+    plain RGB PNG - alpha flattened onto neutral gray (not white/black, so a
+    light- or dark-on-transparent logo variant stays visible instead of
+    vanishing into the flatten color, which was also making the vision model
+    misjudge some reversed-color logos as "blank") and clamped to a sane size
+    range - sidesteps this whole class of "technically the right format,
+    still rejected" failures. Returns None if Pillow itself can't open the
+    bytes; the caller falls back to the pre-normalization bytes rather than
+    failing the scan outright."""
+    from PIL import Image
+
+    try:
+        im = Image.open(io.BytesIO(data))
+        im.load()
     except Exception:
         return None
+
+    if getattr(im, "is_animated", False):
+        im.seek(0)
+
+    if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+        rgba = im.convert("RGBA")
+        flattened = Image.new("RGB", rgba.size, (128, 128, 128))
+        flattened.paste(rgba, mask=rgba.split()[-1])
+        im = flattened
+    elif im.mode != "RGB":
+        im = im.convert("RGB")
+
+    if im.width > _VISION_MAX_DIM or im.height > _VISION_MAX_DIM:
+        im.thumbnail((_VISION_MAX_DIM, _VISION_MAX_DIM), Image.LANCZOS)
+    elif im.width < _VISION_MIN_DIM or im.height < _VISION_MIN_DIM:
+        scale = max(_VISION_MIN_DIM / im.width, _VISION_MIN_DIM / im.height)
+        im = im.resize((max(1, round(im.width * scale)), max(1, round(im.height * scale))), Image.LANCZOS)
+
+    out = io.BytesIO()
+    im.save(out, format="PNG")
+    return out.getvalue(), "png"
+
+
+def _raster_bytes(ref: ImageRef) -> tuple[bytes | None, str | None]:
+    """Bytes Bedrock vision / imagehash can actually open, and their real
+    format. Anything already in a Bedrock-native format (png/jpeg/gif/webp)
+    passes through unchanged; everything else - historically-"vector" formats
+    (EMF/WMF/SVG) AND other embedded raster formats Bedrock simply doesn't
+    accept (BMP/TIFF are the common ones Office embeds) - is rasterized to
+    real PNG via LibreOffice, the same conversion path vectors already used.
+    Previously only VECTOR_FORMATS were routed through this conversion, so a
+    perfectly good BMP/TIFF logo fell through unconverted: correctly
+    identified as BMP/TIFF (or, worse, not recognized at all) by format-
+    sniffing, and never sent to Bedrock - flagged as an unsupported format
+    instead of actually being scanned. Returns (None, None) if rasterization
+    itself fails; the caller must still flag this for human review rather
+    than fail outright.
+
+    Every path additionally goes through _normalize_for_vision() - see there
+    for why "already a supported format" isn't the same as "actually
+    processable by Bedrock". If THAT fails too, this returns (None, None)
+    rather than falling back to the un-normalized bytes: Pillow can open
+    essentially any valid png/jpeg/gif/webp (and anything LibreOffice just
+    rasterized), so a failure at that point means the bytes are genuinely
+    corrupt/truncated, not merely "a format Bedrock happens to dislike".
+    Sending them anyway is exactly what used to reproduce the same
+    "ValidationException: ... Could not process image" on every single scan
+    of that image - falling back to raw bytes here silently re-introduced
+    the very failure mode the format-sniffing/rasterization short-circuit
+    above already exists to prevent."""
+    real_format = guess_image_format(ref.image_bytes, fallback=None) or ref.image_format
+    if real_format in _VISION_FORMATS:
+        data = ref.image_bytes
+    else:
+        try:
+            from app.documents.convert import rasterize_image_to_png
+
+            data = rasterize_image_to_png(ref.image_bytes, real_format)
+        except Exception:
+            return None, None
+
+    return _normalize_for_vision(data) or (None, None)
 
 
 def _ocr_match(ocr_text: list[str], db: Session) -> str | None:
@@ -139,31 +216,46 @@ def _ocr_match(ocr_text: list[str], db: Session) -> str | None:
 
 
 async def _scan_one_group(
-    db: Session, g_idx: int, occurrences: list[ImageRef], raster: bytes | None, phash: str | None
+    db: Session,
+    g_idx: int,
+    occurrences: list[ImageRef],
+    raster: bytes | None,
+    raster_format: str | None,
+    phash: str | None,
+    logo_references: list | None = None,
 ) -> tuple[ImageGroup, int, int, float]:
     sample = occurrences[0]
     locations = sorted({o.location_label for o in occurrences})
     all_indices = [o.index for o in occurrences]
 
-    if raster is None:
+    logo_hits = find_matches(db, phash, threshold=UNCERTAIN_THRESHOLD, references=logo_references) if phash else []
+    best_logo = logo_hits[0] if logo_hits else None
+
+    # _raster_bytes() guarantees raster_format is a Bedrock-native format
+    # whenever raster is non-None (it either passed the bytes through
+    # unchanged because they already were, or rasterized to real PNG) - so
+    # "could not get usable bytes at all" and "got bytes but in an
+    # unsupported format" collapse into this single case.
+    if raster is None or raster_format is None:
         return (
             ImageGroup(
                 group_index=g_idx, sample_ref=sample, locations=locations, all_indices=all_indices,
-                contains_client_identity=False, description="could not render this image format for scanning",
-                confidence=0.0, needs_human_judgment=True,
+                contains_client_identity=best_logo is not None and best_logo[1] <= MATCH_THRESHOLD,
+                description="could not render this image to a scannable format - flagged for manual review",
+                confidence=0.0, phash=phash,
+                logo_match_entity_id=best_logo[0] if best_logo else None,
+                logo_match_distance=best_logo[1] if best_logo else None,
+                needs_human_judgment=True,
             ),
             0, 0, 0.0,
         )
-
-    logo_hits = find_matches(db, phash, threshold=UNCERTAIN_THRESHOLD) if phash else []
-    best_logo = logo_hits[0] if logo_hits else None
 
     try:
         resp = await bedrock_client.converse_vision(
             system_prompt=_system_prompt(),
             user_message="Does this image reveal which client this document is for?",
             image_bytes=raster,
-            image_format="png",
+            image_format=raster_format,
             response_schema=VISION_SCHEMA,
         )
     except Exception as exc:
@@ -243,10 +335,15 @@ async def _scan_one_group(
 # Two SHA-distinct images within this phash Hamming distance are treated as
 # THE SAME image for scanning purposes - the same logo re-exported at a
 # different compression/resize shows up as a different SHA-256 on every slide
-# variant, each previously costing its own Bedrock vision call. Kept tight
-# (well under MATCH_THRESHOLD) so only near-identical renditions merge, never
-# two genuinely different logos.
-PERCEPTUAL_DEDUP_THRESHOLD = 2
+# variant, each previously costing its own Bedrock vision call (and, worse,
+# showing the reviewer the same logo as several separate cards with an
+# undercounted occurrence count each). Reuse MATCH_THRESHOLD - the same "this
+# is confidently the same image" bar already proven out for CROSS-document
+# logo matching (app.masking.logo_reference) - rather than a stricter,
+# arbitrary number: two renditions of one logo within a single document are
+# at least as similar as two renditions across different documents, so
+# there's no principled reason to require a tighter match here.
+PERCEPTUAL_DEDUP_THRESHOLD = MATCH_THRESHOLD
 
 
 async def scan_document_images(
@@ -266,7 +363,7 @@ async def scan_document_images(
     # across the merged SHA groups). Unhashable images stay singletons.
     clusters: list[dict] = []
     for occurrences in by_hash.values():
-        raster = _raster_bytes(occurrences[0])
+        raster, raster_format = _raster_bytes(occurrences[0])
         phash = compute_phash(raster) if raster is not None else None
         merged = False
         if phash is not None:
@@ -279,7 +376,7 @@ async def scan_document_images(
                     merged = True
                     break
         if not merged:
-            clusters.append({"occurrences": list(occurrences), "raster": raster, "phash": phash})
+            clusters.append({"occurrences": list(occurrences), "raster": raster, "raster_format": raster_format, "phash": phash})
 
     skipped = max(0, len(clusters) - MAX_IMAGES_SCANNED)
     to_scan = clusters[:MAX_IMAGES_SCANNED]
@@ -288,16 +385,139 @@ async def scan_document_images(
     total_in = total_out = 0
     total_cost = 0.0
 
+    # Fetched once per document rather than once per image: find_matches()
+    # only needs a fresh Hamming-distance comparison against each reference,
+    # not a fresh query - a chart-heavy or logo-heavy deck could otherwise
+    # re-run the same full-table scan dozens of times in one run.
+    logo_references = load_all_references(db)
+
     for g_idx, cluster in enumerate(to_scan):
         group, in_tok, out_tok, cost = await _scan_one_group(
-            db, g_idx, cluster["occurrences"], cluster["raster"], cluster["phash"]
+            db, g_idx, cluster["occurrences"], cluster["raster"], cluster["raster_format"], cluster["phash"],
+            logo_references=logo_references,
         )
         groups.append(group)
         total_in += in_tok
         total_out += out_tok
         total_cost += cost
 
+    groups = _merge_visually_similar_groups(groups)
     return groups, total_in, total_out, total_cost, skipped
+
+
+def _normalized_brand_surface(surface: str | None) -> str | None:
+    """Case/whitespace-insensitive key for comparing two OCR-matched brand
+    strings - "Johnson & Johnson" and "johnson  &  johnson" must compare
+    equal, since they're the same brand read off two different renditions of
+    its logo. None if there's nothing to compare."""
+    if not surface:
+        return None
+    normalized = " ".join(surface.strip().split()).casefold()
+    return normalized or None
+
+
+def _merge_visually_similar_groups(groups: list[ImageGroup]) -> list[ImageGroup]:
+    """Post-scan consolidation, deliberately separate from (and looser than)
+    the pre-scan PERCEPTUAL_DEDUP_THRESHOLD clustering above. Pre-scan
+    clustering has to stay tight - it decides what to spend a vision call on
+    BEFORE knowing what anything is, so merging too eagerly there risks
+    silently treating two genuinely different logos as one. Post-scan, we
+    already have real results in hand, so we can afford to be more generous,
+    and to use signals beyond raw pixel similarity - two renditions of the
+    same brand's logo can legitimately differ enough in color scheme or
+    background fill to sit outside any phash threshold, and are still one
+    logo, not two:
+      1. Phash distance within UNCERTAIN_THRESHOLD - the same "likely
+         related" bar already trusted for cross-document logo matching -
+         catches the same logo at a different crop/resolution/compression
+         (observed: a dedicated case-study slide's large rendition of a
+         client wordmark vs. a small icon inside a client-logo grid
+         elsewhere in the same deck, which OCR failed to read on the
+         smaller one).
+      2. Same OCR-matched brand text - if two separately-scanned images both
+         deterministically OCR to the same known name/entity, they're the
+         same brand regardless of how different the pixels look (a white-on-
+         transparent vs. a full-color rendition of one company's wordmark,
+         for instance).
+      3. Same logo_match_entity_id - both images independently phash-matched
+         the SAME stored reference logo. Hamming distance obeys the triangle
+         inequality, so two renditions can each sit within threshold of that
+         shared reference while being further apart from each other than the
+         reference-to-reference bar alone would allow - matching the same
+         known entity is still authoritative.
+    Left unmerged, the reviewer sees one logo as several separate cards, each
+    under-reporting its own occurrence count.
+    Union-find over a small list (bounded by MAX_IMAGES_SCANNED) - plain O(n^2)
+    pairwise comparison is cheap at this size."""
+    if len(groups) < 2:
+        return groups
+
+    parent = list(range(len(groups)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(i: int, j: int) -> None:
+        ri, rj = find(i), find(j)
+        if ri != rj:
+            parent[ri] = rj
+
+    for i in range(len(groups)):
+        for j in range(i + 1, len(groups)):
+            gi, gj = groups[i], groups[j]
+
+            same_phash = False
+            if gi.phash is not None and gj.phash is not None:
+                d = phash_distance(gi.phash, gj.phash)
+                same_phash = d is not None and d <= UNCERTAIN_THRESHOLD
+
+            same_logo_entity = (
+                gi.logo_match_entity_id is not None and gi.logo_match_entity_id == gj.logo_match_entity_id
+            )
+
+            brand_i, brand_j = _normalized_brand_surface(gi.ocr_matched_surface), _normalized_brand_surface(gj.ocr_matched_surface)
+            same_ocr_brand = brand_i is not None and brand_i == brand_j
+
+            if same_phash or same_logo_entity or same_ocr_brand:
+                union(i, j)
+
+    clusters: dict[int, list[ImageGroup]] = {}
+    for i, g in enumerate(groups):
+        clusters.setdefault(find(i), []).append(g)
+
+    merged: list[ImageGroup] = []
+    for members in clusters.values():
+        if len(members) == 1:
+            merged.append(members[0])
+            continue
+        primary = max(members, key=lambda g: g.confidence)
+        logo_matches = [(g.logo_match_entity_id, g.logo_match_distance) for g in members if g.logo_match_entity_id is not None]
+        best_logo_entity_id, best_logo_distance = min(logo_matches, key=lambda t: t[1]) if logo_matches else (None, None)
+        merged.append(ImageGroup(
+            group_index=primary.group_index,
+            sample_ref=primary.sample_ref,
+            locations=sorted({loc for g in members for loc in g.locations}),
+            all_indices=sorted({i for g in members for i in g.all_indices}),
+            contains_client_identity=any(g.contains_client_identity for g in members),
+            description=primary.description or next((g.description for g in members if g.description), ""),
+            confidence=max(g.confidence for g in members),
+            ocr_text=list(dict.fromkeys(s for g in members for s in g.ocr_text)),
+            ocr_matched_surface=next((g.ocr_matched_surface for g in members if g.ocr_matched_surface), None),
+            logo_match_entity_id=best_logo_entity_id,
+            logo_match_distance=best_logo_distance,
+            needs_human_judgment=any(g.needs_human_judgment for g in members),
+            phash=primary.phash,
+        ))
+
+    # Renumber sequentially - agent.py's proposal payload and the reviewer's
+    # include/exclude edits are keyed by group_index, so downstream code must
+    # only ever see the final, already-merged list.
+    for new_idx, g in enumerate(merged):
+        g.group_index = new_idx
+    return merged
 
 
 def _is_own_placeholder(g: "ImageGroup") -> bool:

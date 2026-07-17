@@ -6,11 +6,13 @@ entities are created as pending_approval and promoted on reviewer approval.
 """
 
 import re
+import unicodedata
 import uuid
 
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.masking.pattern import surface_pattern
 from app.models import MaskingAlias, MaskingEntity
 
 settings = get_settings()
@@ -26,20 +28,57 @@ _TOKEN_PREFIX = {
 
 
 def normalize(raw_value: str) -> str:
-    """Match key: lowercased, punctuation-stripped, whitespace-collapsed."""
-    v = raw_value.lower().strip()
+    """Match key: Unicode-normalized (diacritic-folded), lowercased,
+    punctuation-stripped, whitespace-collapsed. The Unicode fold MUST happen
+    first: "Café Corp" (precomposed é, U+00E9) and "Café Corp"
+    (bare "e" + combining acute accent, U+0301) are the same visible name but
+    different code points - the ASCII-oriented regex strip below treats them
+    as already-distinct strings, so without folding first they'd produce two
+    different dictionary keys and silently split one entity's aliases.
+    NFKD decomposes a precomposed accented character into its base letter
+    plus a separate combining-mark code point, which unicodedata.combining()
+    can then filter out - only the LOOKUP KEY is folded this way; callers
+    keep the original, correctly-accented string for display/masking."""
+    v = unicodedata.normalize("NFKD", raw_value)
+    v = "".join(c for c in v if not unicodedata.combining(c))
+    v = v.lower().strip()
     v = re.sub(r"[^\w@.\s-]", "", v)
     v = re.sub(r"\s+", " ", v)
     return v
 
 
 def is_own_firm(surface: str) -> bool:
-    """True if `surface` names the delivery firm itself, not a client - checked
-    as "does the normalized name CONTAIN this token", not a bare prefix (a
-    prefix match on e.g. "navi" would also wrongly exclude unrelated real
-    companies that happen to start with the same letters)."""
-    key = re.sub(r"[^a-z0-9]", "", surface.lower())
-    return any(re.sub(r"[^a-z0-9]", "", name.lower()) in key for name in settings.OWN_FIRM_NAMES if name.strip())
+    """True if `surface` names the delivery firm itself, not a client -
+    checked as a word-boundary match via surface_pattern (the SAME regex
+    builder used everywhere else in the pipeline for "does this surface
+    appear in this text"), not raw substring containment. Raw containment
+    (the previous check) had a real false-exclude failure mode: an own-firm
+    name that's a literal substring of an unrelated client's name (e.g.
+    own-firm "Spend" inside a real client "Spendly Inc") would wrongly
+    suppress masking for that client, since "spend" is a substring of
+    "spendly" once non-alphanumerics are stripped. A word-boundary match
+    doesn't have this problem - \\bSpend\\b never matches inside "Spendly"
+    because the letters immediately following "Spend" there are still word
+    characters, so there's no boundary for \\b to land on.
+
+    Deliberate accepted trade-off: an own-firm name concatenated with a
+    suffix and NO separator (e.g. own-firm "Navikenz" written as
+    "NavikenzIndia" with no space) will no longer be recognized as own-firm
+    either, since \\bNavikenz\\b doesn't match inside "NavikenzIndia" for the
+    same reason it doesn't match inside "Spendly". There is no generic rule
+    that catches BOTH shapes without reintroducing the other's failure mode -
+    a rule permissive enough to match "NavikenzIndia" (e.g. allowing a
+    trailing \\w* after the name) is exactly permissive enough to match
+    "Spend" inside "Spendly" again. Between the two, wrongly EXCLUDING a
+    real client name from masking (the substring-containment bug this
+    replaced) is the more severe failure - a genuine data leak - versus
+    wrongly INCLUDING an own-firm variant as maskable (a reviewer can simply
+    not approve it), so this errs toward the stricter, leak-safer match."""
+    return any(
+        re.search(surface_pattern(name.strip()), surface, flags=re.IGNORECASE)
+        for name in settings.OWN_FIRM_NAMES
+        if name.strip()
+    )
 
 
 def lookup(db: Session, raw_value: str) -> MaskingEntity | None:
@@ -57,8 +96,6 @@ def find_in_text(db: Session, text: str) -> list[tuple[MaskingEntity, str]]:
     approved global entity can never silently go unmasked just because one
     run's detector had a weak pass (observed: 6 approved third-party names
     survived a run whose LLM proposed 3 entities instead of the prior run's 11)."""
-    from app.masking.pattern import surface_pattern
-
     matches: list[tuple[MaskingEntity, str]] = []
     entities = db.query(MaskingEntity).filter(MaskingEntity.status == "approved").all()
     for entity in entities:
