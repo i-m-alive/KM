@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
+from app.agents.sanitization import vision_cache
 from app.agents.sanitization.ner_prepass import regex_candidates_for_text
 from app.config import get_settings
 from app.documents.images import ImageRef, extract_images, guess_image_format
@@ -33,6 +34,7 @@ from app.masking.dictionary import is_own_firm
 from app.masking.logo_reference import (
     MATCH_THRESHOLD,
     UNCERTAIN_THRESHOLD,
+    build_band_index,
     compute_phash,
     find_matches,
     is_own_firm_logo,
@@ -223,12 +225,17 @@ async def _scan_one_group(
     raster_format: str | None,
     phash: str | None,
     logo_references: list | None = None,
+    logo_band_index: dict | None = None,
+    run_id=None,
 ) -> tuple[ImageGroup, int, int, float]:
     sample = occurrences[0]
     locations = sorted({o.location_label for o in occurrences})
     all_indices = [o.index for o in occurrences]
 
-    logo_hits = find_matches(db, phash, threshold=UNCERTAIN_THRESHOLD, references=logo_references) if phash else []
+    logo_hits = (
+        find_matches(db, phash, threshold=UNCERTAIN_THRESHOLD, references=logo_references, band_index=logo_band_index)
+        if phash else []
+    )
     best_logo = logo_hits[0] if logo_hits else None
 
     # _raster_bytes() guarantees raster_format is a Bedrock-native format
@@ -250,26 +257,44 @@ async def _scan_one_group(
             0, 0, 0.0,
         )
 
-    try:
-        resp = await bedrock_client.converse_vision(
-            system_prompt=_system_prompt(),
-            user_message="Does this image reveal which client this document is for?",
-            image_bytes=raster,
-            image_format=raster_format,
-            response_schema=VISION_SCHEMA,
-        )
-    except Exception as exc:
-        group = ImageGroup(
-            group_index=g_idx, sample_ref=sample, locations=locations, all_indices=all_indices,
-            contains_client_identity=best_logo is not None and best_logo[1] <= MATCH_THRESHOLD,
-            description=f"scan failed: {exc}", confidence=0.0, phash=phash,
-            logo_match_entity_id=best_logo[0] if best_logo else None,
-            logo_match_distance=best_logo[1] if best_logo else None,
-            needs_human_judgment=best_logo is not None and best_logo[1] > MATCH_THRESHOLD,
-        )
-        return group, 0, 0, 0.0
+    # Same run, same image content (by phash, or a SHA-256 fallback for the
+    # rare unhashable-raster case) -> identical vision verdict, by
+    # construction: a cache hit skips the Bedrock call entirely rather than
+    # risking a different judgment on a second look (detect() and apply()'s
+    # verify are different OS processes - the worker vs. the API server - so
+    # this has to be persisted, not an in-memory dict). Only the model's own
+    # raw judgment is cached; every deterministic signal below (OCR match,
+    # own-firm, logo-hash override) still re-runs fresh every time.
+    content_key = phash or f"sha256:{hashlib.sha256(sample.image_bytes).hexdigest()}"
+    cached = vision_cache.load_cached_verdict(db, run_id, content_key)
+    in_tok = out_tok = 0
+    cost = 0.0
+    if cached is not None:
+        parsed = cached
+    else:
+        try:
+            resp = await bedrock_client.converse_vision(
+                system_prompt=_system_prompt(),
+                user_message="Does this image reveal which client this document is for?",
+                image_bytes=raster,
+                image_format=raster_format,
+                response_schema=VISION_SCHEMA,
+            )
+        except Exception as exc:
+            group = ImageGroup(
+                group_index=g_idx, sample_ref=sample, locations=locations, all_indices=all_indices,
+                contains_client_identity=best_logo is not None and best_logo[1] <= MATCH_THRESHOLD,
+                description=f"scan failed: {exc}", confidence=0.0, phash=phash,
+                logo_match_entity_id=best_logo[0] if best_logo else None,
+                logo_match_distance=best_logo[1] if best_logo else None,
+                needs_human_judgment=best_logo is not None and best_logo[1] > MATCH_THRESHOLD,
+            )
+            return group, 0, 0, 0.0
 
-    parsed = resp.parsed or {}
+        parsed = resp.parsed or {}
+        in_tok, out_tok, cost = resp.input_tokens, resp.output_tokens, resp.estimated_cost_usd
+        vision_cache.store_verdict(db, run_id, content_key, parsed)
+
     ocr_text = [s for s in (parsed.get("ocr_text") or []) if isinstance(s, str)]
     ocr_matched = _ocr_match(ocr_text, db)
     vision_flag = bool(parsed.get("contains_client_identity", False))
@@ -329,7 +354,7 @@ async def _scan_one_group(
         logo_match_distance=best_logo[1] if best_logo else None,
         needs_human_judgment=needs_human_judgment,
     )
-    return group, resp.input_tokens, resp.output_tokens, resp.estimated_cost_usd
+    return group, in_tok, out_tok, cost
 
 
 # Two SHA-distinct images within this phash Hamming distance are treated as
@@ -347,9 +372,14 @@ PERCEPTUAL_DEDUP_THRESHOLD = MATCH_THRESHOLD
 
 
 async def scan_document_images(
-    stored_path: str, content_type: str, filename: str, db: Session
+    stored_path: str, content_type: str, filename: str, db: Session, run_id=None
 ) -> tuple[list[ImageGroup], int, int, float, int]:
-    """Returns (groups, input_tokens, output_tokens, cost, skipped_count)."""
+    """Returns (groups, input_tokens, output_tokens, cost, skipped_count).
+
+    `run_id` scopes vision-verdict memoization (Task 5) - pass the calling
+    run's id so the SAME run's detect() and apply()-verify scans agree on the
+    same image content; omit it (as the offline regression suite does) to get
+    today's always-fresh behavior with no caching."""
     refs = extract_images(stored_path, content_type, filename)
 
     by_hash: dict[str, list[ImageRef]] = {}
@@ -388,13 +418,16 @@ async def scan_document_images(
     # Fetched once per document rather than once per image: find_matches()
     # only needs a fresh Hamming-distance comparison against each reference,
     # not a fresh query - a chart-heavy or logo-heavy deck could otherwise
-    # re-run the same full-table scan dozens of times in one run.
+    # re-run the same full-table scan dozens of times in one run. The band
+    # index is built once alongside it, same reasoning - see
+    # logo_reference.build_band_index for why 16 hex-digit bands are safe.
     logo_references = load_all_references(db)
+    logo_band_index = build_band_index(logo_references)
 
     for g_idx, cluster in enumerate(to_scan):
         group, in_tok, out_tok, cost = await _scan_one_group(
             db, g_idx, cluster["occurrences"], cluster["raster"], cluster["raster_format"], cluster["phash"],
-            logo_references=logo_references,
+            logo_references=logo_references, logo_band_index=logo_band_index, run_id=run_id,
         )
         groups.append(group)
         total_in += in_tok
@@ -543,14 +576,19 @@ def _is_own_placeholder(g: "ImageGroup") -> bool:
 
 
 async def find_residual_image_groups(
-    masked_path: str, content_type: str, filename: str, db: Session
+    masked_path: str, content_type: str, filename: str, db: Session, run_id=None
 ) -> tuple[list[ImageGroup], int, int, int, float]:
     """Re-run the full scan against the RENDERED masked file and return the
     groups that still look client-identifying, as STRUCTURED data (locations
     + all_indices survive into output_json so a later remediation pass can
     target exactly these images without re-scanning anything). Returns
-    (residual_groups, skipped, input_tokens, output_tokens, cost)."""
-    groups, in_tok, out_tok, cost, skipped = await scan_document_images(masked_path, content_type, filename, db)
+    (residual_groups, skipped, input_tokens, output_tokens, cost).
+
+    Pass the run's id as `run_id` so an image left untouched by masking gets
+    the SAME vision verdict here as it did at detect() time (Task 5) - an
+    image that WAS redacted has new bytes (the placeholder), a different
+    content_key, and so is always scanned fresh regardless."""
+    groups, in_tok, out_tok, cost, skipped = await scan_document_images(masked_path, content_type, filename, db, run_id=run_id)
     residual = [g for g in groups if g.contains_client_identity and not _is_own_placeholder(g)]
     return residual, skipped, in_tok, out_tok, cost
 
@@ -571,9 +609,9 @@ def residual_image_messages(residual_groups: list[ImageGroup], skipped: int) -> 
     return messages
 
 
-async def find_residual_images(masked_path: str, content_type: str, filename: str, db: Session) -> list[str]:
+async def find_residual_images(masked_path: str, content_type: str, filename: str, db: Session, run_id=None) -> list[str]:
     """Message-only form of find_residual_image_groups, kept for callers that
     just need flag text - it must re-derive the verdict from scratch rather
     than trusting anything computed pre-render."""
-    residual_groups, skipped, _, _, _ = await find_residual_image_groups(masked_path, content_type, filename, db)
+    residual_groups, skipped, _, _, _ = await find_residual_image_groups(masked_path, content_type, filename, db, run_id=run_id)
     return residual_image_messages(residual_groups, skipped)

@@ -93,21 +93,76 @@ def load_all_references(db: Session) -> list[LogoReference]:
     return db.query(LogoReference).all()
 
 
+def build_band_index(references: list[LogoReference]) -> dict[tuple[int, str], list[LogoReference]]:
+    """LSH-style band index over a reference set - one bucket per (hex
+    position, character) pair of each reference's phash. A phash from
+    imagehash.phash() is a 64-bit hash written as 16 hex digits; splitting it
+    into its 16 single-digit bands means that, by pigeonhole, any two hashes
+    with Hamming distance < 16 are GUARANTEED to share at least one identical
+    band - safely covering both MATCH_THRESHOLD (4) and UNCERTAIN_THRESHOLD
+    (10) with zero false negatives. Bands only PRUNE the candidate set before
+    the real, exact Hamming-distance check in find_matches() - they never
+    decide a match themselves, so this can't silently loosen what counts as
+    a match, only cut how many references get compared.
+
+    Fine to skip at today's scale (a full scan is cheap under a few hundred
+    references - see find_matches' docstring); this exists so that scale
+    doesn't require revisiting the matching logic itself, only building this
+    index once per run/document, the same way load_all_references() is
+    already built once and reused across every image group's find_matches
+    call rather than re-querying per image."""
+    index: dict[tuple[int, str], list[LogoReference]] = {}
+    for ref in references:
+        if not ref.phash:
+            continue
+        for pos, ch in enumerate(ref.phash):
+            index.setdefault((pos, ch), []).append(ref)
+    return index
+
+
+def _candidates_from_index(band_index: dict, phash: str) -> list[LogoReference]:
+    seen_ids: set = set()
+    candidates: list[LogoReference] = []
+    for pos, ch in enumerate(phash):
+        for ref in band_index.get((pos, ch), ()):
+            if ref.id not in seen_ids:
+                seen_ids.add(ref.id)
+                candidates.append(ref)
+    return candidates
+
+
 def find_matches(
-    db: Session, phash: str, threshold: int = UNCERTAIN_THRESHOLD, references: list[LogoReference] | None = None
+    db: Session,
+    phash: str,
+    threshold: int = UNCERTAIN_THRESHOLD,
+    references: list[LogoReference] | None = None,
+    band_index: dict | None = None,
 ) -> list[tuple[uuid.UUID, int]]:
     """Every stored reference within `threshold` Hamming distance, as
     (mask_entity_id, distance), closest first. Empty if no phash or no hit.
-    Pass `references` (from load_all_references) to reuse an already-fetched
-    reference set across many calls in the same run rather than re-querying
-    the table each time; omitted, it queries fresh (unchanged behavior for
-    any single-shot caller)."""
+
+    Three ways to source the candidate set, in priority order:
+    - `band_index` (from build_band_index): prunes to just the references
+      sharing a band with `phash` before the exact distance check - the
+      LSH-style path, for when the reference table has grown past a size
+      where a full scan per image is worth avoiding.
+    - `references` (from load_all_references): reuses an already-fetched
+      reference set across many calls in the same run, full O(n) scan.
+    - neither: queries fresh (unchanged behavior for any single-shot caller).
+
+    Every path still computes the exact Hamming distance and applies
+    `threshold` itself - band_index changes only how many references get
+    compared, never what counts as a match."""
     if not phash:
         return []
-    if references is None:
-        references = db.query(LogoReference).all()
+    if band_index is not None:
+        candidates = _candidates_from_index(band_index, phash)
+    elif references is not None:
+        candidates = references
+    else:
+        candidates = db.query(LogoReference).all()
     hits: list[tuple[uuid.UUID, int]] = []
-    for ref in references:
+    for ref in candidates:
         d = _distance(phash, ref.phash)
         if d is not None and d <= threshold:
             hits.append((ref.mask_entity_id, d))

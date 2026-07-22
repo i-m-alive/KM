@@ -81,4 +81,9 @@ async def detect_entities(document_id: str, total_chunks: int, candidates: list[
         tool_executor=sanitization_tool_executor,
         response_schema=DETECT_SCHEMA,
         max_iterations=max(4, min(total_chunks + 3, 32)),
+        # SYSTEM_PROMPT is stable across every iteration of this loop and
+        # across every document - exactly what a cachePoint is for. This was
+        # already plumbed into converse_with_tools but never turned on here
+        # (near-free cost/latency win on any multi-chunk document).
+        cache_system_prompt=True,
     )

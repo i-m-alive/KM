@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { apiBlobUrl, apiGet, apiPost } from "../api/client";
+import { apiBlobUrl, apiDownload, apiGet, apiPost } from "../api/client";
 
 export default function ComparePage() {
   const { runId } = useParams();
@@ -10,6 +10,7 @@ export default function ComparePage() {
   const [maskedUrl, setMaskedUrl] = useState(null);
   const [error, setError] = useState({ original: null, masked: null, general: null });
   const [rerunning, setRerunning] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +62,17 @@ export default function ComparePage() {
     }
   }
 
+  async function download() {
+    setDownloading(true);
+    try {
+      await apiDownload(`/runs/${runId}/masked/download`);
+    } catch (err) {
+      setError((prev) => ({ ...prev, general: err.message }));
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   if (error.general) return <p className="error-text">{error.general}</p>;
   if (!run)
     return (
@@ -84,10 +96,17 @@ export default function ComparePage() {
           <h1>Compare original vs. sanitized</h1>
           <p className="page-head__sub">
             {run.output?.filename} — look closely at logos, screenshots, and any pixel content; text masking cannot edit
-            images (the run's flags list what was found).
+            images (the run's flags list what was found). The panes below are PDF previews for side-by-side viewing
+            only — use "Download sanitized {run.output?.filename?.split(".").pop()?.toUpperCase() || "file"}" above to
+            get the actual sanitized file in its original format.
           </p>
         </div>
         <div className="page-head__actions">
+          <button className="btn--ghost" onClick={download} disabled={downloading}>
+            {downloading
+              ? "Downloading…"
+              : `Download sanitized ${run.output?.filename?.split(".").pop()?.toUpperCase() || "file"}`}
+          </button>
           <button className="btn--ghost" onClick={resanitize} disabled={rerunning}>
             {rerunning ? "Starting…" : "Re-run Sanitization"}
           </button>
@@ -104,7 +123,7 @@ export default function ComparePage() {
       >
         <div>
           <h3 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            Original <span className="status-pill status-pill--failed">contains client identity</span>
+            Original (PDF preview) <span className="status-pill status-pill--failed">contains client identity</span>
           </h3>
           {error.original && <p className="error-text">{error.original}</p>}
           {originalUrl ? (
@@ -119,7 +138,7 @@ export default function ComparePage() {
         </div>
         <div>
           <h3 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            Sanitized <span className="status-pill status-pill--completed">safe to share</span>
+            Sanitized (PDF preview) <span className="status-pill status-pill--completed">safe to share</span>
           </h3>
           {error.masked && <p className="error-text">{error.masked}</p>}
           {maskedUrl ? (

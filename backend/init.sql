@@ -122,6 +122,25 @@ CREATE TABLE IF NOT EXISTS logo_references (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Memoizes the raw vision-model verdict for one image's content, scoped to a
+-- single run - detect() (worker process) and apply()'s verify (API process)
+-- are genuinely different processes, so this is what lets the SAME run ask
+-- the SAME question about the SAME image bytes once, not twice with a
+-- possibly-different answer. Only the model's own judgment is cached; the
+-- deterministic OCR/own-firm/logo-hash overrides in image_scan.py always
+-- re-run fresh. See app.models.VisionVerdictCache.
+CREATE TABLE IF NOT EXISTS vision_verdict_cache (
+  id SERIAL PRIMARY KEY,
+  run_id UUID REFERENCES agent_runs(id) ON DELETE CASCADE NOT NULL,
+  content_key TEXT NOT NULL,
+  contains_client_identity BOOLEAN NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  confidence REAL NOT NULL,
+  ocr_text JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (run_id, content_key)
+);
+
 CREATE TABLE IF NOT EXISTS masking_occurrences (
   id SERIAL PRIMARY KEY,
   run_id UUID REFERENCES agent_runs(id) ON DELETE CASCADE NOT NULL,

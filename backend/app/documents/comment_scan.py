@@ -13,12 +13,30 @@ spec, the modern Comment part's relationship type and content type are
 normatively fixed (schemas.microsoft.com/office/2018/10/relationships/
 comments), but its on-disk PATH is a producer choice, unlike legacy comments'
 fixed ppt/comments/commentN.xml naming - so it's resolved via the
-relationship graph, not a filename guess. Comment AUTHOR display names
-(legacy ppt/commentAuthors.xml and its modern equivalent) are themselves PII
-and are checked too.
+relationship graph, UNIONED with a static fallback on the conventional
+ppt/authors.xml path (real observed failure: relationship resolution alone
+found nothing on a real produced file, silently leaking 7 author names +
+emails). Comment AUTHOR display names (legacy ppt/commentAuthors.xml and its
+modern equivalent) are themselves PII and are checked too - the modern
+author part's userId ALSO embeds the actual email
+(e.g. "S::ankit.bajpai@zs.com::<GUID>"), checked as its own attribute since
+name/initials alone miss it entirely.
 
-Known, deliberate gap: Excel threaded comments (only legacy xlsx cell
-comments are checked).
+DOCX comment authors are checked two ways: the legacy w:author/w:initials
+ATTRIBUTES on <w:comment> itself in word/comments.xml (previously missed -
+only the comment BODY text was ever scanned), and the modern per-GUID
+people registry (word/people.xml, relationship-resolved with the same
+static-path fallback reasoning as PPTX/xlsx).
+
+Excel threaded (modern/cloud) comments are checked alongside legacy xlsx
+cell comments (see _xlsx_threaded_comment_parts / _xlsx_person_part) - same
+relationship-graph-first reasoning as PPTX's modern comments, UNIONED with a
+glob on the conventional xl/threadedComments/*.xml path as a defensive
+backstop (every real Excel file with modern comments observed uses this
+exact path, so a slightly-off relationship-type string still doesn't
+silently miss them - the same belt-and-suspenders approach already used for
+orphaned PPTX media). Person display names (xl/persons/person.xml) are
+themselves PII, same reasoning as PPTX comment authors, and are checked too.
 """
 
 import posixpath
@@ -30,6 +48,8 @@ from app.masking.pattern import surface_pattern
 
 _MODERN_COMMENTS_RELTYPE = "http://schemas.microsoft.com/office/2018/10/relationships/comments"
 _MODERN_AUTHORS_RELTYPE = "http://schemas.microsoft.com/office/2018/10/relationships/authors"
+_XLSX_THREADED_COMMENT_RELTYPE = "http://schemas.microsoft.com/office/2017/06/relationships/threadedComment"
+_XLSX_PERSON_RELTYPE = "http://schemas.microsoft.com/office/2017/10/relationships/person"
 
 
 def _find_in_text(text: str, surfaces: list[str], where: str) -> list[str]:
@@ -50,14 +70,29 @@ def _part_text(z: zipfile.ZipFile, partname: str) -> str:
     return " ".join(el.text.strip() for el in root.iter() if el.text and el.text.strip())
 
 
-def _author_attr_text(z: zipfile.ZipFile, partname: str) -> str:
-    """Author display names/initials in a commentAuthors-shaped part - stored
-    as XML ATTRIBUTES (name=, initials=), not element text, on both the
-    legacy (p:cmAuthor) and modern (2018-schema) author element - so this
-    reads attribute values instead of _part_text's element-text walk.
-    Generic over the child element's exact tag name (deliberately not
-    hardcoded), since only the relationship type/content type of the modern
-    Author part are spec-guaranteed, not its internal element names."""
+_DEFAULT_AUTHOR_ATTRS = ("name", "initials")
+
+
+def _author_attr_text(z: zipfile.ZipFile, partname: str, attrs: tuple[str, ...] = _DEFAULT_AUTHOR_ATTRS) -> str:
+    """Author display names/initials/userId in a commentAuthors-shaped part -
+    stored as XML ATTRIBUTES, not element text, on both the legacy (p:cmAuthor)
+    and modern author element - so this reads attribute values instead of
+    _part_text's element-text walk. Generic over the child element's exact
+    tag name (deliberately not hardcoded), since only the relationship
+    type/content type of the modern Author part are spec-guaranteed, not its
+    internal element names. `attrs` varies by part shape: legacy/DOCX use
+    name+initials (or author+initials); PPTX's modern author part ALSO
+    carries userId, which embeds the actual email
+    (e.g. "S::ankit.bajpai@zs.com::<GUID>") - the real observed leak this
+    closes, missed entirely when this only checked name/initials.
+
+    Matched by LOCAL attribute name, not exact key: DOCX's w:author/
+    w:initials on <w:comment> are namespace-PREFIXED attributes - ET parses
+    these into Clark notation ("{wordprocessingml-ns}author"), so a bare
+    el.get("author") silently returns None even though the attribute is
+    right there. PPTX/xlsx's name=/initials=/userId=/displayName= are
+    unprefixed, where el.get(...) already works - matching on local name
+    covers both shapes with one implementation instead of two."""
     if partname not in z.namelist():
         return ""
     try:
@@ -66,9 +101,9 @@ def _author_attr_text(z: zipfile.ZipFile, partname: str) -> str:
         return ""
     values = []
     for el in root.iter():
-        for attr in ("name", "initials"):
-            v = el.get(attr)
-            if v and v.strip():
+        for key, v in el.attrib.items():
+            local = key.split("}")[-1] if "}" in key else key
+            if local in attrs and v and v.strip():
                 values.append(v.strip())
     return " ".join(values)
 
@@ -106,9 +141,73 @@ def _modern_comment_parts(z: zipfile.ZipFile) -> list[str]:
 
 def _modern_author_part(z: zipfile.ZipFile) -> str | None:
     """At most one modern Author part per package, target of an implicit
-    relationship from the Presentation part."""
+    relationship from the Presentation part - UNIONED with a static fallback
+    on the conventional ppt/authors.xml path. A real produced file leaked its
+    entire author list (7 names + emails) because relationship resolution
+    alone found nothing - PowerPoint's actual authors.xml either uses a
+    relationship-type string this constant doesn't match, or something else
+    about resolution didn't fire; either way, a wrong/unverifiable
+    relationship-type guess must not cause a silent miss on a path every
+    real PowerPoint file with modern comments actually uses, same
+    belt-and-suspenders reasoning as the xlsx threaded-comment/person parts."""
     targets = _rels_targets(z, "ppt/_rels/presentation.xml.rels", _MODERN_AUTHORS_RELTYPE, "ppt")
-    return targets[0] if targets else None
+    if targets:
+        return targets[0]
+    return "ppt/authors.xml" if "ppt/authors.xml" in z.namelist() else None
+
+
+_DOCX_PEOPLE_RELTYPE = "http://schemas.microsoft.com/office/2011/relationships/people"
+
+
+def _docx_people_part(z: zipfile.ZipFile) -> str | None:
+    """DOCX's analogue of PPTX's modern author part / xlsx's person part -
+    author display names behind modern/threaded comments, keyed by GUID.
+    Same relationship-resolution-first, static-path-fallback reasoning;
+    the exact relationship-type string is a best-effort guess (unverifiable
+    without a real sample file), so the conventional word/people.xml path is
+    what actually carries this check in practice."""
+    targets = _rels_targets(z, "word/_rels/document.xml.rels", _DOCX_PEOPLE_RELTYPE, "word")
+    if targets:
+        return targets[0]
+    return "word/people.xml" if "word/people.xml" in z.namelist() else None
+
+
+def _xlsx_threaded_comment_parts(z: zipfile.ZipFile) -> list[str]:
+    """Modern (threaded) Excel comment parts. Resolved primarily via each
+    worksheet's OWN relationships (same reasoning as PPTX's modern comments -
+    the relationship type is what the spec actually fixes, not the path),
+    UNIONED with a glob on the conventional xl/threadedComments/*.xml path -
+    every real Excel file with modern comments observed uses exactly this
+    path, so a mismatched/unrecognized relationship type string still
+    doesn't silently miss them."""
+    parts = set()
+    for name in z.namelist():
+        if re.match(r"^xl/worksheets/sheet\d+\.xml$", name):
+            rels_name = f"xl/worksheets/_rels/{posixpath.basename(name)}.rels"
+            parts.update(_rels_targets(z, rels_name, _XLSX_THREADED_COMMENT_RELTYPE, "xl/worksheets"))
+    parts.update(name for name in z.namelist() if re.match(r"^xl/threadedComments/threadedComment\d*\.xml$", name))
+    return sorted(parts)
+
+
+def _xlsx_person_part(z: zipfile.ZipFile) -> str | None:
+    """At most one Person part per workbook (the display-name registry behind
+    every threaded comment's personId) - relationship-resolved first, same
+    conventional-path fallback reasoning as _xlsx_threaded_comment_parts."""
+    targets = _rels_targets(z, "xl/_rels/workbook.xml.rels", _XLSX_PERSON_RELTYPE, "xl")
+    if targets:
+        return targets[0]
+    return "xl/persons/person.xml" if "xl/persons/person.xml" in z.namelist() else None
+
+
+def _display_name_attr_text(z: zipfile.ZipFile, partname: str) -> str:
+    """Person display names - stored as a displayName= XML ATTRIBUTE on each
+    <person> element, not element text, same shape as PPTX comment authors'
+    name=/initials= attributes but a different attribute name. Delegates to
+    _author_attr_text (local-attribute-name matched) rather than a bare
+    el.get(...), the same fix that closed a real miss on DOCX's
+    namespace-prefixed w:author - cheap insurance against the same bug here
+    even though today's real-world xlsx producers use displayName unprefixed."""
+    return _author_attr_text(z, partname, attrs=("displayName",))
 
 
 def _deltext_only(z: zipfile.ZipFile, partname: str) -> str:
@@ -128,6 +227,18 @@ def _scan_docx(path: str, surfaces: list[str]) -> list[str]:
     try:
         with zipfile.ZipFile(path) as z:
             hits.extend(_find_in_text(_part_text(z, "word/comments.xml"), surfaces, "comment"))
+            # w:author/w:initials on <w:comment> itself - attributes, not
+            # element text, so _part_text's element-text walk never saw
+            # these; a comment author's real name survived untouched even
+            # though the comment BODY text was already being scrubbed.
+            hits.extend(_find_in_text(
+                _author_attr_text(z, "word/comments.xml", attrs=("author", "initials")), surfaces, "comment author",
+            ))
+            people_part = _docx_people_part(z)
+            if people_part:
+                hits.extend(_find_in_text(
+                    _author_attr_text(z, people_part, attrs=("author", "userId")), surfaces, "comment author",
+                ))
             for partname in ("word/document.xml", "word/comments.xml"):
                 hits.extend(_find_in_text(_deltext_only(z, partname), surfaces, "tracked deletion"))
     except Exception:
@@ -148,7 +259,12 @@ def _scan_pptx(path: str, surfaces: list[str]) -> list[str]:
                 hits.extend(_find_in_text(_part_text(z, name), surfaces, "comment"))
             author_part = _modern_author_part(z)
             if author_part:
-                hits.extend(_find_in_text(_author_attr_text(z, author_part), surfaces, "comment author"))
+                # userId embeds the actual email (e.g.
+                # "S::ankit.bajpai@zs.com::<GUID>") - the real leak: name/
+                # initials alone missed the email entirely.
+                hits.extend(_find_in_text(
+                    _author_attr_text(z, author_part, attrs=("name", "initials", "userId")), surfaces, "comment author",
+                ))
     except Exception:
         pass
     return hits
@@ -164,6 +280,21 @@ def _scan_xlsx_comments(path: str, surfaces: list[str]) -> list[str]:
             for cell in row:
                 if cell.comment and cell.comment.text:
                     hits.extend(_find_in_text(cell.comment.text, surfaces, f"comment on {ws.title}!{cell.coordinate}"))
+    try:
+        with zipfile.ZipFile(path) as z:
+            # Legacy xlsx comments keep an <authors><author>Name</author>...
+            # list as its own element TEXT, separate from the comment body -
+            # openpyxl's cell.comment.text above only ever sees the body.
+            for name in z.namelist():
+                if re.match(r"^xl/comments\d*\.xml$", name) or re.match(r"^xl/comments/comment\d*\.xml$", name):
+                    hits.extend(_find_in_text(_part_text(z, name), surfaces, "comment"))
+            for name in _xlsx_threaded_comment_parts(z):
+                hits.extend(_find_in_text(_part_text(z, name), surfaces, "threaded comment"))
+            person_part = _xlsx_person_part(z)
+            if person_part:
+                hits.extend(_find_in_text(_display_name_attr_text(z, person_part), surfaces, "threaded comment author"))
+    except Exception:
+        pass
     return hits
 
 

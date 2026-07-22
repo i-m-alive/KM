@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     TIMESTAMP,
+    Boolean,
     ForeignKey,
     Integer,
     Numeric,
@@ -211,6 +212,33 @@ class LogoReference(Base):
     mask_entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("masking_entities.id", ondelete="CASCADE"), nullable=False)
     phash: Mapped[str] = mapped_column(String, nullable=False)
     source_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agent_runs.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class VisionVerdictCache(Base):
+    """Memoizes the RAW vision-model response (not the deterministic
+    post-processing built on top of it) for one image's content, scoped to a
+    single run - so the same image content gets an identical vision verdict
+    whether it's scanned at detect() time (the worker process) or apply()'s
+    post-render verify time (the API server process; these are genuinely
+    different processes, so an in-memory cache can't bridge them). Scoped per
+    run, not global, so verification still independently re-derives its
+    answer for every new run - only the SAME run asking the SAME question
+    about the SAME bytes twice is short-circuited. Only the model's own
+    contains_client_identity/description/confidence/ocr_text are cached; the
+    deterministic OCR-match, own-firm, and logo-hash overrides in
+    image_scan.py always re-run fresh against current dictionary/logo state."""
+
+    __tablename__ = "vision_verdict_cache"
+    __table_args__ = (UniqueConstraint("run_id", "content_key", name="uq_vision_verdict_run_content"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    content_key: Mapped[str] = mapped_column(String, nullable=False)  # phash, or "sha256:<hex>" when unhashable
+    contains_client_identity: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    confidence: Mapped[float] = mapped_column(REAL, nullable=False)
+    ocr_text: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
 

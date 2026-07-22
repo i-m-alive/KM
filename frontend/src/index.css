@@ -29,6 +29,7 @@
   --warn-bg: #fef3c7; --warn-fg: #92400e; --warn-dot: #f59e0b;
   --bad-bg: #fee2e2;  --bad-fg: #b91c1c;  --bad-dot: #ef4444;
   --info-bg: #dbeafe; --info-fg: #1d4ed8; --info-dot: #3b82f6;
+  --advisory-bg: #ede9fe; --advisory-fg: #5b21b6; --advisory-dot: #8b5cf6;
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -523,6 +524,7 @@ button.btn--sm, .btn--sm { padding: 0.3rem 0.65rem; font-size: 0.78rem; }
 .flag-list__item--info { background: var(--info-bg); color: #1e3a8a; border-color: #c6dbfa; }
 .flag-list__item--warning { background: var(--warn-bg); color: #78350f; border-color: #f3e0a8; }
 .flag-list__item--blocking { background: var(--bad-bg); color: #7f1d1d; border-color: #f5c2c2; }
+.flag-list__item--advisory { background: var(--advisory-bg); color: var(--advisory-fg); border-color: #ddd6fe; }
 
 .callout {
   padding: 0.85rem 1.05rem;
