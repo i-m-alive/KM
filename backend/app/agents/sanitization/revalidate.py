@@ -35,6 +35,7 @@ new dictionary entry and re-masks.
 
 import os
 import re
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -54,6 +55,7 @@ from app.llm import bedrock_client
 from app.masking import dictionary
 from app.masking.dictionary import is_own_firm
 from app.models import AgentRun, MaskingEntity, MaskingOccurrence, RunFlag, UploadedDocument
+from app.storage.local_store import save_masked_document, save_run_output
 
 
 class RevalidationError(ValueError):
@@ -322,6 +324,26 @@ def reapply_with_additional_entities(db: Session, run: AgentRun, approved_residu
             "applied_count": len(new_entries),
         },
     }
+
+    # Refresh the cached masked-document artifact ("View sanitized document"
+    # reads run.output_file_path, not the live masked_path) - without this,
+    # that viewer keeps showing the PRE-FIX text/entity list forever after a
+    # revalidation fix, even though the real downloaded file and every
+    # verification flag above are already correct. Same file, same
+    # deterministic path (save_run_output writes to
+    # outputs/sanitization/<run_id>.json every time), so this overwrites in
+    # place rather than creating a second artifact.
+    masked_chunks_data = [{"chunk_id": c.chunk_id, "label": c.label, "text": c.text} for c in rendered_chunks]
+    save_masked_document(str(run.id), filename, masked_chunks_data)
+    run.output_file_path = save_run_output(
+        "sanitization", str(run.id),
+        {
+            "run_id": str(run.id),
+            "generated_at": datetime.utcnow().isoformat(),
+            **run.output_json,
+            "masked_chunks": masked_chunks_data,
+        },
+    )
 
     # Drop the superseded revalidation flag and any now-resolved channel
     # flags, then add fresh ones for whatever still doesn't verify clean -

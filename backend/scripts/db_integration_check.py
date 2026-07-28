@@ -241,6 +241,23 @@ def check_reapply_with_additional_entities_real_db() -> None:
               known_entity.mask_token in full_text, f"got: {full_text!r}")
         check("run.output_json now carries a revalidation block for the fix pass",
               "revalidation" in (run.output_json or {}), f"got keys: {list((run.output_json or {}).keys())}")
+
+        # The cache-refresh fix: "View sanitized document" reads
+        # run.output_file_path, not the live masked_path - it must reflect
+        # the fix, not the pre-fix text/entity list forever after.
+        import json as _json
+
+        check("run.output_file_path was set to a real file on disk",
+              bool(run.output_file_path) and __import__("os").path.exists(run.output_file_path),
+              f"got: {run.output_file_path}")
+        with open(run.output_file_path) as f:
+            cached = _json.load(f)
+        cached_text = "\n\n".join(c.get("text", "") for c in cached.get("masked_chunks", []))
+        check("the cached masked-document artifact no longer contains the fixed residual",
+              "Arvind Fashions" not in cached_text, f"got: {cached_text!r}")
+        cached_tokens = {e.get("mask_token") for e in cached.get("entities_masked", [])}
+        check("the cached artifact's entities_masked now includes the newly-approved entity's token",
+              new_entity.mask_token in cached_tokens, f"got: {cached_tokens}")
     finally:
         # reapply_with_additional_entities COMMITS internally - it MUST, in
         # production, for the exact same reason remediate_run() does (real
@@ -266,6 +283,18 @@ def check_reapply_with_additional_entities_real_db() -> None:
         db.close()
         if workdir:
             shutil.rmtree(workdir, ignore_errors=True)
+        # save_run_output/save_masked_document (exercised by the
+        # cache-refresh fix) write into the REAL backend/outputs/sanitization/
+        # directory (keyed by run_id), not the disposable workdir above -
+        # clean those up too so this test doesn't litter real app output.
+        import glob as _glob
+
+        for pattern in (f"outputs/sanitization/{run_id}.json", f"outputs/sanitization/{run_id}__*"):
+            for p in _glob.glob(pattern):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
 
 
 def main() -> int:
