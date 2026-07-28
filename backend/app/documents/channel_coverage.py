@@ -32,8 +32,14 @@ _KNOWN_COVERED_PATTERNS = [
     # docProps (metadata_scan.py / metadata_scrub.py)
     re.compile(r"^docProps/(core|app|custom)\.xml$"),
     # Legacy + modern PPTX comments and authors (comment_scan.py build_author_parts
-    # / _modern_comment_parts, comment_scrub.py)
+    # / _modern_comment_parts, comment_scrub.py). Modern (2018-schema) comment
+    # parts are named "modernComment_<slideId>_<hash>.xml" (resolved dynamically
+    # via each slide's .rels, not a fixed literal) - the narrower legacy-only
+    # pattern below missed this real naming shape entirely, raising a false
+    # "unclaimed channel" warning on every modern-PPTX run even though
+    # comment_scan.py/comment_scrub.py already fully cover it.
     re.compile(r"^ppt/comments/comment\d*\.xml$"),
+    re.compile(r"^ppt/comments/modernComment_.*\.xml$"),
     re.compile(r"^ppt/commentAuthors\.xml$"),
     re.compile(r"^ppt/authors\.xml$"),
     # DOCX comments/people (comment_scan.py / comment_scrub.py)
