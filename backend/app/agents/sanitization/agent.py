@@ -946,12 +946,33 @@ class SanitizationAgent(BackgroundAgent):
         # Auto-build the logo reference set from this run's approved image
         # redactions - global, reused across future documents, same pattern
         # as text mask tokens (no manual curation - see app.masking.logo_reference).
+        #
+        # Deliberately NOT falling back to client_entity_surface here (unlike
+        # image_labels above): that fallback attributes ANY approved image
+        # with no OCR-derivable text to "the designated client", even when
+        # the image is an unrelated chart/screenshot with no logo in it at
+        # all. Low-stakes for a display label; wrong for a PERSISTENT,
+        # CROSS-DOCUMENT phash signal - a bad attribution here doesn't just
+        # look wrong once, it makes future documents' unrelated images start
+        # false-positive matching against this client's "logo". Observed
+        # real consequence: one entity accumulated 35+ phash rows (all
+        # distinct hashes, so not simple dupes - most were miscellaneous
+        # approved images from repeated re-runs of the same deck, not logos)
+        # after only ~7 runs, which also broke the admin panel's Logos
+        # column layout. Only two attributions are trustworthy enough to
+        # persist globally: this image's own OCR text names a real entity,
+        # or it already perceptually matched a KNOWN prior logo reference
+        # for a specific entity (logo_match_token) - both are evidence about
+        # THIS image, not a guess based on who else is in the document.
         for g in approved_groups:
             phash = g.get("phash")
             if not phash:
                 continue
             ocr_matched = (g.get("ocr_matched_surface") or "").strip().lower()
-            linked_entity = surface_to_entity.get(ocr_matched) or surface_to_entity.get(client_entity_surface)
+            logo_match_entity = None
+            if g.get("logo_match_token"):
+                logo_match_entity = db.query(MaskingEntity).filter(MaskingEntity.mask_token == g["logo_match_token"]).first()
+            linked_entity = surface_to_entity.get(ocr_matched) or logo_match_entity
             if linked_entity:
                 sample_ref = by_index.get(g.get("sample_index"))
                 store_reference(

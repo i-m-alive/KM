@@ -281,12 +281,15 @@ function MaskingDictionarySection() {
             <tr key={e.id}>
               <td className="agent-card__meta">{e.mask_token}</td>
               <td>{e.aliases.join(", ")}</td>
-              <td>
+              <td style={{ maxWidth: 260 }}>
                 {e.logos.length === 0 ? (
                   <span className="agent-card__meta">—</span>
                 ) : (
-                  <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
-                    {e.logos.map((logo) =>
+                  <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", maxWidth: 260 }}>
+                    {/* Capped display: a mis-attributed run (or a client whose logo
+                        genuinely recurs many times) must never be able to blow up
+                        this row's height and break the table below it. */}
+                    {e.logos.slice(0, 6).map((logo) =>
                       logo.thumbnail_available ? (
                         <LogoThumbnail key={logo.id} logoId={logo.id} />
                       ) : (
@@ -299,6 +302,11 @@ function MaskingDictionarySection() {
                           n/a
                         </span>
                       )
+                    )}
+                    {e.logos.length > 6 && (
+                      <span className="agent-card__meta" style={{ alignSelf: "center" }}>
+                        +{e.logos.length - 6} more
+                      </span>
                     )}
                   </div>
                 )}
