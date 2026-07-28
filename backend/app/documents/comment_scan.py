@@ -37,6 +37,17 @@ exact path, so a slightly-off relationship-type string still doesn't
 silently miss them - the same belt-and-suspenders approach already used for
 orphaned PPTX media). Person display names (xl/persons/person.xml) are
 themselves PII, same reasoning as PPTX comment authors, and are checked too.
+
+Author/person-identity attributes (name/initials/userId/author/displayName)
+get an UNCONDITIONAL residual check via build_author_parts() +
+_residual_identity_attrs() - independent of `surfaces` - mirroring
+metadata_scan's identity-field check. Real observed failure: authors.xml
+leaked 7 names + emails on a file whose body was otherwise clean, because
+nothing had ever detected those specific names/emails as client entities -
+gating this check on `surfaces` would have exactly the same blind spot as
+the scrub side did before this was made unconditional. build_author_parts()
+is shared with comment_scrub.py so scan and scrub can never disagree about
+which parts exist or which attributes matter on each.
 """
 
 import posixpath
@@ -172,6 +183,51 @@ def _docx_people_part(z: zipfile.ZipFile) -> str | None:
     return "word/people.xml" if "word/people.xml" in z.namelist() else None
 
 
+def build_author_parts(z: zipfile.ZipFile) -> dict[str, tuple[str, ...]]:
+    """Maps every author/person-identity part actually present in this
+    package to the specific attribute names that carry PII there. Shared by
+    this module's unconditional residual check and comment_scrub's
+    unconditional clearing, so scan and scrub can never disagree about which
+    parts exist or which attributes matter on each - the same discipline
+    already applied to modern-comment-part resolution."""
+    names = z.namelist()
+    author_parts: dict[str, tuple[str, ...]] = {}
+    if "ppt/commentAuthors.xml" in names:
+        author_parts["ppt/commentAuthors.xml"] = ("name", "initials")
+    modern_author_part = _modern_author_part(z)
+    if modern_author_part:
+        author_parts[modern_author_part] = ("name", "initials", "userId")
+    xlsx_person_part = _xlsx_person_part(z)
+    if xlsx_person_part:
+        author_parts[xlsx_person_part] = ("displayName",)
+    if "word/comments.xml" in names:
+        author_parts["word/comments.xml"] = ("author", "initials")
+    docx_people_part = _docx_people_part(z)
+    if docx_people_part:
+        author_parts[docx_people_part] = ("author", "userId")
+    return author_parts
+
+
+def _residual_identity_attrs(z: zipfile.ZipFile, partname: str, attrs: tuple[str, ...]) -> list[str]:
+    """Unconditional: any of `attrs` still non-empty on any element in this
+    part is itself the leak, regardless of whether its value matches
+    anything in `surfaces` - these attributes are always a real identity by
+    construction (see module docstring)."""
+    if partname not in z.namelist():
+        return []
+    try:
+        root = ET.fromstring(z.read(partname))
+    except ET.ParseError:
+        return []
+    hits = []
+    for el in root.iter():
+        for key, v in el.attrib.items():
+            local = key.split("}")[-1] if "}" in key else key
+            if local in attrs and v and v.strip():
+                hits.append(f"{partname}: identity attribute '{local}' still populated: '{v.strip()}'")
+    return hits
+
+
 def _xlsx_threaded_comment_parts(z: zipfile.ZipFile) -> list[str]:
     """Modern (threaded) Excel comment parts. Resolved primarily via each
     worksheet's OWN relationships (same reasoning as PPTX's modern comments -
@@ -222,10 +278,20 @@ def _deltext_only(z: zipfile.ZipFile, partname: str) -> str:
     return " ".join(el.text.strip() for el in root.iter() if el.tag.endswith("delText") and el.text and el.text.strip())
 
 
+def _unconditional_identity_hits(z: zipfile.ZipFile) -> list[str]:
+    """Author/person identity-attribute residuals, independent of `surfaces`
+    - see build_author_parts/_residual_identity_attrs and module docstring."""
+    hits: list[str] = []
+    for partname, attrs in build_author_parts(z).items():
+        hits.extend(_residual_identity_attrs(z, partname, attrs))
+    return hits
+
+
 def _scan_docx(path: str, surfaces: list[str]) -> list[str]:
     hits: list[str] = []
     try:
         with zipfile.ZipFile(path) as z:
+            hits.extend(_unconditional_identity_hits(z))
             hits.extend(_find_in_text(_part_text(z, "word/comments.xml"), surfaces, "comment"))
             # w:author/w:initials on <w:comment> itself - attributes, not
             # element text, so _part_text's element-text walk never saw
@@ -250,6 +316,7 @@ def _scan_pptx(path: str, surfaces: list[str]) -> list[str]:
     hits: list[str] = []
     try:
         with zipfile.ZipFile(path) as z:
+            hits.extend(_unconditional_identity_hits(z))
             for name in z.namelist():
                 if re.match(r"ppt/comments/comment\d*\.xml$", name):
                     hits.extend(_find_in_text(_part_text(z, name), surfaces, "comment"))
@@ -282,6 +349,7 @@ def _scan_xlsx_comments(path: str, surfaces: list[str]) -> list[str]:
                     hits.extend(_find_in_text(cell.comment.text, surfaces, f"comment on {ws.title}!{cell.coordinate}"))
     try:
         with zipfile.ZipFile(path) as z:
+            hits.extend(_unconditional_identity_hits(z))
             # Legacy xlsx comments keep an <authors><author>Name</author>...
             # list as its own element TEXT, separate from the comment body -
             # openpyxl's cell.comment.text above only ever sees the body.
@@ -299,13 +367,25 @@ def _scan_xlsx_comments(path: str, surfaces: list[str]) -> list[str]:
 
 
 def _scan_pdf(path: str, surfaces: list[str]) -> list[str]:
+    """PDF annotations carry TWO separate PII-relevant fields: `content`
+    (the visible comment text - checked against `surfaces`, same as every
+    other channel) and `title` (the standard PDF markup-annotation Title
+    field, which every real PDF viewer/producer uses for the ANNOTATION
+    AUTHOR's display name - the same "always a real identity by
+    construction" shape as author name= on PPTX/DOCX comments). `title` is
+    checked UNCONDITIONALLY, independent of `surfaces`, same reasoning as
+    build_author_parts()/_residual_identity_attrs() for the OOXML formats."""
     import fitz
 
     hits: list[str] = []
     doc = fitz.open(path)
     for page_number, page in enumerate(doc):
         for annot in page.annots() or []:
-            content = (annot.info or {}).get("content", "")
+            info = annot.info or {}
+            title = (info.get("title") or "").strip()
+            if title:
+                hits.append(f"annotation on page {page_number + 1}: identity attribute 'title' still populated: '{title}'")
+            content = info.get("content", "")
             if content:
                 hits.extend(_find_in_text(content, surfaces, f"annotation on page {page_number + 1}"))
     doc.close()
@@ -313,8 +393,9 @@ def _scan_pdf(path: str, surfaces: list[str]) -> list[str]:
 
 
 def find_residual_comments(path: str, content_type: str, filename: str, surfaces: list[str]) -> list[str]:
-    if not surfaces:
-        return []
+    """Deliberately does NOT early-return when `surfaces` is empty - the
+    author/person identity-attribute check runs unconditionally (see module
+    docstring), independent of any specific detected surface."""
     lower = filename.lower()
     if content_type == "application/pdf" or lower.endswith(".pdf"):
         return _scan_pdf(path, surfaces)

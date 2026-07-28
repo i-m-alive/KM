@@ -82,6 +82,17 @@ class Settings(BaseSettings):
     # paid call per run; enable once you've seen its signal/cost on real runs.
     SANITIZATION_PRECISION_CHECK_ENABLED: bool = False
 
+    # Custom replacement aliases (Task C): when a reviewer sets an alias for
+    # an entity, this gates the LLM "is this alias itself a real
+    # organization" check (alias_validate.py) on top of the always-on
+    # deterministic dictionary-collision checks. Unlike the flags above,
+    # defaults True - aliases are already an explicit, opt-in reviewer
+    # action (nothing changes for a run where nobody sets one), so there's
+    # no existing-run cost to protect against, only a real safety gap
+    # (silently accepting an alias that happens to name a real company) if
+    # left off.
+    SANITIZATION_ALIAS_VALIDATION_ENABLED: bool = True
+
     # Mosaic re-identification QA: an extra Bedrock pass that tries to guess
     # the real client behind each mask token using ONLY the remaining
     # unmasked text (quantities, events, dates, unique descriptors). Advisory

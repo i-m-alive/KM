@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.auth.permissions import require_capability
 from app.db import get_db
 from app.masking import dictionary
-from app.models import AccountOwnership, AuditLog, ClientAccount, MaskingEntity, Role, User
+from app.models import AccountOwnership, AgentRun, AuditLog, ClientAccount, MaskingEntity, Role, User
 from app.schemas import (
     AuditLogEntryOut,
     ClientAccountCreateRequest,
@@ -213,3 +213,46 @@ def unskip_masking_entity(
     db.commit()
     db.refresh(entity)
     return _to_entity_out(entity)
+
+
+@router.get("/review-deltas")
+def review_deltas_summary(
+    _: User = Depends(require_capability("view_raw_masking_dictionary")),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Aggregates Task 3's reviewer-edit deltas (recall/precision misses, per
+    entity_type) across every Sanitization run that has them - the cheapest
+    real accuracy signal this system produces, previously just sitting
+    unused inside each run's own output_json. Intended to inform tuning
+    SANITIZATION_CONFIDENCE_THRESHOLDS (config.py) against real reviewed
+    usage instead of the untuned 0.6 default every type currently shares."""
+    runs = db.query(AgentRun).filter(AgentRun.agent_id == "sanitization", AgentRun.output_json.isnot(None)).all()
+
+    recall_totals: dict[str, int] = {}
+    precision_totals: dict[str, int] = {}
+    runs_with_data = 0
+    for run in runs:
+        deltas = (run.output_json or {}).get("review_deltas") or {}
+        recall = deltas.get("recall_miss_by_type") or {}
+        precision = deltas.get("precision_miss_by_type") or {}
+        if not recall and not precision:
+            continue
+        runs_with_data += 1
+        for etype, count in recall.items():
+            recall_totals[etype] = recall_totals.get(etype, 0) + count
+        for etype, count in precision.items():
+            precision_totals[etype] = precision_totals.get(etype, 0) + count
+
+    entity_types = sorted(set(recall_totals) | set(precision_totals))
+    return {
+        "runs_with_data": runs_with_data,
+        "total_runs_checked": len(runs),
+        "by_entity_type": [
+            {
+                "entity_type": etype,
+                "recall_misses": recall_totals.get(etype, 0),
+                "precision_misses": precision_totals.get(etype, 0),
+            }
+            for etype in entity_types
+        ],
+    }

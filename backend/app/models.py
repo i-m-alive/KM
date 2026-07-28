@@ -179,6 +179,12 @@ class MaskingEntity(Base):
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending_approval")  # pending_approval | approved
     created_by_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agent_runs.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+    # Reviewer-chosen replacement string (e.g. "Acme Pharma"), used everywhere
+    # instead of mask_token when set - same global scope as mask_token itself,
+    # so it's reused consistently across every future document for this
+    # entity too. NULL (the default) reproduces today's [CLIENT_N] behavior
+    # exactly - see masking.dictionary.resolved_replacement().
+    custom_replacement: Mapped[str | None] = mapped_column(String, nullable=True)
 
     aliases: Mapped[list["MaskingAlias"]] = relationship(
         "MaskingAlias", back_populates="entity", cascade="all, delete-orphan"

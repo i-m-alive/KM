@@ -183,3 +183,60 @@ def unskip(db: Session, entity: MaskingEntity) -> None:
     proposed (and reviewed normally) again."""
     entity.status = "pending_approval"
     db.flush()
+
+
+def resolved_replacement(entity: MaskingEntity) -> str:
+    """What actually gets substituted for this entity: the reviewer's chosen
+    alias if one is set, else the standard [CLIENT_N] token. The one place
+    every masking call site should read from, so "did this entity get an
+    alias" is never re-checked ad hoc at each of the many substitution
+    sites (body text, alt-text, docProps, comments, hyperlinks)."""
+    return entity.custom_replacement or entity.mask_token
+
+
+def set_custom_replacement(db: Session, entity: MaskingEntity, replacement: str) -> None:
+    """Persist a reviewer-chosen alias - global scope, same as mask_token,
+    so it's reused for this entity in every future document too. Callers
+    MUST validate first (see validate_custom_replacement) - this function
+    itself does not re-check anything, matching approve()/skip()'s pattern
+    of being a pure governance-decision setter."""
+    entity.custom_replacement = replacement
+    db.flush()
+
+
+def validate_custom_replacement(db: Session, entity: MaskingEntity, replacement: str) -> list[str]:
+    """Deterministic half of alias validation (the LLM "is this itself a
+    real company name" check lives in alias_validate.py - this covers what
+    doesn't need a model call). Returns human-readable problem descriptions;
+    empty list = passes. Three failure modes, all a form of the same risk -
+    the alias itself creates a NEW, different re-identification/collision
+    leak instead of just hiding the original name:
+
+    1. The alias equals or contains another entity's own known surface
+       (mapping one client to a string that names a DIFFERENT real entity
+       already in the dictionary is a false, potentially defamatory leak -
+       e.g. aliasing J&J to "Pfizer" when Pfizer is itself a tracked entity).
+    2. The alias collides with an alias ALREADY assigned to a different
+       entity (two distinct clients silently merging into one identity).
+    """
+    problems: list[str] = []
+    replacement_key = normalize(replacement)
+    if not replacement_key:
+        return ["Alias is empty after normalization."]
+
+    other_entities = db.query(MaskingEntity).filter(MaskingEntity.id != entity.id).all()
+    for other in other_entities:
+        for alias in other.aliases:
+            surface = (alias.raw_value or "").strip()
+            if len(surface) < 3:
+                continue
+            if re.search(surface_pattern(surface), replacement, flags=re.IGNORECASE):
+                problems.append(
+                    f"Alias {replacement!r} contains '{surface}', which already names a different tracked entity ({other.mask_token})."
+                )
+        if other.custom_replacement and normalize(other.custom_replacement) == replacement_key:
+            problems.append(
+                f"Alias {replacement!r} is already assigned to a different entity ({other.mask_token}) - "
+                "two distinct clients would silently share one identity."
+            )
+    return problems

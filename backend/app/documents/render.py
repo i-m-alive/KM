@@ -264,7 +264,12 @@ def _mask_xlsx_sheet_names_and_headers(wb, surface_to_token: dict[str, str], sty
 
 
 def _render_xlsx(
-    src: str, dst: str, surface_to_token: dict[str, str], style: str, approved_image_refs: list | None = None
+    src: str,
+    dst: str,
+    surface_to_token: dict[str, str],
+    style: str,
+    approved_image_refs: list | None = None,
+    image_labels: dict[int, str] | None = None,
 ) -> int:
     """Text masking AND image redaction happen in this ONE load->mutate->save
     pass, deliberately - openpyxl renumbers every image's media partname on
@@ -289,9 +294,16 @@ def _render_xlsx(
 
     images_redacted = 0
     if approved_image_refs:
-        from app.documents.image_redact import placeholder_png
+        from app.documents.image_redact import PLACEHOLDER_LABEL, placeholder_png
 
-        approved_bytes = {ref.image_bytes for ref in approved_image_refs if ref.locator.get("kind") == "xlsx"}
+        image_labels = image_labels or {}
+        # bytes -> label, not just a set of approved bytes: each approved
+        # image may carry its own reviewer-chosen alias (Task C) instead of
+        # the default "REDACTED" text.
+        approved_bytes_to_label = {
+            ref.image_bytes: image_labels.get(ref.index, PLACEHOLDER_LABEL)
+            for ref in approved_image_refs if ref.locator.get("kind") == "xlsx"
+        }
         for ws in wb.worksheets:
             for im in ws._images:
                 try:
@@ -302,8 +314,8 @@ def _render_xlsx(
                     data = im.ref.getvalue()
                 except Exception:
                     continue
-                if data in approved_bytes:
-                    im.ref = io.BytesIO(placeholder_png(im.width, im.height))
+                if data in approved_bytes_to_label:
+                    im.ref = io.BytesIO(placeholder_png(im.width, im.height, label=approved_bytes_to_label[data]))
                     im.format = "png"
                     images_redacted += 1
 
@@ -397,12 +409,19 @@ def render_masked_document(
     surface_to_token: dict[str, str],
     style: str = DEFAULT_MASKING_STYLE,
     approved_image_refs: list | None = None,
+    image_labels: dict[int, str] | None = None,
 ) -> tuple[str, int]:
     """Produce a masked copy in the original format. Returns (path,
     xlsx_images_redacted) - the second element is only ever non-zero for
     xlsx, where image redaction must happen in this same pass (see
     _render_xlsx); every other format redacts images separately, after this
-    call, via image_redact.redact_images()."""
+    call, via image_redact.redact_images().
+
+    `image_labels` (Task C): ImageRef.index -> reviewer-chosen alias text,
+    for images whose logo resolved to an entity with a custom replacement -
+    rendered into the placeholder box instead of "REDACTED". Only actually
+    consumed here for xlsx (whose image redaction happens in this same
+    pass); every other format's redact_images() call takes it directly."""
     out_dir = os.path.join(settings.OUTPUTS_DIR, "sanitization")
     os.makedirs(out_dir, exist_ok=True)
     stem, ext = os.path.splitext(os.path.basename(filename))
@@ -418,7 +437,7 @@ def render_masked_document(
     elif lower.endswith(".pptx") or "presentationml" in content_type:
         _render_pptx(src_path, dst, surface_to_token, style)
     elif lower.endswith(".xlsx") or "spreadsheetml" in content_type:
-        xlsx_images_redacted = _render_xlsx(src_path, dst, surface_to_token, style, approved_image_refs)
+        xlsx_images_redacted = _render_xlsx(src_path, dst, surface_to_token, style, approved_image_refs, image_labels)
     else:
         with open(dst, "w", encoding="utf-8") as f:
             f.write("\n".join(f"{k} -> {v}" for k, v in surface_to_token.items()))

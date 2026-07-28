@@ -49,23 +49,41 @@ SYSTEM_PROMPT = (
     "You may call fs_read_document(document_id, start_chunk, end_chunk) to read the document in "
     "chunk ranges. Read enough to be exhaustive — a missed client identifier is a data leak. "
     "Return every client-identifying surface string once, with its type and your confidence (0-1). "
-    "Prefer to confirm or reject the provided candidate strings, and add any you find that they missed."
+    "Prefer to confirm or reject the provided candidate strings, and add any you find that they missed. "
+    "You will also be given image alt-text/labels found in the document, separately from its body - these "
+    "are often messy descriptive phrases (e.g. 'GMR Group | Delhi', 'Bandhan Bank Vector Logo Free "
+    "Download') rather than clean names. Extract any client-identifying entity embedded in them the same "
+    "way you would from body text - a name that appears ONLY in alt-text is just as real a leak as one in "
+    "the body."
 )
 
 
-async def detect_entities(document_id: str, total_chunks: int, candidates: list[Candidate]) -> bedrock_client.BedrockResponse:
+async def detect_entities(
+    document_id: str, total_chunks: int, candidates: list[Candidate], alt_texts: list[str] | None = None,
+) -> bedrock_client.BedrockResponse:
     """Run the tool-use detection loop. Returns a BedrockResponse whose .parsed
-    is {"entities": [...]} and which carries token/cost usage."""
+    is {"entities": [...]} and which carries token/cost usage.
+
+    `alt_texts` (image descr/title values) are passed as extra CONTEXT, not
+    fed through fs_read_document - they live outside the chunked body text
+    entirely (see agent.py's alt-text merge), so the model needs them handed
+    over directly rather than discovering them by reading chunks."""
     candidate_lines = "\n".join(
         f"- {c.surface_text!r} (guess: {c.entity_type_guess}; seen {c.occurrences}x)"
         + (f" e.g. ...{c.contexts[0]}..." if c.contexts else "")
         for c in candidates
     ) or "(none found by the pre-pass; read the document and find them yourself)"
 
+    alt_text_block = ""
+    if alt_texts:
+        alt_text_lines = "\n".join(f"- {a!r}" for a in alt_texts)
+        alt_text_block = f"\nImage alt-text/labels found in this document (NOT part of the body text):\n{alt_text_lines}\n"
+
     user_message = (
         f"document_id: {document_id}\n"
         f"total_chunks: {total_chunks} (chunk ids 0..{total_chunks - 1})\n\n"
-        f"Candidate strings from the deterministic pre-pass:\n{candidate_lines}\n\n"
+        f"Candidate strings from the deterministic pre-pass:\n{candidate_lines}\n"
+        f"{alt_text_block}\n"
         "Read the document with fs_read_document and return the client-identifying entities as JSON."
     )
 

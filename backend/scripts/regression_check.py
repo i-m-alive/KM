@@ -22,6 +22,7 @@ No Bedrock calls and no DB - runs offline in seconds:
 
 import asyncio
 import io
+import re
 import shutil
 import sys
 import tempfile
@@ -815,6 +816,70 @@ def check_pptx_author_list() -> None:
         shutil.rmtree(workdir, ignore_errors=True)
 
 
+def check_author_identity_unconditional() -> None:
+    """Task B core acceptance test: authors.xml/userId must be cleared even
+    with an EMPTY surface_to_token/surfaces - proving the fix doesn't
+    depend on detection succeeding anywhere. This is the actual root cause
+    of "authors.xml completely untouched": nothing in detect() ever looks at
+    authors.xml, so these names/emails were NEVER in surface_to_token to
+    begin with: the correct fix can't be "detect them better", it has to be
+    "don't require detection for this field at all"."""
+    print("\n== author identity unconditional clearing (Task B core) ==")
+    from app.documents.comment_scan import find_residual_comments
+    from app.documents.comment_scrub import scrub_comments
+
+    workdir = Path(tempfile.mkdtemp(prefix="naviknow-authors-unconditional-"))
+    try:
+        ct = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        path = str(workdir / "authors2.pptx")
+        from pptx import Presentation
+
+        Presentation().save(path)
+
+        authors_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<p:authorLst xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+            '<p:author id="0" name="Kashyap Durrani" initials="KD" '
+            'userId="S::kashyap.durrani@zs.com::22222222-2222-2222-2222-222222222222" providerId="AD"/>'
+            "</p:authorLst>"
+        )
+        with zipfile.ZipFile(path, "a") as z:
+            z.writestr("ppt/authors.xml", authors_xml)
+
+        residual_before = find_residual_comments(path, ct, "authors2.pptx", [])
+        check("author identity flagged with an EMPTY surfaces list (never detected anywhere)",
+              any("identity attribute" in h for h in residual_before), f"got: {residual_before}")
+
+        changed = scrub_comments(path, ct, "authors2.pptx", {}, STYLE)
+        check("scrub_comments clears author identity with an EMPTY surface_to_token", changed >= 2, f"got: {changed}")
+
+        residual_after = find_residual_comments(path, ct, "authors2.pptx", [])
+        check("no author-identity residual remains after scrub (empty surfaces list)",
+              len(residual_after) == 0, f"got: {residual_after}")
+
+        # Prove it actually BLOCKS - replant and re-check.
+        replant_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<p:authorLst xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+            '<p:author id="0" name="Replanted Name" initials="RN" '
+            'userId="S::replanted@zs.com::33333333-3333-3333-3333-333333333333" providerId="AD"/>'
+            "</p:authorLst>"
+        )
+        tmp_path = path + ".replant"
+        with zipfile.ZipFile(path, "r") as zin, zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                if item.filename == "ppt/authors.xml":
+                    zout.writestr(item, replant_xml)
+                else:
+                    zout.writestr(item, zin.read(item.filename))
+        shutil.move(tmp_path, path)
+        residual_replant = find_residual_comments(path, ct, "authors2.pptx", [])
+        check("a re-planted author-identity leak fails verification even with an empty surfaces list",
+              any("identity attribute" in h for h in residual_replant), f"got: {residual_replant}")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
 def check_docx_comment_author() -> None:
     """Task B acceptance test (part 2): a DOCX comment's w:author/w:initials
     - attributes on <w:comment> itself, a different shape than the comment
@@ -891,6 +956,417 @@ def check_unconditional_identity_fields() -> None:
         residual_replant = find_residual_metadata(path, ct, "identity.docx", [])
         check("a re-planted creator leak fails verification even with an empty surfaces list",
               any("identity field" in h for h in residual_replant), f"got: {residual_replant}")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def check_surface_pattern_underscore_boundary() -> None:
+    """Task A core acceptance test: surface_pattern() must match a surface
+    immediately adjacent to an underscore (e.g. alt-text/filenames like
+    "Nextcare_logo"), which regex's plain \\b treats as NO boundary at all
+    (both are \\w characters) - misdiagnosed as a case-sensitivity bug in the
+    original report (case-insensitive matching was already in place and
+    didn't fix it), but confirmed here with an exact case match too, so the
+    real cause can't silently regress back to "just add re.IGNORECASE"."""
+    print("\n== surface_pattern underscore boundary (Task A core) ==")
+    from app.masking.pattern import surface_pattern
+
+    check("matches a surface followed by an underscore (exact case)",
+          bool(re.search(surface_pattern("NextCare"), "NextCare_logo", re.IGNORECASE)))
+    check("matches a surface followed by an underscore (different case) - proves this was never about case",
+          bool(re.search(surface_pattern("NextCare"), "nextcare_logo", re.IGNORECASE)))
+    check("matches with a trailing file extension after the underscore",
+          bool(re.search(surface_pattern("NextCare"), "NextCare_logo.png", re.IGNORECASE)))
+    check("still finds a surface with normal punctuation boundaries",
+          bool(re.search(surface_pattern("GMR"), "GMR Group | Delhi", re.IGNORECASE)))
+    check("word-boundary safety is NOT weakened: 'RIA' must still not match inside 'MATERIAL'",
+          not re.search(surface_pattern("RIA"), "MATERIAL", re.IGNORECASE))
+    check("line-wrapped multi-word surfaces still match",
+          bool(re.search(surface_pattern("Tata Capital"), "Tata\nCapital programs", re.IGNORECASE)))
+
+
+def check_alt_text_detector_context() -> None:
+    """Task A acceptance test: alt-text values must actually reach the LLM
+    detector call as context, not just the cheap regex/dictionary merge -
+    real observed failure: "GMR Group | Delhi" and "AJG India" had no
+    deterministic signal at all (not emails/phones, not already-known
+    entities) and so were never proposed with anything but my own crude
+    low-confidence whole-phrase fallback. Mocked Bedrock - this proves the
+    plumbing (alt_texts reaches the prompt, the response flows back
+    normally), not real model judgment."""
+    print("\n== alt-text reaches the LLM detector (Task A core) ==")
+    from unittest.mock import AsyncMock
+
+    from app.agents.sanitization import detector
+    from app.llm import bedrock_client
+
+    captured = {}
+
+    async def fake_converse_with_tools(**kwargs):
+        captured["user_message"] = kwargs.get("user_message")
+        return bedrock_client.BedrockResponse(
+            text="", parsed={"entities": [{"surface_text": "GMR Group", "entity_type": "CLIENT_NAME", "confidence": 0.85}]},
+            input_tokens=80, output_tokens=20, estimated_cost_usd=0.001,
+        )
+
+    with patch.object(bedrock_client, "converse_with_tools", new=AsyncMock(side_effect=fake_converse_with_tools)):
+        resp = asyncio.run(detector.detect_entities(
+            "doc-1", 3, [], alt_texts=["GMR Group | Delhi", "AJG India"],
+        ))
+
+    check("alt-text values are included in the detector's prompt",
+          "GMR Group | Delhi" in captured["user_message"] and "AJG India" in captured["user_message"],
+          f"prompt was: {captured.get('user_message')}")
+    entities = (resp.parsed or {}).get("entities", [])
+    check("the model's alt-text-derived entity flows back through the response normally",
+          any(e["surface_text"] == "GMR Group" for e in entities), f"got: {entities}")
+
+    with patch.object(bedrock_client, "converse_with_tools", new=AsyncMock(side_effect=fake_converse_with_tools)):
+        asyncio.run(detector.detect_entities("doc-2", 3, [], alt_texts=None))
+    check("no alt-text section is added to the prompt when there's nothing to pass",
+          "alt-text" not in captured["user_message"].lower(), f"prompt was: {captured.get('user_message')}")
+
+
+class _FakeAlias:
+    def __init__(self, raw_value):
+        self.raw_value = raw_value
+
+
+class _FakeMaskingEntity:
+    def __init__(self, id_, mask_token, aliases=None, custom_replacement=None):
+        self.id = id_
+        self.mask_token = mask_token
+        self.aliases = aliases or []
+        self.custom_replacement = custom_replacement
+
+
+class _FakeAliasQuery:
+    def __init__(self, entities):
+        self._entities = entities
+
+    def filter(self, *a, **k):
+        return self
+
+    def all(self):
+        return self._entities
+
+
+class _FakeAliasDB:
+    def __init__(self, others):
+        self._others = others
+
+    def query(self, model):
+        return _FakeAliasQuery(self._others)
+
+    def flush(self):
+        pass
+
+
+def check_custom_replacement_alias() -> None:
+    """Task C acceptance test: resolved_replacement falls back to mask_token
+    when no alias is set (today's exact [CLIENT_N] behavior, unchanged), and
+    to the alias once set. validate_custom_replacement must reject an alias
+    that names another tracked entity's own surface (e.g. aliasing one
+    client to "Pfizer" when Pfizer is itself tracked) or that's already
+    assigned to a different entity, and pass a genuinely distinct one.
+    Fakes stand in for the ORM entity/session, since this is pure logic."""
+    print("\n== custom replacement alias (Task C) ==")
+    from app.masking import dictionary
+
+    entity = _FakeMaskingEntity(id_=1, mask_token="[CLIENT_16]")
+    check("resolved_replacement falls back to mask_token when no alias is set",
+          dictionary.resolved_replacement(entity) == "[CLIENT_16]")
+
+    other = _FakeMaskingEntity(id_=2, mask_token="[CLIENT_55]", aliases=[_FakeAlias("Pfizer")])
+    problems_collision = dictionary.validate_custom_replacement(_FakeAliasDB([other]), entity, "Pfizer")
+    check("alias equal to another tracked entity's own surface is rejected",
+          len(problems_collision) > 0, f"got: {problems_collision}")
+
+    other_with_alias = _FakeMaskingEntity(id_=3, mask_token="[CLIENT_60]", custom_replacement="Acme Pharma")
+    problems_dup = dictionary.validate_custom_replacement(_FakeAliasDB([other_with_alias]), entity, "Acme Pharma")
+    check("alias already assigned to a different entity is rejected",
+          len(problems_dup) > 0, f"got: {problems_dup}")
+
+    fake_db_clean = _FakeAliasDB([other, other_with_alias])
+    problems_clean = dictionary.validate_custom_replacement(fake_db_clean, entity, "Acme Widgets")
+    check("a genuinely distinct alias passes deterministic validation", problems_clean == [], f"got: {problems_clean}")
+
+    dictionary.set_custom_replacement(fake_db_clean, entity, "Acme Widgets")
+    check("resolved_replacement uses the alias once set", dictionary.resolved_replacement(entity) == "Acme Widgets")
+
+
+def check_alias_llm_validation() -> None:
+    """Task C acceptance test: the LLM alias-validation call must flag a
+    real company name ("Pfizer") as is_real_organization, and pass a clearly
+    fictional placeholder ("Acme Pharma"). Mocked Bedrock - tests the
+    plumbing, not real model judgment, same discipline as Task 1/2's tests."""
+    print("\n== alias LLM validation (Task C) ==")
+    from unittest.mock import AsyncMock
+
+    from app.agents.sanitization import alias_validate
+    from app.llm import bedrock_client
+
+    real_org_resp = bedrock_client.BedrockResponse(
+        text="", parsed={"is_real_organization": True, "reason": "Pfizer is a real pharmaceutical company."},
+        input_tokens=30, output_tokens=15, estimated_cost_usd=0.0003,
+    )
+    with patch.object(bedrock_client, "converse", new=AsyncMock(return_value=real_org_resp)):
+        resp = asyncio.run(alias_validate.validate_alias("Pfizer"))
+    check("a real organization alias is flagged", (resp.parsed or {}).get("is_real_organization") is True, f"got: {resp.parsed}")
+
+    fictional_resp = bedrock_client.BedrockResponse(
+        text="", parsed={"is_real_organization": False, "reason": "Generic fictional placeholder name."},
+        input_tokens=30, output_tokens=15, estimated_cost_usd=0.0003,
+    )
+    with patch.object(bedrock_client, "converse", new=AsyncMock(return_value=fictional_resp)):
+        resp2 = asyncio.run(alias_validate.validate_alias("Acme Pharma"))
+    check("a fictional placeholder alias is not flagged", (resp2.parsed or {}).get("is_real_organization") is False, f"got: {resp2.parsed}")
+
+
+def check_image_placeholder_custom_label() -> None:
+    """Task C acceptance test: a custom alias label rendered into the
+    redaction placeholder must still be recognized by is_placeholder_bytes
+    - idempotent-redaction safety (a second remediation pass must recognize
+    an already-redacted image and target nothing). A longer label's extra
+    text pixels must not push the near-gray ratio below the detection
+    threshold."""
+    print("\n== image placeholder custom label (Task C) ==")
+    from app.documents.image_redact import is_placeholder_bytes, placeholder_png
+
+    default_png = placeholder_png(200, 150)
+    check("default 'REDACTED' placeholder is recognized", is_placeholder_bytes(default_png))
+
+    custom_png = placeholder_png(200, 150, label="Acme Pharma")
+    check("a custom alias label is still recognized as a placeholder (idempotent redaction safety)",
+          is_placeholder_bytes(custom_png))
+
+    long_custom_png = placeholder_png(200, 150, label="A Much Longer Corporate Alias Name Inc.")
+    check("a longer custom alias label doesn't break placeholder recognition either",
+          is_placeholder_bytes(long_custom_png))
+
+
+def check_redact_images_per_entity_labels() -> None:
+    """Task C acceptance test: redact_images's `labels` dict must produce a
+    DIFFERENT placeholder per image when different entities' aliases apply
+    to different logos in the same document - not one shared label
+    overwriting whichever entity happened to redact last."""
+    print("\n== redact_images per-entity labels (Task C) ==")
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    from app.documents.image_redact import redact_images
+    from app.documents.images import extract_images
+
+    workdir = Path(tempfile.mkdtemp(prefix="naviknow-alias-images-"))
+    try:
+        ct = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        path = str(workdir / "alias_images.pptx")
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[5])
+        slide.shapes.add_picture(io.BytesIO(_png_bytes((10, 20, 30))), Inches(0.5), Inches(0.5))
+        slide.shapes.add_picture(io.BytesIO(_png_bytes((40, 50, 60))), Inches(3), Inches(0.5))
+        prs.save(path)
+
+        refs = extract_images(path, ct, "alias_images.pptx")
+        # Exclude docProps/thumbnail.jpeg - PowerPoint auto-generates this
+        # document thumbnail as its own embedded image, unrelated to the two
+        # slide pictures this test actually plants.
+        pptx_refs = [r for r in refs if r.locator.get("kind") == "pptx" and r.locator.get("partname", "").startswith("ppt/media/")]
+        check("fixture has two distinct images to redact", len(pptx_refs) == 2, f"got: {len(pptx_refs)}")
+
+        labels = {pptx_refs[0].index: "Acme Pharma", pptx_refs[1].index: "Beta Bank"}
+        redacted, _ = redact_images(path, ct, "alias_images.pptx", pptx_refs, labels=labels)
+        check("both images redacted", redacted == 2, f"got: {redacted}")
+
+        refs_after = extract_images(path, ct, "alias_images.pptx")
+        bytes_by_index = {
+            r.index: r.image_bytes for r in refs_after
+            if r.locator.get("kind") == "pptx" and r.locator.get("partname", "").startswith("ppt/media/")
+        }
+        check("the two redacted placeholders have different bytes (different alias labels rendered)",
+              bytes_by_index[pptx_refs[0].index] != bytes_by_index[pptx_refs[1].index],
+              "placeholders are byte-identical despite different labels")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def check_pdf_annotation_author() -> None:
+    """Item 1b acceptance test: a PDF annotation's Title field (the standard
+    PDF markup-annotation author field, same "always a real identity"
+    shape as PPTX/DOCX comment author names) must be flagged and cleared
+    UNCONDITIONALLY - independent of `surfaces` - not just its content text."""
+    print("\n== pdf annotation author/title (item 1b) ==")
+    import fitz
+
+    from app.documents.comment_scan import find_residual_comments
+    from app.documents.comment_scrub import scrub_comments
+
+    workdir = Path(tempfile.mkdtemp(prefix="naviknow-pdf-author-"))
+    try:
+        ct = "application/pdf"
+        path = str(workdir / "annot.pdf")
+        doc = fitz.open()
+        page = doc.new_page()
+        annot = page.add_text_annot((72, 160), "benign note")
+        annot.set_info(title="Vallab Deshmukh")
+        annot.update()
+        doc.save(path)
+        doc.close()
+
+        residual_before = find_residual_comments(path, ct, "annot.pdf", [])
+        check("annotation author/title flagged with an EMPTY surfaces list",
+              any("identity attribute" in h and "Vallab Deshmukh" in h for h in residual_before), f"got: {residual_before}")
+
+        changed = scrub_comments(path, ct, "annot.pdf", {}, STYLE)
+        check("scrub_comments clears the annotation title with an EMPTY surface_to_token", changed >= 1, f"got: {changed}")
+
+        residual_after = find_residual_comments(path, ct, "annot.pdf", [])
+        check("no annotation-author residual remains after scrub", len(residual_after) == 0, f"got: {residual_after}")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def check_channel_coverage_audit() -> None:
+    """Item 1c acceptance test: the coverage audit must flag a deliberately
+    unknown, identity-suggestive part (simulating "the next authors.xml") -
+    and must NOT flag anything on the existing regression fixture (proving
+    it doesn't cry wolf on every normal file, which would make it noise
+    reviewers learn to ignore)."""
+    print("\n== channel coverage audit (item 1c) ==")
+    from app.documents.channel_coverage import audit_channel_coverage
+
+    workdir = Path(tempfile.mkdtemp(prefix="naviknow-coverage-"))
+    try:
+        ct = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        clean_path = str(workdir / "clean.pptx")
+        build_pptx(clean_path)
+        warnings_clean = audit_channel_coverage(clean_path, ct, "clean.pptx")
+        check("no false positives on a normal, fully-covered pptx", warnings_clean == [], f"got: {warnings_clean}")
+
+        unknown_path = str(workdir / "unknown.pptx")
+        build_pptx(unknown_path)
+        # Simulate "the next authors.xml": an unrecognized part with an
+        # identity-suggestive name this audit has never been told about.
+        with zipfile.ZipFile(unknown_path, "a") as z:
+            z.writestr("ppt/reviewersList.xml", "<reviewers><reviewer name='Someone'/></reviewers>")
+        warnings_unknown = audit_channel_coverage(unknown_path, ct, "unknown.pptx")
+        check("an unrecognized identity-suggestive part is flagged",
+              any("ppt/reviewersList.xml" in w for w in warnings_unknown), f"got: {warnings_unknown}")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def check_docx_alt_text() -> None:
+    """Item 3b acceptance test: alt-text scan/scrub for DOCX specifically -
+    only PPTX had a dedicated regression fixture before this. python-docx's
+    inline picture docPr has no descr/title by default, so this injects
+    them directly into the real XML python-docx generated, the same
+    raw-injection pattern already used elsewhere in this suite for shapes
+    neither library exposes a high-level API for."""
+    print("\n== docx alt-text channel (item 3b) ==")
+    import docx
+    from PIL import Image
+
+    from app.documents.alttext_scan import extract_alt_text
+    from app.documents.alttext_scrub import scrub_alt_text
+    from app.documents.verify import find_residual_surfaces
+
+    workdir = Path(tempfile.mkdtemp(prefix="naviknow-docx-alttext-"))
+    try:
+        ct = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        path = str(workdir / "alttext.docx")
+        png_buf = io.BytesIO()
+        Image.new("RGB", (60, 40), (10, 20, 30)).save(png_buf, format="PNG")
+        png_buf.seek(0)
+        doc = docx.Document()
+        doc.add_picture(png_buf)
+        doc.save(path)
+
+        with zipfile.ZipFile(path) as z:
+            xml = z.read("word/document.xml").decode("utf-8")
+        assert "<wp:docPr" in xml, "fixture assumption broke: python-docx no longer emits wp:docPr this way"
+        new_xml = re.sub(
+            r'(<wp:docPr\b[^>]*?)/>',
+            rf'\1 descr="Our Business | {CLIENT} Group logo" title="{CLIENT} wordmark"/>',
+            xml, count=1,
+        )
+        tmp_path = path + ".tmp"
+        with zipfile.ZipFile(path, "r") as zin, zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                zout.writestr(item, new_xml.encode("utf-8") if item.filename == "word/document.xml" else zin.read(item.filename))
+        shutil.move(tmp_path, path)
+
+        pre = extract_alt_text(path, ct, "alttext.docx")
+        check("docx alt-text descr/title detected before scrub", any(CLIENT in v for v in pre), f"got: {pre}")
+
+        residual_before = find_residual_surfaces(path, ct, "alttext.docx", SURFACES)
+        check("text-channel verification catches the docx alt-text leak pre-scrub",
+              CLIENT in residual_before, f"got: {residual_before}")
+
+        changed = scrub_alt_text(path, ct, "alttext.docx", SURFACE_TO_TOKEN, STYLE)
+        check("scrub_alt_text reports rewritten attributes on docx", changed >= 2, f"got: {changed}")
+
+        post = extract_alt_text(path, ct, "alttext.docx")
+        check("no client name remains in docx alt-text after scrub", not any(CLIENT in v for v in post), f"got: {post}")
+
+        residual_after = find_residual_surfaces(path, ct, "alttext.docx", SURFACES)
+        check("text channel verifies clean after docx alt-text scrub", CLIENT not in residual_after, f"got: {residual_after}")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def check_xlsx_alt_text() -> None:
+    """Item 3b acceptance test: alt-text scan/scrub for XLSX specifically -
+    openpyxl's embedded-image cNvPr defaults to descr="Picture" (no
+    namespace prefix - a bare <cNvPr>, confirming TAG_RE's optional-prefix
+    match is actually needed, not just defensive)."""
+    print("\n== xlsx alt-text channel (item 3b) ==")
+    import openpyxl
+    from openpyxl.drawing.image import Image as XLImage
+    from PIL import Image
+
+    from app.documents.alttext_scan import extract_alt_text
+    from app.documents.alttext_scrub import scrub_alt_text
+    from app.documents.verify import find_residual_surfaces
+
+    workdir = Path(tempfile.mkdtemp(prefix="naviknow-xlsx-alttext-"))
+    try:
+        ct = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        path = str(workdir / "alttext.xlsx")
+        png_buf = io.BytesIO()
+        Image.new("RGB", (60, 40), (10, 20, 30)).save(png_buf, format="PNG")
+        png_buf.seek(0)
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.add_image(XLImage(png_buf), "A1")
+        wb.save(path)
+
+        with zipfile.ZipFile(path) as z:
+            drawing_name = next(n for n in z.namelist() if re.match(r"^xl/drawings/drawing\d*\.xml$", n))
+            xml = z.read(drawing_name).decode("utf-8")
+        assert 'descr="Picture"' in xml, "fixture assumption broke: openpyxl no longer emits a default descr this way"
+        new_xml = xml.replace('descr="Picture"', f'descr="{CLIENT} Group logo"')
+        tmp_path = path + ".tmp"
+        with zipfile.ZipFile(path, "r") as zin, zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                zout.writestr(item, new_xml.encode("utf-8") if item.filename == drawing_name else zin.read(item.filename))
+        shutil.move(tmp_path, path)
+
+        pre = extract_alt_text(path, ct, "alttext.xlsx")
+        check("xlsx alt-text descr detected before scrub (unprefixed <cNvPr>)", any(CLIENT in v for v in pre), f"got: {pre}")
+
+        residual_before = find_residual_surfaces(path, ct, "alttext.xlsx", SURFACES)
+        check("text-channel verification catches the xlsx alt-text leak pre-scrub",
+              CLIENT in residual_before, f"got: {residual_before}")
+
+        changed = scrub_alt_text(path, ct, "alttext.xlsx", SURFACE_TO_TOKEN, STYLE)
+        check("scrub_alt_text reports rewritten attributes on xlsx", changed >= 1, f"got: {changed}")
+
+        post = extract_alt_text(path, ct, "alttext.xlsx")
+        check("no client name remains in xlsx alt-text after scrub", not any(CLIENT in v for v in post), f"got: {post}")
+
+        residual_after = find_residual_surfaces(path, ct, "alttext.xlsx", SURFACES)
+        check("text channel verifies clean after xlsx alt-text scrub", CLIENT not in residual_after, f"got: {residual_after}")
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
@@ -996,6 +1472,14 @@ def main() -> int:
             failures.append(f"pptx author list: crashed - {exc}")
 
         try:
+            check_author_identity_unconditional()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"author identity unconditional: crashed - {exc}")
+
+        try:
             check_docx_comment_author()
         except Exception as exc:
             import traceback
@@ -1010,6 +1494,86 @@ def main() -> int:
 
             traceback.print_exc()
             failures.append(f"unconditional identity fields: crashed - {exc}")
+
+        try:
+            check_surface_pattern_underscore_boundary()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"surface_pattern underscore boundary: crashed - {exc}")
+
+        try:
+            check_alt_text_detector_context()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"alt-text detector context: crashed - {exc}")
+
+        try:
+            check_custom_replacement_alias()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"custom replacement alias: crashed - {exc}")
+
+        try:
+            check_alias_llm_validation()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"alias LLM validation: crashed - {exc}")
+
+        try:
+            check_image_placeholder_custom_label()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"image placeholder custom label: crashed - {exc}")
+
+        try:
+            check_redact_images_per_entity_labels()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"redact_images per-entity labels: crashed - {exc}")
+
+        try:
+            check_pdf_annotation_author()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"pdf annotation author: crashed - {exc}")
+
+        try:
+            check_channel_coverage_audit()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"channel coverage audit: crashed - {exc}")
+
+        try:
+            check_docx_alt_text()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"docx alt-text: crashed - {exc}")
+
+        try:
+            check_xlsx_alt_text()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"xlsx alt-text: crashed - {exc}")
 
         print(f"\n{'=' * 50}\n{passes} checks passed, {len(failures)} failed")
         for f in failures:

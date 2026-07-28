@@ -104,8 +104,18 @@ CREATE TABLE IF NOT EXISTS masking_entities (
   client_account_id UUID REFERENCES client_accounts(id),
   status TEXT NOT NULL DEFAULT 'pending_approval',
   created_by_run_id UUID REFERENCES agent_runs(id),
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  -- Reviewer-chosen replacement string (e.g. "Acme Pharma") used instead of
+  -- mask_token when set. Global scope, same as mask_token - reused across
+  -- every future document for this entity. See app.models.MaskingEntity.
+  custom_replacement TEXT
 );
+
+-- CREATE TABLE IF NOT EXISTS is a no-op against an already-existing table,
+-- so on a database created before custom_replacement existed, the column
+-- above never actually gets added - this is the ALTER equivalent of that,
+-- safe to re-run.
+ALTER TABLE masking_entities ADD COLUMN IF NOT EXISTS custom_replacement TEXT;
 
 CREATE TABLE IF NOT EXISTS masking_aliases (
   id SERIAL PRIMARY KEY,

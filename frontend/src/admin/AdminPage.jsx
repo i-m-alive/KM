@@ -287,6 +287,72 @@ function MaskingDictionarySection() {
   );
 }
 
+function ReviewDeltasSection() {
+  const [summary, setSummary] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiGet("/governance/review-deltas")
+      .then(setSummary)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading)
+    return (
+      <div className="loading-state">
+        <span className="spinner" /> Loading review deltas…
+      </div>
+    );
+
+  const rows = summary?.by_entity_type || [];
+
+  return (
+    <div className="card section">
+      <h3 className="card__title">Review deltas (Task 3 accuracy signal)</h3>
+      <p className="card__sub">
+        Recall misses = entities the model missed that a reviewer added by hand; precision misses = entities the
+        model over-flagged that a reviewer removed. This is the cheapest real accuracy signal the system has —
+        {summary ? ` drawn from ${summary.runs_with_data} of ${summary.total_runs_checked} Sanitization run(s)` : ""}{" "}
+        with at least one reviewer edit — use it to decide which entity type's confidence gate
+        (<code>SANITIZATION_CONFIDENCE_THRESHOLDS</code>) is actually worth moving, instead of guessing.
+      </p>
+      {error && <p className="error-text">{error}</p>}
+      {rows.length === 0 ? (
+        <p className="agent-card__meta">No reviewer edits recorded yet — every run so far was approved as proposed.</p>
+      ) : (
+        <table className="run-table">
+          <thead>
+            <tr>
+              <th>Entity type</th>
+              <th>Recall misses (model missed)</th>
+              <th>Precision misses (model over-flagged)</th>
+              <th>Suggests</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.entity_type}>
+                <td className="agent-card__meta">{r.entity_type}</td>
+                <td>{r.recall_misses}</td>
+                <td>{r.precision_misses}</td>
+                <td className="agent-card__meta">
+                  {r.recall_misses > r.precision_misses * 2
+                    ? "consider a lower confidence gate — the model is missing more than it over-flags"
+                    : r.precision_misses > r.recall_misses * 2
+                      ? "consider a higher confidence gate — the model over-flags more than it misses"
+                      : "roughly balanced so far"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { user } = useAuth();
   const canManageUsers = user?.role === "admin";
@@ -308,6 +374,7 @@ export default function AdminPage() {
       {canManageUsers && <UsersSection />}
       {canManageAccounts && <AccountsSection />}
       {canViewMaskingDictionary && <MaskingDictionarySection />}
+      {canViewMaskingDictionary && <ReviewDeltasSection />}
     </div>
   );
 }
