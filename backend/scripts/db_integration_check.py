@@ -165,6 +165,109 @@ def check_cross_surface_merge_real_db() -> None:
         db.close()
 
 
+def check_reapply_with_additional_entities_real_db() -> None:
+    """revalidate.py's fix loop against a real DB + real file I/O - the
+    riskiest new code path (writes new MaskingEntity/MaskingOccurrence rows
+    AND mutates a file on disk). Builds a minimal docx that already has one
+    entity masked (simulating a completed run's rendered output) plus one
+    UNMASKED residual name - exactly the "Arvind Fashions" production miss
+    this whole feature exists to catch - then approves that residual via
+    reapply_with_additional_entities and checks it actually disappears from
+    the file, gets a real dictionary entry, and leaves the pre-existing
+    mask token untouched (idempotent re-render, same as remediate.py's)."""
+    print("\n== revalidate.reapply_with_additional_entities against a real DB + real file ==")
+    import shutil
+    import tempfile
+
+    import docx
+
+    from app.agents.sanitization import revalidate
+    from app.documents.extract import extract_chunks
+    from app.masking import dictionary
+    from app.models import AgentRun, MaskingAlias, MaskingEntity, MaskingOccurrence, UploadedDocument, User
+
+    db = _make_session()
+    workdir = None
+    try:
+        run = _seed_run(db)
+        run_id = run.id
+        user_id = run.created_by
+
+        known_entity = dictionary.get_or_create(db, "Johnson & Johnson", "CLIENT_NAME", run_id, approved=True)
+        dictionary.approve(db, known_entity)
+        db.flush()
+        db.add(MaskingOccurrence(
+            run_id=run_id, entity_id=known_entity.id, chunk_id=0, start_offset=0, end_offset=0,
+            surface_text="Johnson & Johnson",
+        ))
+
+        workdir = tempfile.mkdtemp(prefix="naviknow-db-revalidate-")
+        masked_path = f"{workdir}/masked.docx"
+        d = docx.Document()
+        d.add_paragraph(f"Engagement overview for {known_entity.mask_token}.")
+        d.add_paragraph("D2C website partnership announced with Arvind Fashions this quarter.")
+        d.save(masked_path)
+
+        content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        doc = UploadedDocument(
+            filename="engagement.docx", content_type=content_type,
+            stored_path=masked_path, uploaded_by=run.created_by,
+        )
+        db.add(doc)
+        db.flush()
+
+        run.output_json = {
+            "document_id": str(doc.id),
+            "masked_document_path": masked_path,
+            "masking_style": "token",
+            "verified_images": True,
+        }
+        db.flush()
+
+        result = revalidate.reapply_with_additional_entities(
+            db, run, [{"leaked_text": "Arvind Fashions", "entity_type": "CLIENT_NAME"}]
+        )
+        check("reapply reports exactly one new entity applied", result["applied"] == 1, f"got: {result}")
+
+        new_entity = dictionary.lookup(db, "Arvind Fashions")
+        check("a real, approved MaskingEntity now exists for the approved residual",
+              new_entity is not None and new_entity.status == "approved", f"got: {new_entity}")
+
+        chunks = extract_chunks(masked_path, content_type, "engagement.docx")
+        full_text = "\n".join(c.text for c in chunks)
+        check("the approved residual no longer appears in the rendered file",
+              "Arvind Fashions" not in full_text, f"got: {full_text!r}")
+        check("the PRE-EXISTING masked entity's token is untouched (idempotent re-render)",
+              known_entity.mask_token in full_text, f"got: {full_text!r}")
+        check("run.output_json now carries a revalidation block for the fix pass",
+              "revalidation" in (run.output_json or {}), f"got keys: {list((run.output_json or {}).keys())}")
+    finally:
+        # reapply_with_additional_entities COMMITS internally - it MUST, in
+        # production, for the exact same reason remediate_run() does (real
+        # work has to persist) - so unlike every other check in this file
+        # (whose functions only flush), a plain db.rollback() here has
+        # nothing left to undo. Explicit cleanup, in FK-safe order, so this
+        # disposable test DB doesn't accumulate rows run after run.
+        try:
+            db.rollback()
+            new_entity = dictionary.lookup(db, "Arvind Fashions")
+            entity_ids = [e.id for e in (locals().get("known_entity"), new_entity) if e is not None]
+            if entity_ids:
+                db.query(MaskingOccurrence).filter(MaskingOccurrence.entity_id.in_(entity_ids)).delete(synchronize_session=False)
+                db.query(MaskingAlias).filter(MaskingAlias.entity_id.in_(entity_ids)).delete(synchronize_session=False)
+                db.query(MaskingEntity).filter(MaskingEntity.id.in_(entity_ids)).delete(synchronize_session=False)
+            db.query(MaskingOccurrence).filter(MaskingOccurrence.run_id == run_id).delete(synchronize_session=False)
+            db.query(UploadedDocument).filter(UploadedDocument.id == doc.id).delete(synchronize_session=False)
+            db.query(AgentRun).filter(AgentRun.id == run_id).delete(synchronize_session=False)
+            db.query(User).filter(User.id == user_id).delete(synchronize_session=False)
+            db.commit()
+        except Exception:
+            db.rollback()
+        db.close()
+        if workdir:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+
 def main() -> int:
     try:
         from sqlalchemy import create_engine
@@ -175,7 +278,10 @@ def main() -> int:
         print("Setup: createdb naviknow_test, then run backend/init.sql against it (see this file's docstring).")
         return 2
 
-    for fn in (check_find_in_text_real_db, check_alias_validation_real_db, check_cross_surface_merge_real_db):
+    for fn in (
+        check_find_in_text_real_db, check_alias_validation_real_db, check_cross_surface_merge_real_db,
+        check_reapply_with_additional_entities_real_db,
+    ):
         try:
             fn()
         except Exception as exc:

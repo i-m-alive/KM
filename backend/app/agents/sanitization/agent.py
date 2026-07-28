@@ -14,7 +14,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.agents.base import AgentFlag, AgentResult, AgentStep, BackgroundAgent, ReviewProposal
-from app.agents.sanitization import alias_validate, detector, precision_check, reidentify, review_deltas, summarizer
+from app.agents.sanitization import alias_validate, detector, precision_check, reidentify, revalidate, review_deltas, summarizer
 from app.agents.sanitization.apply_masks import apply_masks
 from app.agents.sanitization.image_scan import (
     MAX_IMAGES_SCANNED,
@@ -889,6 +889,60 @@ class SanitizationAgent(BackgroundAgent):
             for warning in coverage_warnings:
                 flags.append(AgentFlag(message=f"Channel-coverage audit: {warning}", severity="warning"))
 
+        # Revalidation: a second, independent pass over the RENDERED output
+        # that catches what the dictionary-based verification just above
+        # structurally cannot - it only confirms a KNOWN surface disappeared,
+        # never whether an entity was detected in the first place. Automatic
+        # on every completed run (not opt-in like precision/reidentify above)
+        # - the whole point is to catch what nobody already knew to look for,
+        # and gating it behind manual opt-in would defeat that. Two real
+        # leaks found this way in production motivated this: "Arvind
+        # Fashions" (a total detection miss sitting in plain body text next
+        # to a correctly-masked token) and "[CLIENT_25] Turbine Ltd." (a
+        # partial-name fragment left next to its own mask token) - see
+        # revalidate.py's docstring for the full story.
+        revalidation = None
+        redetect_resp = None
+        if rendered_natively and settings.SANITIZATION_REVALIDATION_ENABLED:
+            t = time.monotonic()
+            rendered_chunks = extract_chunks(masked_doc_path, doc.content_type, doc.filename)
+            rendered_alt_texts = extract_alt_text(masked_doc_path, doc.content_type, doc.filename, include_name=True)
+            rendered_full_text = "\n".join(c.text for c in rendered_chunks) + (
+                "\n" + "\n".join(rendered_alt_texts) if rendered_alt_texts else ""
+            )
+            tokens_used = list(surface_to_token.values())
+
+            boundary_hits = revalidate.find_boundary_leaks(rendered_full_text, tokens_used)
+
+            fresh_hits = []
+            if tokens_used:
+                redetect_resp = await revalidate.fresh_redetect(rendered_full_text)
+                fresh_hits = revalidate.parse_fresh_redetect_hits(redetect_resp)
+
+            residuals = boundary_hits + fresh_hits
+            score = revalidate.compute_completeness(len(surface_to_token), len(residuals))
+            revalidation = {"version": "v1", "score": score, "residuals": residuals}
+
+            if residuals:
+                preview = "; ".join(f"{r['leaked_text']} ({r['lens']}, {r['confidence']:.0%})" for r in residuals[:5])
+                flags.append(AgentFlag(
+                    message=(
+                        f"Revalidation found {len(residuals)} possible residual leak(s) not caught by dictionary-based "
+                        f"verification (estimated completeness {score}%): {preview}"
+                        f"{'…' if len(residuals) > 5 else ''}. Review and approve via the revalidation panel to re-sanitize."
+                    ),
+                    severity="blocking",
+                ))
+            steps.append(AgentStep(
+                order=10, name="revalidate (fresh-eyes re-detection)", tool="bedrock" if redetect_resp else None,
+                detail=(
+                    f"{len(boundary_hits)} boundary leak(s), {len(fresh_hits)} fresh-detect leak(s); "
+                    f"estimated completeness {score}%"
+                    + (f"; {redetect_resp.input_tokens}+{redetect_resp.output_tokens} tok" if redetect_resp else "")
+                ),
+                duration_ms=int((time.monotonic() - t) * 1000),
+            ))
+
         # Auto-build the logo reference set from this run's approved image
         # redactions - global, reused across future documents, same pattern
         # as text mask tokens (no manual curation - see app.masking.logo_reference).
@@ -899,7 +953,11 @@ class SanitizationAgent(BackgroundAgent):
             ocr_matched = (g.get("ocr_matched_surface") or "").strip().lower()
             linked_entity = surface_to_entity.get(ocr_matched) or surface_to_entity.get(client_entity_surface)
             if linked_entity:
-                store_reference(db, linked_entity.id, phash, run.id)
+                sample_ref = by_index.get(g.get("sample_index"))
+                store_reference(
+                    db, linked_entity.id, phash, run.id,
+                    image_bytes=sample_ref.image_bytes if sample_ref else None,
+                )
 
         output = {
             "document_id": document_id,
@@ -931,6 +989,7 @@ class SanitizationAgent(BackgroundAgent):
             },
             "occurrence_count": len(occurrences),
             "images_redacted": images_redacted,
+            "revalidation": revalidation,
             "sanitized_summary": parsed.get("sanitized_summary"),
             "metadata": parsed.get("metadata", {}),
             "masked_chunks": masked_chunks,
@@ -948,6 +1007,10 @@ class SanitizationAgent(BackgroundAgent):
             total_in += reidentify_resp.input_tokens
             total_out += reidentify_resp.output_tokens
             total_cost += reidentify_resp.estimated_cost_usd
+        if redetect_resp is not None:
+            total_in += redetect_resp.input_tokens
+            total_out += redetect_resp.output_tokens
+            total_cost += redetect_resp.estimated_cost_usd
         total_in += alias_validation_in
         total_out += alias_validation_out
         total_cost += alias_validation_cost

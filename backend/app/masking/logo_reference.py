@@ -7,6 +7,7 @@ same canonical entity as that image's text mask token if one was resolved.
 """
 
 import io
+import os
 import uuid
 
 from sqlalchemy.orm import Session
@@ -18,6 +19,8 @@ settings = get_settings()
 
 MATCH_THRESHOLD = 4  # Hamming distance <= this = confident match
 UNCERTAIN_THRESHOLD = 10  # <= this (but > MATCH_THRESHOLD) = needs_human_judgment
+
+_THUMBNAIL_MAX_SIZE = (160, 160)
 
 
 def _normalize_for_hash(im):
@@ -170,10 +173,40 @@ def find_matches(
     return hits
 
 
-def store_reference(db: Session, entity_id: uuid.UUID, phash: str, run_id: uuid.UUID | None) -> None:
+def _save_thumbnail(entity_id: uuid.UUID, image_bytes: bytes) -> str | None:
+    """Best-effort small PNG preview of the approved image, so governance can
+    SEE what a mask token actually matched instead of only a hex phash - None
+    if the bytes can't be opened (unsupported/corrupt format), same
+    degrade-gracefully contract as compute_phash. Filename includes a short
+    byte-content hash (not the phash) so two different renditions of the same
+    logo don't collide on disk before each gets its own LogoReference row."""
+    try:
+        import hashlib
+
+        from PIL import Image
+
+        out_dir = os.path.join(settings.OUTPUTS_DIR, "logo_thumbnails")
+        os.makedirs(out_dir, exist_ok=True)
+        digest = hashlib.sha256(image_bytes).hexdigest()[:16]
+        path = os.path.join(out_dir, f"{entity_id}__{digest}.png")
+        with Image.open(io.BytesIO(image_bytes)) as im:
+            im.load()
+            if im.mode not in ("RGB", "RGBA"):
+                im = im.convert("RGBA" if "A" in im.mode or im.mode == "P" else "RGB")
+            im.thumbnail(_THUMBNAIL_MAX_SIZE)
+            im.save(path, format="PNG")
+        return path
+    except Exception:
+        return None
+
+
+def store_reference(
+    db: Session, entity_id: uuid.UUID, phash: str, run_id: uuid.UUID | None, image_bytes: bytes | None = None,
+) -> None:
     if not phash:
         return
-    db.add(LogoReference(mask_entity_id=entity_id, phash=phash, source_run_id=run_id))
+    thumbnail_path = _save_thumbnail(entity_id, image_bytes) if image_bytes else None
+    db.add(LogoReference(mask_entity_id=entity_id, phash=phash, source_run_id=run_id, thumbnail_path=thumbnail_path))
     db.flush()
 
 

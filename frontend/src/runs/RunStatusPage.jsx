@@ -43,6 +43,83 @@ function VerificationPanel({ output }) {
   );
 }
 
+function RevalidationPanel({ run, onUpdated }) {
+  const [selected, setSelected] = useState(new Set());
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState(null);
+  const revalidation = run.output?.revalidation;
+  if (!revalidation) return null;
+  const { score, residuals } = revalidation;
+
+  function toggle(i) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
+
+  async function applyApproved() {
+    if (selected.size === 0) return;
+    setApplying(true);
+    setError(null);
+    try {
+      const updated = await apiPost(`/runs/${run.id}/revalidate/apply`, {
+        residual_indices: Array.from(selected),
+      });
+      onUpdated(updated);
+      setSelected(new Set());
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ margin: "1rem 0" }}>
+      <h3 className="card__title">
+        Revalidation — estimated completeness {score}%{" "}
+        <span className={`status-pill status-pill--${residuals.length === 0 ? "completed" : "failed"}`}>
+          {residuals.length === 0 ? "clean" : `${residuals.length} residual(s)`}
+        </span>
+      </h3>
+      <p className="card__sub">
+        A second, independent fresh-eyes pass over the rendered output — catches an entity that was never in the
+        masking dictionary at all, or a name only partially masked. This is an estimate bounded by this pass's own
+        detection power, not a guarantee — review the items below, not just the percentage.
+      </p>
+      {residuals.length === 0 ? (
+        <p className="agent-card__meta">No residual leaks found by revalidation.</p>
+      ) : (
+        <>
+          <ul className="flag-list">
+            {residuals.map((r, i) => (
+              <li
+                key={i}
+                className="flag-list__item flag-list__item--blocking"
+                style={{ display: "flex", gap: "0.6rem", alignItems: "flex-start" }}
+              >
+                <input type="checkbox" checked={selected.has(i)} onChange={() => toggle(i)} style={{ marginTop: "0.2rem" }} />
+                <span>
+                  <strong>{r.leaked_text}</strong>{" "}
+                  ({r.lens === "boundary" ? `partial mask, next to ${r.mask_token}` : "fresh-eyes miss"}, confidence{" "}
+                  {(r.confidence * 100).toFixed(0)}%){r.context && <> — "{r.context}"</>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {error && <p className="error-text">{error}</p>}
+          <button onClick={applyApproved} disabled={applying || selected.size === 0}>
+            {applying ? "Re-sanitizing…" : `Approve ${selected.size || ""} & re-sanitize`.replace("  ", " ")}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function RunStatusPage() {
   const { runId } = useParams();
   const navigate = useNavigate();
@@ -171,6 +248,8 @@ export default function RunStatusPage() {
       )}
 
       <VerificationPanel output={run.output} />
+
+      {run.agent_id === "sanitization" && <RevalidationPanel run={run} onUpdated={setRun} />}
 
       <FlagList flags={run.flags} />
 

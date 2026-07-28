@@ -129,8 +129,12 @@ CREATE TABLE IF NOT EXISTS logo_references (
   mask_entity_id UUID REFERENCES masking_entities(id) ON DELETE CASCADE NOT NULL,
   phash TEXT NOT NULL,
   source_run_id UUID REFERENCES agent_runs(id),
+  thumbnail_path TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Additive - safe to re-run against an existing database that already has logo_references.
+ALTER TABLE logo_references ADD COLUMN IF NOT EXISTS thumbnail_path TEXT;
 
 -- Memoizes the raw vision-model verdict for one image's content, scoped to a
 -- single run - detect() (worker process) and apply()'s verify (API process)

@@ -1,6 +1,35 @@
 import { useEffect, useState } from "react";
-import { apiGet, apiPatch, apiPost, apiDelete } from "../api/client";
+import { apiBlobUrl, apiGet, apiPatch, apiPost, apiDelete } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+
+// Thumbnails need an Authorization header a plain <img src> can't attach -
+// same reason ComparePage.jsx fetches its previews via apiBlobUrl instead of
+// pointing an <img>/<iframe> straight at the API path.
+function LogoThumbnail({ logoId }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = null;
+    apiBlobUrl(`/governance/logo-references/${logoId}/thumbnail`).then((u) => {
+      if (cancelled) return;
+      objectUrl = u;
+      setUrl(u);
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [logoId]);
+  if (!url) return null;
+  return (
+    <img
+      src={url}
+      alt="matched logo"
+      title="Image matched to this entity via perceptual-hash logo matching"
+      style={{ width: 40, height: 40, objectFit: "contain", border: "1px solid var(--ink-200)", borderRadius: 4, background: "#fff" }}
+    />
+  );
+}
 
 const ROLES = ["admin", "km_governance", "km_reviewer", "practice_lead", "delivery", "read_only"];
 
@@ -234,6 +263,7 @@ function MaskingDictionarySection() {
           <tr>
             <th>Mask token</th>
             <th>Surface(s)</th>
+            <th>Logos</th>
             <th>Type</th>
             <th>Status</th>
             <th>Client account</th>
@@ -244,13 +274,35 @@ function MaskingDictionarySection() {
         <tbody>
           {entities.length === 0 && (
             <tr>
-              <td colSpan={7}>No masking entities yet.</td>
+              <td colSpan={8}>No masking entities yet.</td>
             </tr>
           )}
           {entities.map((e) => (
             <tr key={e.id}>
               <td className="agent-card__meta">{e.mask_token}</td>
               <td>{e.aliases.join(", ")}</td>
+              <td>
+                {e.logos.length === 0 ? (
+                  <span className="agent-card__meta">—</span>
+                ) : (
+                  <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+                    {e.logos.map((logo) =>
+                      logo.thumbnail_available ? (
+                        <LogoThumbnail key={logo.id} logoId={logo.id} />
+                      ) : (
+                        <span
+                          key={logo.id}
+                          className="agent-card__meta"
+                          title="Matched via perceptual hash, but no preview image was stored for this one"
+                          style={{ width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", border: "1px dashed var(--ink-200)", borderRadius: 4, fontSize: "0.7rem" }}
+                        >
+                          n/a
+                        </span>
+                      )
+                    )}
+                  </div>
+                )}
+              </td>
               <td className="agent-card__meta">{e.entity_type}</td>
               <td>
                 <span className={`status-pill status-pill--${e.status === "approved" ? "completed" : e.status === "skipped" ? "failed" : "awaiting_review"}`}>

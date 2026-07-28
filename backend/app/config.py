@@ -100,6 +100,17 @@ class Settings(BaseSettings):
     SANITIZATION_REIDENTIFY_ENABLED: bool = False
     SANITIZATION_REIDENTIFY_THRESHOLD: float = 0.5
 
+    # Revalidation agent: a second, independent pass over the RENDERED masked
+    # output (see revalidate.py) that catches what verify.py structurally
+    # cannot - an entity that was never in the dictionary in the first place
+    # (a total detection miss), or a partial-name fragment left next to its
+    # own mask token. Unlike precision/reidentify above, defaults True and
+    # runs unconditionally on every completed run: this exists specifically
+    # to catch what nobody already knew to look for, so gating it behind
+    # manual opt-in would defeat the point. Findings are surfaced as
+    # "blocking" flags for a human to approve/reject, never auto-applied.
+    SANITIZATION_REVALIDATION_ENABLED: bool = True
+
     # Tagging
     TAG_CONFIDENCE_THRESHOLD: float = 0.7  # below this, flag for reviewer instead of auto-applying
 

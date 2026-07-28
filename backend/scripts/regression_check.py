@@ -1371,6 +1371,101 @@ def check_xlsx_alt_text() -> None:
         shutil.rmtree(workdir, ignore_errors=True)
 
 
+def check_revalidation_agent() -> None:
+    """Acceptance test for the revalidation agent (revalidate.py): a second,
+    independent pass over the rendered output. Uses the two REAL leaks found
+    by directly inspecting a completed production run's actual output file -
+    "[CLIENT_25] Turbine Ltd." (a partial-name fragment next to its own mask
+    token - Lens 1, deterministic) and "Arvind Fashions" (a total detection
+    miss elsewhere in the text - Lens 2, mocked Bedrock, same offline
+    discipline as check_precision_qa/check_reidentify_qa)."""
+    print("\n== revalidation agent (fresh-eyes re-check, Lens 1 + Lens 2 + scoring) ==")
+    from app.agents.sanitization import revalidate
+    from app.llm import bedrock_client
+
+    # Lens 1: deterministic boundary heuristic.
+    leaky_text = (
+        "Intelligent automation of the B2C Order-to-cash process reconciliation with third-party "
+        "marketplace [CLIENT_15] (such as Ajio, Myntra, etc.) and D2C website for Arvind Fashions. "
+        "AI-driven process transformation for [CLIENT_25] Turbine Ltd. | Bangalore."
+    )
+    boundary_hits = revalidate.find_boundary_leaks(leaky_text, ["[CLIENT_15]", "[CLIENT_25]"])
+    hit = next((h for h in boundary_hits if h["mask_token"] == "[CLIENT_25]"), None)
+    check("boundary heuristic catches a legal-suffix fragment left next to its own mask token",
+          hit is not None and hit["leaked_text"] == "Turbine Ltd.", f"got: {boundary_hits}")
+    check("boundary heuristic does not flag a token with nothing suspicious immediately after it",
+          not any(h["mask_token"] == "[CLIENT_15]" for h in boundary_hits), f"got: {boundary_hits}")
+
+    clean_text = "The engagement was led by [CLIENT_1] alongside their advisory team."
+    check("boundary heuristic finds nothing in ordinary masked prose",
+          revalidate.find_boundary_leaks(clean_text, ["[CLIENT_1]"]) == [])
+
+    # Lens 2: fresh, adversarial re-detection (mocked Bedrock).
+    canned_entities = {
+        "entities": [
+            {"surface_text": "Arvind Fashions", "entity_type": "CLIENT_NAME", "confidence": 0.9},
+            {"surface_text": "[CLIENT_15]", "entity_type": "CLIENT_NAME", "confidence": 0.4},  # must be filtered
+            {"surface_text": "Navikenz", "entity_type": "CLIENT_NAME", "confidence": 0.3},  # own-firm, must be filtered
+        ]
+    }
+    mock_resp = bedrock_client.BedrockResponse(text="", parsed=canned_entities, input_tokens=200, output_tokens=40, estimated_cost_usd=0.001)
+    with patch.object(bedrock_client, "converse", new=AsyncMock(return_value=mock_resp)):
+        resp = asyncio.run(revalidate.fresh_redetect(leaky_text))
+    fresh_hits = revalidate.parse_fresh_redetect_hits(resp)
+    check("fresh re-detect surfaces the total-miss entity (Arvind Fashions)",
+          any(h["leaked_text"] == "Arvind Fashions" for h in fresh_hits), f"got: {fresh_hits}")
+    check("fresh re-detect filters out a bare mask token echoed back",
+          not any(h["leaked_text"] == "[CLIENT_15]" for h in fresh_hits), f"got: {fresh_hits}")
+    check("fresh re-detect filters out the delivery firm's own name",
+          not any(h["leaked_text"] == "Navikenz" for h in fresh_hits), f"got: {fresh_hits}")
+
+    with patch.object(bedrock_client, "converse", new=AsyncMock(return_value=mock_resp)) as mocked:
+        resp_empty = asyncio.run(revalidate.fresh_redetect(""))
+    check("fresh re-detect makes no Bedrock call on empty text", resp_empty is None and not mocked.called)
+
+    # Scoring: masked / (masked + residual), always paired with the residual list.
+    score = revalidate.compute_completeness(masked_count=46, residual_count=2)
+    check("completeness score matches the real Fidelity run (46 masked, 2 residual -> ~95.8%)",
+          abs(score - 95.8) < 0.1, f"got: {score}")
+    check("completeness score is 100% when nothing was masked and nothing is residual",
+          revalidate.compute_completeness(0, 0) == 100.0)
+    check("completeness score is 0% when everything masked has an equal-count residual twin",
+          revalidate.compute_completeness(0, 5) == 0.0)
+
+
+def check_logo_thumbnail() -> None:
+    """Acceptance test for the admin-panel logo visibility gap: an approved
+    image match previously left NO trace in the admin UI beyond a bare hex
+    phash - _save_thumbnail must produce a small preview PNG on disk from
+    real image bytes, must degrade gracefully (None, not a crash) on bytes
+    PIL can't open, and store_reference must persist the resulting path onto
+    the LogoReference row so the API can serve it back."""
+    print("\n== logo reference thumbnail (admin panel visibility) ==")
+    import uuid
+
+    from app.masking import logo_reference
+
+    workdir = Path(tempfile.mkdtemp(prefix="naviknow-logo-thumb-"))
+    try:
+        with patch.object(logo_reference.settings, "OUTPUTS_DIR", str(workdir)):
+            image_bytes = _png_bytes(color=(40, 90, 200))
+            entity_id = uuid.uuid4()
+
+            path = logo_reference._save_thumbnail(entity_id, image_bytes)
+            check("a thumbnail path is returned for real image bytes", path is not None, f"got: {path}")
+            check("the thumbnail file actually exists on disk", path is not None and Path(path).exists())
+
+            from PIL import Image
+            with Image.open(path) as im:
+                check("the thumbnail was actually resized down (not a full-size copy)",
+                      im.size[0] <= 160 and im.size[1] <= 160, f"got: {im.size}")
+
+            bad_path = logo_reference._save_thumbnail(entity_id, b"not a real image")
+            check("an unopenable image degrades to None instead of raising", bad_path is None, f"got: {bad_path}")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
 def main() -> int:
     workdir = Path(tempfile.mkdtemp(prefix="naviknow-regression-"))
     try:
@@ -1574,6 +1669,22 @@ def main() -> int:
 
             traceback.print_exc()
             failures.append(f"xlsx alt-text: crashed - {exc}")
+
+        try:
+            check_revalidation_agent()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"revalidation agent: crashed - {exc}")
+
+        try:
+            check_logo_thumbnail()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"logo reference thumbnail: crashed - {exc}")
 
         print(f"\n{'=' * 50}\n{passes} checks passed, {len(failures)} failed")
         for f in failures:

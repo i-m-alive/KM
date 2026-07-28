@@ -218,6 +218,12 @@ class LogoReference(Base):
     mask_entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("masking_entities.id", ondelete="CASCADE"), nullable=False)
     phash: Mapped[str] = mapped_column(String, nullable=False)
     source_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agent_runs.id"), nullable=True)
+    # Local-disk path to a small preview PNG of the actual approved image, so
+    # governance can SEE what got matched instead of trusting a bare hex hash -
+    # best-effort: None if the source bytes couldn't be opened by PIL (an
+    # unsupported/corrupt raster format), same degrade-gracefully contract as
+    # compute_phash itself.
+    thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
 

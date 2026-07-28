@@ -1,17 +1,20 @@
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth.permissions import require_capability
 from app.db import get_db
 from app.masking import dictionary
-from app.models import AccountOwnership, AgentRun, AuditLog, ClientAccount, MaskingEntity, Role, User
+from app.models import AccountOwnership, AgentRun, AuditLog, ClientAccount, LogoReference, MaskingEntity, Role, User
 from app.schemas import (
     AuditLogEntryOut,
     ClientAccountCreateRequest,
     ClientAccountOut,
+    LogoReferenceOut,
     MaskingEntityOut,
     OwnerAssignRequest,
     UserOut,
@@ -156,8 +159,9 @@ def get_full_audit_log(
 DICTIONARY_STALE_AFTER_DAYS = 14
 
 
-def _to_entity_out(entity: MaskingEntity) -> MaskingEntityOut:
+def _to_entity_out(entity: MaskingEntity, logos_by_entity: dict[uuid.UUID, list[LogoReference]] | None = None) -> MaskingEntityOut:
     stale_cutoff = datetime.now(timezone.utc) - timedelta(days=DICTIONARY_STALE_AFTER_DAYS)
+    logos = (logos_by_entity or {}).get(entity.id, [])
     return MaskingEntityOut(
         id=entity.id,
         mask_token=entity.mask_token,
@@ -168,6 +172,10 @@ def _to_entity_out(entity: MaskingEntity) -> MaskingEntityOut:
         client_account_name=entity.client_account.name if entity.client_account else None,
         created_at=entity.created_at,
         stale=entity.status == "pending_approval" and entity.created_at < stale_cutoff,
+        logos=[
+            LogoReferenceOut(id=lr.id, created_at=lr.created_at, thumbnail_available=bool(lr.thumbnail_path))
+            for lr in logos
+        ],
     )
 
 
@@ -182,7 +190,27 @@ def list_masking_dictionary(
         .order_by(MaskingEntity.created_at.desc())
         .all()
     )
-    return [_to_entity_out(e) for e in entities]
+    logos_by_entity: dict[uuid.UUID, list[LogoReference]] = {}
+    for lr in db.query(LogoReference).order_by(LogoReference.created_at.desc()).all():
+        logos_by_entity.setdefault(lr.mask_entity_id, []).append(lr)
+    return [_to_entity_out(e, logos_by_entity) for e in entities]
+
+
+@router.get("/logo-references/{logo_reference_id}/thumbnail")
+def get_logo_reference_thumbnail(
+    logo_reference_id: int,
+    _: User = Depends(require_capability("view_raw_masking_dictionary")),
+    db: Session = Depends(get_db),
+):
+    """Preview PNG of the actual approved image a mask token was matched
+    against (see app.masking.logo_reference) - not every reference has one
+    (best-effort, see LogoReference.thumbnail_path's docstring)."""
+    ref = db.get(LogoReference, logo_reference_id)
+    if ref is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Logo reference not found")
+    if not ref.thumbnail_path or not os.path.exists(ref.thumbnail_path):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No thumbnail available for this logo reference")
+    return FileResponse(ref.thumbnail_path, media_type="image/png")
 
 
 @router.post("/masking-dictionary/{entity_id}/skip", response_model=MaskingEntityOut)
