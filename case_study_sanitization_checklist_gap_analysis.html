@@ -89,6 +89,12 @@
   .pill.prot{color:#8A5A10;background:var(--brass-bg);border-color:var(--brass-line);}
   .pill.new{color:var(--ready);background:var(--ready-bg);border-color:var(--ready-line);}
   .pill.ext{color:var(--archive);background:var(--archive-bg);border-color:var(--archive-line);}
+<<<<<<< HEAD
+=======
+  .pill.p4{color:var(--archive);background:var(--archive-bg);border-color:var(--archive-line);}
+  .pill.mand{color:#fff;background:var(--danger);border-color:var(--danger);font-weight:600;}
+  .pill.synth{color:var(--archive);background:var(--archive-bg);border-color:var(--archive-line);}
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
   .callout{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--skill);border-radius:12px;padding:18px 20px;margin:20px 0;}
   .callout.blue{border-left-color:var(--signal);}
@@ -148,6 +154,21 @@
   .tiergate .tier.t3{border-top:4px solid var(--danger-line);}
   @media(max-width:900px){ .tiergate{grid-template-columns:1fr;} }
 
+<<<<<<< HEAD
+=======
+  .tiergate4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:6px 0 20px;}
+  .tiergate4 .tier{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
+  .tiergate4 .tier h4{font-family:"Space Grotesk";margin:0 0 8px;color:var(--navy);font-size:.98rem;}
+  .tiergate4 .tier ul{margin:0;padding-left:18px;font-size:.85rem;color:var(--ink-soft);}
+  .tiergate4 .tier ul li{margin-bottom:5px;}
+  .tiergate4 .tier.l1{border-top:4px solid var(--ready-line);}
+  .tiergate4 .tier.l2{border-top:4px solid var(--skill-line);}
+  .tiergate4 .tier.l3{border-top:4px solid var(--brass-line);}
+  .tiergate4 .tier.l4{border-top:4px solid var(--danger-line);}
+  @media(max-width:900px){ .tiergate4{grid-template-columns:1fr 1fr;} }
+  @media(max-width:560px){ .tiergate4{grid-template-columns:1fr;} }
+
+>>>>>>> 2eb74f5 (Added case study and updated files)
   .phase{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:14px;}
   .phase .phead{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
   .phase .pnum{font-family:"IBM Plex Mono";font-weight:700;color:#fff;background:var(--navy);border-radius:7px;padding:2px 9px;font-size:12px;}
@@ -186,13 +207,21 @@
 
 <header class="mast">
   <div class="wrap">
+<<<<<<< HEAD
     <p class="kicker"><span class="dot"></span> NaviKnow · Agent Platform <span class="dot"></span> A-01 Sanitization <span class="dot"></span> Full Checklist Audit &amp; Implementation Plan · v2</p>
+=======
+    <p class="kicker"><span class="dot"></span> NaviKnow · Agent Platform <span class="dot"></span> A-01 Sanitization <span class="dot"></span> Full Checklist Audit &amp; Implementation Plan · v3 <span class="dot"></span> + Phase 4 policy engine</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <h1 class="title">Case Study Sanitization Checklist — every item, what's done, what's not, and how we close the rest</h1>
     <p class="lede">A full item-by-item audit of the 29 checks in the Case Study Sanitization Checklist against the Sanitization Agent (A-01) as actually built and debugged — not the design intent, the validated behavior. Where the checklist isn't met, this document designs the technical closure: new entity types, new skills, new protected calls, the data model and file changes they need, and the review/governance process that ties it all to the checklist's own distribution-approval field.</p>
     <div class="mast-meta">
       <span>SOURCE &nbsp;<b>Case_Study_Sanitization_Checklist.html — 10 categories, 29 checks</b></span>
       <span>BASELINE &nbsp;<b>A-01 design v3 + live debugging report (19 bugs fixed, 5/5 channels verified clean)</b></span>
       <span>RESULT &nbsp;<b>2 done · 5 partial · 19 gap · 3 process gap</b></span>
+<<<<<<< HEAD
+=======
+      <span>PHASE 4 &nbsp;<b>Advanced Policy-Based Sanitization — rule engine, 4-level hierarchy, policy matrix (added this revision, Sec. 12)</b></span>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     </div>
   </div>
 </header>
@@ -211,6 +240,10 @@
     <a href="#plan">09 Build plan &amp; phasing</a>
     <a href="#decisions">10 Decisions log</a>
     <a href="#implementation">11 Detailed implementation plan</a>
+<<<<<<< HEAD
+=======
+    <a href="#phase4">12 Phase 4 · Policy-based sanitization</a>
+>>>>>>> 2eb74f5 (Added case study and updated files)
   </div>
 </nav>
 
@@ -306,19 +339,31 @@
     <p class="sec-sub">The 24 partial/gap items above collapse into seven design problems (the People and Technical/Screenshots partial items close alongside their category's gap fix). Each states what's missing, why the current architecture doesn't catch it, and the technical closure design.</p>
 
     <div class="gapcard">
+<<<<<<< HEAD
       <div class="ghead"><span class="pill p1">P1</span><h3>A · Commercial &amp; Financial Terms <span style="opacity:.7;font-size:.8em">(3.1–3.3)</span></h3></div>
+=======
+      <div class="ghead"><span class="pill p1">P1</span><h3>A · Commercial &amp; Financial Terms <span style="opacity:.7;font-size:.8em">(3.1—3.3)</span></h3></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       <div class="gbody">
         <div class="gwhy"><b>Root cause:</b> the taxonomy has an explicit row keeping deal dollar amounts by default — correct for an internal record, wrong for something meant to leave the building.</div>
         <span class="glabel">Design</span>
         <ul class="gdesign">
           <li>New entity type <code class="inline">COMMERCIAL_TERM</code> — regex pre-pass for currency/percentage/payment-term patterns (free) feeding the Detector for contextual classification (a $ figure near "trial balance" isn't a commercial-term hit; one near "contract value" is).</li>
+<<<<<<< HEAD
           <li>Default action is <b>flag</b>, not mask — a case study often needs a figure to stay credible ("saved $2M annually"). Reviewer chooses keep / generalize ("$2M" → "multi-million dollar") / remove.</li>
+=======
+          <li>Default action is <b>flag</b>, not mask — a case study often needs a figure to stay credible ("saved $2M annually"). Reviewer chooses keep / generalize ("$2M" — "multi-million dollar") / remove.</li>
+>>>>>>> 2eb74f5 (Added case study and updated files)
         </ul>
       </div>
     </div>
 
     <div class="gapcard">
+<<<<<<< HEAD
       <div class="ghead"><span class="pill p2">P2</span><h3>B · Infrastructure, Security &amp; Credentials <span style="opacity:.7;font-size:.8em">(4.1–4.3)</span></h3></div>
+=======
+      <div class="ghead"><span class="pill p2">P2</span><h3>B · Infrastructure, Security &amp; Credentials <span style="opacity:.7;font-size:.8em">(4.1—4.3)</span></h3></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       <div class="gbody">
         <div class="gwhy"><b>Root cause:</b> the pre-pass pattern library only knows identity shapes (emails, org/person names) — nothing about hostnames, IP ranges, or secret formats.</div>
         <span class="glabel">Design</span>
@@ -331,7 +376,11 @@
     </div>
 
     <div class="gapcard">
+<<<<<<< HEAD
       <div class="ghead"><span class="pill p1">P1</span><h3>C · Data Samples in Screenshots, Datasets &amp; Reports <span style="opacity:.7;font-size:.8em">(5.1–5.3)</span></h3></div>
+=======
+      <div class="ghead"><span class="pill p1">P1</span><h3>C · Data Samples in Screenshots, Datasets &amp; Reports <span style="opacity:.7;font-size:.8em">(5.1—5.3)</span></h3></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       <div class="gbody">
         <div class="gwhy"><b>Root cause:</b> the vision call asks exactly one question — does this image reveal client <i>identity</i> (logo/wordmark). It's never asked whether the image's <i>content</i> is real, unmasked client data.</div>
         <span class="glabel">Design</span>
@@ -356,7 +405,11 @@
     </div>
 
     <div class="gapcard">
+<<<<<<< HEAD
       <div class="ghead"><span class="pill p2">P2</span><h3>E · Competitive &amp; Strategic Information <span style="opacity:.7;font-size:.8em">(6.1–6.3)</span></h3></div>
+=======
+      <div class="ghead"><span class="pill p2">P2</span><h3>E · Competitive &amp; Strategic Information <span style="opacity:.7;font-size:.8em">(6.1—6.3)</span></h3></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       <div class="gbody">
         <div class="gwhy"><b>Root cause:</b> this is contextual, judgment-heavy prose ("the client is evaluating a divestiture of...") — structurally not name-shaped or number-shaped, so no regex pre-pass can catch it and the current Detector skill is scoped to identity, not strategy.</div>
         <span class="glabel">Design</span>
@@ -368,7 +421,11 @@
     </div>
 
     <div class="gapcard">
+<<<<<<< HEAD
       <div class="ghead"><span class="pill p2">P2</span><h3>F · Sensitive Outcomes <span style="opacity:.7;font-size:.8em">(7.1–7.3)</span></h3></div>
+=======
+      <div class="ghead"><span class="pill p2">P2</span><h3>F · Sensitive Outcomes <span style="opacity:.7;font-size:.8em">(7.1—7.3)</span></h3></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       <div class="gbody">
         <div class="gwhy"><b>Root cause:</b> this is the clearest case where "detect and mask" is the wrong shape — a root-cause narrative or a negative metric is often exactly what makes a case study credible, and whether it's safe to publish is a client-relationship judgment call, not a text pattern.</div>
         <span class="glabel">Design</span>
@@ -396,11 +453,16 @@
   <!-- 04 TAXONOMY -->
   <section id="taxonomy">
     <div class="sec-head"><span class="num">04</span><h2>New entity taxonomy — additions to A-01's fixed table</h2></div>
+<<<<<<< HEAD
     <p class="sec-sub">Appends to the existing taxonomy (A-01 design §06). Action follows the same three-value convention already in use, plus one new value this plan introduces: <span class="pill covered">Mask</span> exact deterministic replacement, <span class="pill gap">Mandatory redact</span> non-overridable removal, <span class="pill partial">Flag</span> a reviewer judgment call, <span class="pill covered">Keep</span> untouched.</p>
+=======
+    <p class="sec-sub">Appends to the existing taxonomy (A-01 design Sec. 06). Action follows the same three-value convention already in use, plus one new value this plan introduces: <span class="pill covered">Mask</span> exact deterministic replacement, <span class="pill gap">Mandatory redact</span> non-overridable removal, <span class="pill partial">Flag</span> a reviewer judgment call, <span class="pill covered">Keep</span> untouched.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <div class="wrap-x">
     <table class="board">
       <thead><tr><th style="width:190px">Entity type</th><th>Examples</th><th style="width:120px">Detection</th><th style="width:130px">Default action</th><th style="width:100px">Closes</th></tr></thead>
       <tbody>
+<<<<<<< HEAD
         <tr><td class="anm">COMMERCIAL_TERM</td><td class="small">Contract value, margins, discounts, pricing/payment terms, SLA-breach detail</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">3.1–3.3</td></tr>
         <tr><td class="anm">INFRA_IDENTIFIER</td><td class="small">IP ranges, hostnames, internal domains, firewall/security config detail</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill covered">Mask</span></td><td class="small">4.1–4.2</td></tr>
         <tr><td class="anm">CREDENTIAL</td><td class="small">API keys, tokens, connection strings, passwords</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill gap">Mandatory redact</span></td><td class="small">4.3</td></tr>
@@ -410,6 +472,17 @@
         <tr><td class="anm">STRATEGY_MENTION</td><td class="small">M&amp;A plans, unannounced initiatives, roadmaps</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">6.3</td></tr>
         <tr><td class="anm">NEGATIVE_OUTCOME</td><td class="small">Failure/outage/breach root cause, negative metric, regulatory finding</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag — client sign-off</span></td><td class="small">7.1–7.3</td></tr>
         <tr><td class="anm">OWN_COST_DETAIL</td><td class="small">Internal staffing ratios, day-rate/FTE figures, exact internal configs</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">8.1–8.2</td></tr>
+=======
+        <tr><td class="anm">COMMERCIAL_TERM</td><td class="small">Contract value, margins, discounts, pricing/payment terms, SLA-breach detail</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">3.1—3.3</td></tr>
+        <tr><td class="anm">INFRA_IDENTIFIER</td><td class="small">IP ranges, hostnames, internal domains, firewall/security config detail</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill covered">Mask</span></td><td class="small">4.1—4.2</td></tr>
+        <tr><td class="anm">CREDENTIAL</td><td class="small">API keys, tokens, connection strings, passwords</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill gap">Mandatory redact</span></td><td class="small">4.3</td></tr>
+        <tr><td class="anm">DIAGRAM_LABEL_TEXT</td><td class="small">System names / infra labels rendered inside a diagram image</td><td class="center"><span class="pill skill">Vision-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">4.4</td></tr>
+        <tr><td class="anm">DATA_SAMPLE_IMAGE</td><td class="small">Screenshot/dashboard image containing real (non-synthetic) client data</td><td class="center"><span class="pill skill">Vision-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">5.1, 5.3</td></tr>
+        <tr><td class="anm">COMPETITOR_NAME</td><td class="small">Named competing vendors, referenced client competitors</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag — mask on confirm</span></td><td class="small">6.1—6.2</td></tr>
+        <tr><td class="anm">STRATEGY_MENTION</td><td class="small">M&amp;A plans, unannounced initiatives, roadmaps</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">6.3</td></tr>
+        <tr><td class="anm">NEGATIVE_OUTCOME</td><td class="small">Failure/outage/breach root cause, negative metric, regulatory finding</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag — client sign-off</span></td><td class="small">7.1—7.3</td></tr>
+        <tr><td class="anm">OWN_COST_DETAIL</td><td class="small">Internal staffing ratios, day-rate/FTE figures, exact internal configs</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">8.1—8.2</td></tr>
+>>>>>>> 2eb74f5 (Added case study and updated files)
         <tr><td class="anm">ORG_CHART_STRUCTURE</td><td class="small">Reporting-line diagrams, structured name/title pairs</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">2.3</td></tr>
         <tr><td class="anm">CLIENT_PERSON_TITLE / CLIENT_PHONE</td><td class="small">Job titles and phone numbers tied to a named client stakeholder</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill covered">Mask</span></td><td class="small">2.1</td></tr>
         <tr><td class="anm">INTERNAL_TEAM_MEMBER</td><td class="small">NaviKenz staff named/pictured alongside the client</td><td class="center"><span class="pill prot">Consent lookup</span></td><td class="center"><span class="pill partial">Keep if consented, else flag</span></td><td class="small">2.2</td></tr>
@@ -425,7 +498,11 @@
   <!-- 05 SKILLS ROSTER -->
   <section id="skillsroster">
     <div class="sec-head"><span class="num">05</span><h2>Skills roster remaining to implement</h2></div>
+<<<<<<< HEAD
     <p class="sec-sub">Skills in the platform's own sense (A-01 design §09) — reusable prompt/behaviour modules the Detector, Summarizer, and vision-scan steps load. This section is <i>only</i> the LLM-reasoning additions; deterministic, code-only additions are tracked separately in §06 so the tool/skill separation A-01 already relies on stays intact.</p>
+=======
+    <p class="sec-sub">Skills in the platform's own sense (A-01 design Sec. 09) — reusable prompt/behaviour modules the Detector, Summarizer, and vision-scan steps load. This section is <i>only</i> the LLM-reasoning additions; deterministic, code-only additions are tracked separately in Sec. 06 so the tool/skill separation A-01 already relies on stays intact.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <div class="wrap-x">
     <table class="board">
       <thead><tr><th style="width:250px">Skill</th><th style="width:130px">Used by</th><th>What it encodes</th><th style="width:90px">Status</th></tr></thead>
@@ -449,7 +526,11 @@
   <!-- 06 PROTECTED CALLS -->
   <section id="protcalls">
     <div class="sec-head"><span class="num">06</span><h2>Protected calls &amp; deterministic additions</h2></div>
+<<<<<<< HEAD
     <p class="sec-sub">Following A-01's own tools-vs-protected-calls split (design §08): these run as agent code, never as a model tool call — the same discipline that keeps <code class="inline">document.apply_masks</code> exact and repeatable applies here.</p>
+=======
+    <p class="sec-sub">Following A-01's own tools-vs-protected-calls split (design Sec. 08): these run as agent code, never as a model tool call — the same discipline that keeps <code class="inline">document.apply_masks</code> exact and repeatable applies here.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <div class="wrap-x">
     <table class="board">
       <thead><tr><th style="width:260px">Call</th><th style="width:100px">Type</th><th>Role</th><th style="width:90px">Status</th></tr></thead>
@@ -460,8 +541,13 @@
         <tr><td class="anm">flag_for_judgment.create</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Writes a new-style proposal item (commercial term / competitor / strategy / negative outcome / own-cost) distinct from a mask candidate — one shared mechanism for all five flag-based entity types.</td><td class="center"><span class="pill new">New</span></td></tr>
         <tr><td class="anm">flag_for_judgment.resolve</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Records the reviewer's decision (keep / generalize / remove / requires client sign-off) against a flagged item, part of the audit trail.</td><td class="center"><span class="pill new">New</span></td></tr>
         <tr><td class="anm">internal_team_consent.lookup / set</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Deterministic read/write of a named internal team member's consent status, checked before defaulting to "keep."</td><td class="center"><span class="pill new">New</span></td></tr>
+<<<<<<< HEAD
         <tr><td class="anm">legal_attestation.record</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Governance-only write of the MSA/NDA, case-study clause, and compliance-confirmed booleans (§08).</td><td class="center"><span class="pill new">New</span></td></tr>
         <tr><td class="anm">distribution_gate.evaluate</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Checks a run's open flags + attestation record against the requested distribution tier before allowing it to be marked ready (§08).</td><td class="center"><span class="pill new">New</span></td></tr>
+=======
+        <tr><td class="anm">legal_attestation.record</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Governance-only write of the MSA/NDA, case-study clause, and compliance-confirmed booleans (Sec. 08).</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">distribution_gate.evaluate</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Checks a run's open flags + attestation record against the requested distribution tier before allowing it to be marked ready (Sec. 08).</td><td class="center"><span class="pill new">New</span></td></tr>
+>>>>>>> 2eb74f5 (Added case study and updated files)
         <tr><td class="anm">document.apply_masks</td><td class="center"><span class="pill prot">Existing</span></td><td class="small">Unchanged — deterministic span replacement over reviewer-approved entities, now also covering the new mask-type entity additions.</td><td class="center"><span class="pill covered">Existing</span></td></tr>
       </tbody>
     </table>
@@ -471,7 +557,11 @@
   <!-- 07 ARCHITECTURE -->
   <section id="architecture">
     <div class="sec-head"><span class="num">07</span><h2>Architecture — extended pipeline, data model, and file layout</h2></div>
+<<<<<<< HEAD
     <p class="sec-sub">No new sub-agents and no new run states. Every technical addition below slots into an existing step of the detect → review → apply → verify pipeline already proven on a real document.</p>
+=======
+    <p class="sec-sub">No new sub-agents and no new run states. Every technical addition below slots into an existing step of the detect — review — apply — verify pipeline already proven on a real document.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
     <figure class="diagram-fig">
       <svg class="diagram" viewBox="0 0 1160 260" role="img" aria-label="Extended sanitization pipeline: detect phase runs extract text, NER pre-pass plus new infra/credential regex, dictionary lookup, LLM Detector with new skills, vision scan with new fields, then human review with new judgment flags; on approval the apply phase runs apply masks, render, redact images, a new EXIF strip step, scrub metadata, and verify across six channels.">
@@ -499,7 +589,11 @@
           <rect x="510" y="28" width="180" height="60" rx="8" class="box-rect box-new"></rect>
           <text x="600" y="50" text-anchor="middle">LLM Detector</text>
           <text x="600" y="64" text-anchor="middle" class="lbl-sub">+ 4 new skills</text>
+<<<<<<< HEAD
           <text x="600" y="77" text-anchor="middle" class="lbl-sub">(§05)</text>
+=======
+          <text x="600" y="77" text-anchor="middle" class="lbl-sub">(Sec. 05)</text>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
           <rect x="710" y="28" width="180" height="60" rx="8" class="box-rect box-new"></rect>
           <text x="800" y="50" text-anchor="middle">Vision scan</text>
@@ -509,7 +603,11 @@
           <rect x="910" y="28" width="230" height="60" rx="8" class="box-rect box-new"></rect>
           <text x="1025" y="50" text-anchor="middle">Human review</text>
           <text x="1025" y="64" text-anchor="middle" class="lbl-sub">+ judgment-flag queue</text>
+<<<<<<< HEAD
           <text x="1025" y="77" text-anchor="middle" class="lbl-sub">(§06 flag_for_judgment)</text>
+=======
+          <text x="1025" y="77" text-anchor="middle" class="lbl-sub">(Sec. 06 flag_for_judgment)</text>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
           <path d="M140,58 L160,58" class="arrow" marker-end="url(#arrowA)"></path>
           <path d="M340,58 L360,58" class="arrow" marker-end="url(#arrowA)"></path>
@@ -544,7 +642,11 @@
 
           <rect x="810" y="158" width="220" height="60" rx="8" class="box-rect box-ext"></rect>
           <text x="920" y="185" text-anchor="middle">Verify</text>
+<<<<<<< HEAD
           <text x="920" y="200" text-anchor="middle" class="lbl-sub">5 → 6 channels (+ EXIF)</text>
+=======
+          <text x="920" y="200" text-anchor="middle" class="lbl-sub">5 — 6 channels (+ EXIF)</text>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
           <path d="M140,188 L160,188" class="arrow" marker-end="url(#arrowA)"></path>
           <path d="M280,188 L300,188" class="arrow" marker-end="url(#arrowA)"></path>
@@ -566,7 +668,11 @@
     <table class="board">
       <thead><tr><th style="width:210px">Table / column</th><th>Purpose</th><th style="width:100px">Status</th></tr></thead>
       <tbody>
+<<<<<<< HEAD
         <tr><td class="anm">masking_dictionary.entity_type</td><td class="small">Enum extended with the ten new entity types from §04.</td><td class="center"><span class="pill ext">Extend</span></td></tr>
+=======
+        <tr><td class="anm">masking_dictionary.entity_type</td><td class="small">Enum extended with the ten new entity types from Sec. 04.</td><td class="center"><span class="pill ext">Extend</span></td></tr>
+>>>>>>> 2eb74f5 (Added case study and updated files)
         <tr><td class="anm">masking_dictionary.consent_status</td><td class="small">New column — <code class="inline">not_required</code> / <code class="inline">pending</code> / <code class="inline">granted</code>, for internal-team entities only.</td><td class="center"><span class="pill new">New</span></td></tr>
         <tr><td class="anm">flagged_items</td><td class="small">New table — <code class="inline">run_id, flag_type, chunk_id/image_id, surface_text, suggested_action, status (pending/resolved), reviewer_id, resolution, decided_at</code>. Backs <code class="inline">flag_for_judgment.*</code> for all five flag-based entity types.</td><td class="center"><span class="pill new">New</span></td></tr>
         <tr><td class="anm">legal_attestation</td><td class="small">New table — <code class="inline">run_id or client_account_id, msa_nda_reviewed, case_study_clause_status, compliance_confirmed, attested_by, attested_at, notes</code>.</td><td class="center"><span class="pill new">New</span></td></tr>
@@ -580,7 +686,11 @@
     <div class="filetree">backend/app/<br>
 &nbsp;&nbsp;agents/sanitization/<br>
 &nbsp;&nbsp;&nbsp;&nbsp;ner_prepass.py <span class="comment"># EXTENDED — + infra/credential + title/phone regex</span><br>
+<<<<<<< HEAD
 &nbsp;&nbsp;&nbsp;&nbsp;detector.py <span class="comment"># EXTENDED — loads 4 new skills (§05)</span><br>
+=======
+&nbsp;&nbsp;&nbsp;&nbsp;detector.py <span class="comment"># EXTENDED — loads 4 new skills (Sec. 05)</span><br>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 &nbsp;&nbsp;&nbsp;&nbsp;image_scan.py <span class="comment"># EXTENDED — + data-sample field, + diagram/screenshot text field</span><br>
 &nbsp;&nbsp;&nbsp;&nbsp;summarizer.py <span class="comment"># EXTENDED — + discusses_negative_outcome field</span><br>
 &nbsp;&nbsp;&nbsp;&nbsp;<span class="new">flags.py</span> <span class="comment"># NEW — flag_for_judgment.create / .resolve</span><br>
@@ -602,12 +712,20 @@ frontend/src/pages/<br>
   <!-- 08 PROCESS -->
   <section id="process">
     <div class="sec-head"><span class="num">08</span><h2>Process &amp; governance — the distribution-tier gate</h2></div>
+<<<<<<< HEAD
     <p class="sec-sub">The checklist already has a natural gate built in — "Approved for Distribution To: Internal only / Sales-Marketing / Public-External." Not every category needs to be clean for an internal share; all of them do before something goes external. This reuses the tiered-strictness philosophy already proven in the SharePoint Cleanup Agent's Tier-1/Tier-2 model (sharepoint_cleaning_agent_master_design.html §07): what requires review is decided by the destination, not by model confidence.</p>
+=======
+    <p class="sec-sub">The checklist already has a natural gate built in — "Approved for Distribution To: Internal only / Sales-Marketing / Public-External." Not every category needs to be clean for an internal share; all of them do before something goes external. This reuses the tiered-strictness philosophy already proven in the SharePoint Cleanup Agent's Tier-1/Tier-2 model (sharepoint_cleaning_agent_master_design.html Sec. 07): what requires review is decided by the destination, not by model confidence.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <div class="tiergate">
       <div class="tier t1">
         <h4>Internal only</h4>
         <ul>
+<<<<<<< HEAD
           <li>Client identity masked (1–2)</li>
+=======
+          <li>Client identity masked (1—2)</li>
+>>>>>>> 2eb74f5 (Added case study and updated files)
           <li>Credentials never allowed through, any tier</li>
           <li>No commercial/strategic/outcome gate required</li>
         </ul>
@@ -637,11 +755,19 @@ frontend/src/pages/<br>
       <p><code class="inline">distribution_gate.evaluate</code> blocks the "mark ready for public distribution" action in the review UI until the attestation record exists and every flag in the run is resolved — exactly the way A-03 blocks Tier-2 actions on a missing eligibility rule.</p>
     </div>
     <div class="states">
+<<<<<<< HEAD
       <span class="state">draft</span><span class="arrow">→</span>
       <span class="state run">flags open</span><span class="arrow">→</span>
       <span class="state pause">tier requested</span><span class="arrow">→</span>
       <span class="state bad">gate blocked</span><span style="color:var(--muted);margin:0 6px">or</span>
       <span class="state done">gate cleared → ready to distribute</span>
+=======
+      <span class="state">draft</span><span class="arrow">—</span>
+      <span class="state run">flags open</span><span class="arrow">—</span>
+      <span class="state pause">tier requested</span><span class="arrow">—</span>
+      <span class="state bad">gate blocked</span><span style="color:var(--muted);margin:0 6px">or</span>
+      <span class="state done">gate cleared — ready to distribute</span>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     </div>
   </section>
 
@@ -678,6 +804,18 @@ frontend/src/pages/<br>
         <li><code class="inline">exif_strip.py</code> + sixth verification channel (<code class="inline">verified_image_metadata</code>).</li>
       </ul>
     </div>
+<<<<<<< HEAD
+=======
+    <div class="phase">
+      <div class="phead"><span class="pnum">P4</span><h4>Advanced Policy-Based Sanitization</h4><span class="pill p4">Policy layer</span></div>
+      <p>Sequenced after P1-P3 for the same reason the governance gate was: a configurable rule engine and a 4-level policy hierarchy have nothing to enforce until <code class="inline">flagged_items</code>, the entity taxonomy (Sec. 04), and the 3-tier distribution gate (Sec. 08) already exist. P4 doesn't rebuild that infrastructure — it generalizes it into an organization-configurable policy layer. Full design in Sec. 12.</p>
+      <ul>
+        <li>Rule engine (regex/dictionary/keyword/metadata/file-type/org-custom) running ahead of the LLM Detector — formalizes the free pre-pass pattern already used since P1/P2.</li>
+        <li>Four default policy profiles (Internal / Cross-Practice / External Partner / Public) superseding the 3-tier <code class="inline">distribution_tier</code> enum with a finer <code class="inline">policy_level</code>, migration-mapped so no P3 run breaks.</li>
+        <li>Reviewer override path + audit trail, reusing the existing <code class="inline">audit_log.write</code> call from Gap F (Sec. 11).</li>
+      </ul>
+    </div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
   </section>
 
   <!-- 10 DECISIONS -->
@@ -688,11 +826,24 @@ frontend/src/pages/<br>
         <tr><td>Audit granularity</td><td class="small">Scored at the individual checklist-item level (29), not the 10-category level, so a category with mixed status isn't miscounted as fully done or fully missing.</td></tr>
         <tr><td>Mask vs. flag</td><td class="small">Every new category defaults to <b>flag-for-review</b>, not auto-mask — a case study's value is in real outcomes and figures; only identity-class entities and credentials get a hard mask/mandatory-redaction.</td></tr>
         <tr><td>No new sub-agents</td><td class="small">All seven gaps extend the existing Detector/Reconciler/Summarizer + pre-pass + image-scan steps. No new catalogued agent, no new run state.</td></tr>
+<<<<<<< HEAD
         <tr><td>Deterministic-first</td><td class="small">Infra identifiers, credentials, titles/phones, and EXIF stripping are pure regex/code, zero LLM cost — same cost-lever logic already applied in A-01 §10.</td></tr>
+=======
+        <tr><td>Deterministic-first</td><td class="small">Infra identifiers, credentials, titles/phones, and EXIF stripping are pure regex/code, zero LLM cost — same cost-lever logic already applied in A-01 Sec. 10.</td></tr>
+>>>>>>> 2eb74f5 (Added case study and updated files)
         <tr><td>Shared flag mechanism</td><td class="small">Commercial terms, competitive/strategic mentions, sensitive outcomes, own-IP/cost detail, and org-chart structure all route through one new <code class="inline">flagged_items</code> table / <code class="inline">flag_for_judgment</code> call rather than five bespoke UI additions.</td></tr>
         <tr><td>One vision call, three new fields</td><td class="small">Data-sample content, diagram/screenshot visible text, and (with Gap B) credential/hostname detection all extend the single existing per-image vision call rather than adding new vision passes — no added model cost per image.</td></tr>
         <tr><td>Legal &amp; Contractual is not agent detection</td><td class="small">Modeled as a governance attestation record + a distribution-tier gate, owned by km_governance — mirrors A-03's eligibility-rule gate pattern rather than inventing a new one.</td></tr>
         <tr><td>Distribution tiers reuse the checklist's own field</td><td class="small">"Approved for Distribution To" becomes the gate deciding which flags must be resolved before a run can be marked ready — Internal / Sales-Marketing / Public-External, increasing in strictness.</td></tr>
+<<<<<<< HEAD
+=======
+        <tr><td>Rules run before the LLM, always</td><td class="small">Phase 4's rule engine (Sec. 12.1) is a strict pre-pass, never a replacement for the Detector — it resolves what's deterministic (regex/dictionary/keyword/metadata/file-type/org-custom) so the LLM only reasons over genuinely ambiguous spans. Same cost lever as the original regex/NER pre-pass, generalized and made org-configurable.</td></tr>
+        <tr><td>4 levels, not 3</td><td class="small">The Sec. 08 distribution gate's Internal/Sales-Marketing/Public-External split is kept, not replaced — Phase 4's hierarchy (Sec. 12.2) refines it by splitting "Internal" into Internal Team and Internal Cross-Practice, and adding a new External Partner level between Sales-Marketing and Public for NDA'd third parties the original 3-tier model had no slot for.</td></tr>
+        <tr><td>Policy is data, not code</td><td class="small">Sanitization profiles are YAML/JSON, loaded per run by a new Profile Loader (Sec. 12.6/12.7) — an organization tunes its own thresholds, custom rules, and level definitions without a code deploy, the same "config over code" preference already used for the masking-style skill's token format.</td></tr>
+        <tr><td>Overrides are logged, mandatory items aren't overridable</td><td class="small">Any policy decision below Priority 0 can be reviewer-overridden with a reason code, written to a new audit table (Sec. 12.5) — but <code class="inline">CREDENTIAL</code> and other mandatory-redaction entities stay non-overridable at every level, unchanged from the rule already built in Gap B (Sec. 11).</td></tr>
+        <tr><td>One arbitration authority, not two</td><td class="small">"Policy Resolution Engine" (Sec. 12.7) is a named responsibility of the Policy Evaluator, not a second component built alongside it — conflicts between the rule engine, the LLM Detector, org overlays, and consent records are arbitrated in exactly one place, by one published precedence order, so there's never a question of which of two arbiters ran last.</td></tr>
+        <tr><td>Audit entries are append-only and policy-version-stamped</td><td class="small">Every decision writes a hash-chained, immutable entry naming the exact <code class="inline">policy_version</code> that produced it (Sec. 12.5/12.7) — a profile can be revised (a new published version) without invalidating what an already-completed run's audit trail says happened, which is what an auditor re-checking a run six months later actually needs.</td></tr>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       </tbody>
     </table>
   </section>
@@ -700,7 +851,11 @@ frontend/src/pages/<br>
   <!-- 11 DETAILED IMPLEMENTATION PLAN -->
   <section id="implementation">
     <div class="sec-head"><span class="num">11</span><h2>Detailed implementation plan — resolving every gap against the current agent</h2></div>
+<<<<<<< HEAD
     <p class="sec-sub">This is the "how," underneath §03's "what" and §09's "when." Each gap below is broken into concrete implementation steps against the actual current codebase (file names as listed in the live debugging report's appendix), in build order, ending with the regression-suite coverage that proves it before it ever touches a real document — the same discipline that caught real bugs (issues 16 and 17 in the debugging report) before they reached production. P1/P2/P3 labels match §03/§09 — this section doesn't re-sequence anything, it just fills in the steps under each label.</p>
+=======
+    <p class="sec-sub">This is the "how," underneath Sec. 03's "what" and Sec. 09's "when." Each gap below is broken into concrete implementation steps against the actual current codebase (file names as listed in the live debugging report's appendix), in build order, ending with the regression-suite coverage that proves it before it ever touches a real document — the same discipline that caught real bugs (issues 16 and 17 in the debugging report) before they reached production. P1/P2/P3 labels match Sec. 03/Sec. 09 — this section doesn't re-sequence anything, it just fills in the steps under each label.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
     <h3>A · Commercial &amp; Financial Terms <span class="pill p1">P1</span></h3>
     <div class="phase"><div class="phead"><span class="pnum">1</span><h4>Detection — new regex layer</h4></div><p>New <code class="inline">app/agents/sanitization/regex_patterns/commercial_terms.py</code>: currency amounts, percentage figures, and payment-term keyword phrases ("net 30", "penalty clause", "SLA credit", "rate card"). Wired into <code class="inline">ner_prepass.py</code>'s existing candidate-generation pass, free and on-CPU, same as today's regex/NER candidates.</p></div>
@@ -734,7 +889,11 @@ frontend/src/pages/<br>
     <h3>E · Competitive &amp; Strategic Information <span class="pill p2">P2</span></h3>
     <div class="phase"><div class="phead"><span class="pnum">1</span><h4>New skill</h4></div><p><code class="inline">competitive-strategic-detection</code>, loaded by <code class="inline">detector.py</code> alongside <code class="inline">sanitization-detection</code> — scans chunk text for named-competitor mentions and forward-looking strategic language (M&amp;A, unannounced initiative, roadmap).</p></div>
     <div class="phase"><div class="phead"><span class="pnum">2</span><h4>Flagged-item routing</h4></div><p>Detector emits <code class="inline">COMPETITOR_NAME</code> and <code class="inline">STRATEGY_MENTION</code> candidates into <code class="inline">flagged_items</code>, not directly into <code class="inline">masking_dictionary</code>, with the offending sentence(s) attached for reviewer context.</p></div>
+<<<<<<< HEAD
     <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Resolve paths differ by type</h4></div><p>For <code class="inline">COMPETITOR_NAME</code>, resolving "mask" promotes it into <code class="inline">masking_dictionary</code> via the existing <code class="inline">pending_approval → approved</code> path, so it gets a consistent token if it recurs. For <code class="inline">STRATEGY_MENTION</code>, resolution is keep/generalize/remove text only — no token, since it's prose-level judgment rather than a named entity.</p></div>
+=======
+    <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Resolve paths differ by type</h4></div><p>For <code class="inline">COMPETITOR_NAME</code>, resolving "mask" promotes it into <code class="inline">masking_dictionary</code> via the existing <code class="inline">pending_approval — approved</code> path, so it gets a consistent token if it recurs. For <code class="inline">STRATEGY_MENTION</code>, resolution is keep/generalize/remove text only — no token, since it's prose-level judgment rather than a named entity.</p></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <div class="phase"><div class="phead"><span class="pnum">4</span><h4>Regression</h4></div><p>Fixture chunk with a fictional competitor name and a "planned acquisition of X" sentence; assert both are flagged, never silently masked or silently ignored.</p></div>
 
     <h3>F · Sensitive Outcomes <span class="pill p2">P2</span></h3>
@@ -767,12 +926,373 @@ frontend/src/pages/<br>
     </ul>
   </section>
 
+<<<<<<< HEAD
+=======
+  <!-- 12 PHASE 4 -->
+  <section id="phase4">
+    <div class="sec-head"><span class="num">12</span><h2>Phase 4 — Advanced Policy-Based Sanitization</h2></div>
+    <p class="sec-sub">Everything in Sec. 01-11 closes specific checklist gaps with specific entity types, skills, and a 3-tier distribution gate. Phase 4 sits one layer above that: it generalizes the mask/flag decision itself into a configurable, audience-aware <b>policy</b>, so that which action applies to which entity is driven by data an organization can edit — not by logic hardcoded into the Detector. Nothing here replaces the taxonomy (Sec. 04), skills (Sec. 05), protected calls (Sec. 06), or the <code class="inline">flagged_items</code>/audit infrastructure built in Sec. 08 and Sec. 11 — Phase 4 plugs into all four.</p>
+
+    <div class="callout arch">
+      <p class="ctitle">What changes vs. Sec. 01-11</p>
+      <p>Before Phase 4: an entity's default action (mask/flag/keep) is fixed per entity type, and "how strict" is a single 3-way distribution-tier gate checked once at the end.</p>
+      <p>After Phase 4: an entity's action is resolved per <i>policy level</i> from a profile the organization owns, deterministic rules run before any LLM call to cut cost, and reviewers can override any non-mandatory decision with a logged reason — same entities, same skills, more configurable strictness.</p>
+    </div>
+
+    <h3>12.1 Policy-driven rule engine</h3>
+    <p>A configurable, deterministic engine that runs <i>before</i> the LLM Detector ever sees a chunk — it formalizes the free regex/NER pre-pass pattern already used since Gap A/B (Sec. 11) into six rule types an organization can extend without touching agent code. It is "policy-driven" rather than a bare pattern matcher: a rule's match doesn't apply an action by itself, it produces a candidate that the Policy Resolution Engine (Sec. 12.7) merges against the requested hierarchical level and any LLM Detector finding before one final action is written.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:200px">Rule type</th><th>Examples</th><th style="width:120px">Runs</th><th style="width:110px">Cost</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">Regex patterns</td><td class="small">IPs, emails, currency amounts, credential shapes, phone numbers</td><td class="center"><span class="pill covered">Pre-LLM</span></td><td class="center"><span class="pill covered">Free / CPU</span></td></tr>
+        <tr><td class="anm">Dictionary-based detection</td><td class="small">Known client aliases, competitor list, internal system names, own-firm names</td><td class="center"><span class="pill covered">Pre-LLM</span></td><td class="center"><span class="pill covered">Free / DB lookup</span></td></tr>
+        <tr><td class="anm">Keyword lists</td><td class="small">"net 30", "penalty clause", "planned acquisition", "root cause", "breach"</td><td class="center"><span class="pill covered">Pre-LLM</span></td><td class="center"><span class="pill covered">Free / CPU</span></td></tr>
+        <tr><td class="anm">Metadata rules</td><td class="small">File author/classification tag, EXIF GPS present, document sensitivity label</td><td class="center"><span class="pill covered">Pre-LLM</span></td><td class="center"><span class="pill covered">Free / CPU</span></td></tr>
+        <tr><td class="anm">File-type specific rules</td><td class="small">.pptx speaker notes, .xlsx hidden sheets, image EXIF vs. embedded diagram text</td><td class="center"><span class="pill covered">Pre-LLM</span></td><td class="center"><span class="pill covered">Free / CPU</span></td></tr>
+        <tr><td class="anm">Organization-defined custom rules</td><td class="small">A client's own compliance additions, loaded from that org's profile overlay (Sec. 12.6)</td><td class="center"><span class="pill covered">Pre-LLM</span></td><td class="center"><span class="pill covered">Free / CPU</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h4 style="font-family:'Space Grotesk';font-weight:600;font-size:.98rem;color:var(--navy);margin:20px 0 8px;">Rule priority &amp; conflict resolution</h4>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:110px">Priority</th><th>Rule source</th><th style="width:150px">Reviewer-overridable?</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">0 — Mandatory</td><td class="small">System-level rules for credentials and legal holds</td><td class="center"><span class="pill mand">Never</span></td></tr>
+        <tr><td class="anm">1 — Org-custom</td><td class="small">Organization's own compliance-team additions, ranked above the generic library</td><td class="center"><span class="pill partial">Yes</span></td></tr>
+        <tr><td class="anm">2 — Built-in deterministic</td><td class="small">The platform's own regex/dictionary/keyword library</td><td class="center"><span class="pill partial">Yes</span></td></tr>
+        <tr><td class="anm">3 — Metadata rules</td><td class="small">File-level signals (classification tags, EXIF flags)</td><td class="center"><span class="pill partial">Yes</span></td></tr>
+        <tr><td class="anm">4 — File-type default</td><td class="small">Fallback baseline per file format when nothing more specific fires</td><td class="center"><span class="pill partial">Yes</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout blue">
+      <p class="ctitle">Conflict resolution: most restrictive action wins</p>
+      <p>When two rules fire on the same span at different priority tiers, the engine does not simply take the higher-priority tier's answer — it applies whichever action is more restrictive on a fixed scale: <b>Mandatory Redact &gt; Remove &gt; Generalize &gt; Mask &gt; Flag &gt; Keep</b>. A Priority-4 file-type default that says "remove" beats a Priority-2 library rule that only says "mask." Every rule that matched is still recorded against the span for the reviewer, even the ones that lost the tie — nothing is silently dropped from the audit trail.</p>
+      <p><b>Cost effect:</b> every span this engine resolves with certainty is one the LLM Detector never has to reason about. As an organization adds its own custom rules (Priority 1), the deterministic share of each document grows and per-document LLM spend shrinks accordingly — the same lever already proven in Sec. 10's "deterministic-first" decision, now extended to all six rule types instead of just the original three regex pattern files.</p>
+      <p>This tie-break is the rule engine's own internal arbitration — resolving <i>which rule wins</i> when several rules fire. It is one input to the broader Policy Resolution Engine (Sec. 12.7), which additionally arbitrates between this engine's output, the LLM Detector's contextual finding, and the requested hierarchical level, since those three can each suggest a different action for the same entity.</p>
+    </div>
+
+    <h3>12.2 Hierarchical sanitization</h3>
+    <p>Four sanitization levels, escalating by intended recipient. Each level inherits everything the level below it requires, then adds more.</p>
+    <div class="tiergate4">
+      <div class="tier l1">
+        <h4>L1 · Internal Team</h4>
+        <ul>
+          <li>Minimal masking — only <code class="inline">CREDENTIAL</code> is mandatory-redacted</li>
+          <li>Client identity, infra identifiers, commercial terms, and strategy all kept</li>
+          <li>Preserves full business context for the delivery team itself</li>
+        </ul>
+      </div>
+      <div class="tier l2">
+        <h4>L2 · Internal Cross-Practice</h4>
+        <ul>
+          <li>Everything in L1, plus:</li>
+          <li>Client identity masked (name, brand, location, person)</li>
+          <li>Infrastructure identifiers masked</li>
+          <li>Commercial terms, strategy, and own-cost detail still kept — audience is trusted staff outside the account team</li>
+        </ul>
+      </div>
+      <div class="tier l3">
+        <h4>L3 · External Partner</h4>
+        <ul>
+          <li>Everything in L2, plus:</li>
+          <li>Commercial terms removed or generalized</li>
+          <li>Architecture/diagram details removed</li>
+          <li>Internal methodology and own-cost detail generalized</li>
+          <li>Competitor and strategy mentions flagged for review</li>
+        </ul>
+      </div>
+      <div class="tier l4">
+        <h4>L4 · Public Case Study</h4>
+        <ul>
+          <li>Everything in L3, plus:</li>
+          <li>Maximum sanitization, generic company naming</li>
+          <li>Real-data screenshots replaced with synthetic equivalents</li>
+          <li>Strategy, financial specifics, credentials, and competitor names all removed</li>
+          <li>Sensitive-outcome client sign-off mandatory before publish</li>
+        </ul>
+      </div>
+    </div>
+    <p class="sec-sub" style="margin-top:0;">The full per-entity breakdown of what's masked, flagged, generalized, or removed at each level is the Policy Matrix below — the level cards above are the summary, the matrix is the source of truth.</p>
+
+    <h3>12.3 Policy matrix</h3>
+    <p>Action codes: <span class="pill covered">Keep</span> untouched · <span class="pill tool">Mask</span> deterministic token replacement · <span class="pill skill">Generalize</span> reviewer-provided generalized text · <span class="pill partial">Flag</span> reviewer judgment call · <span class="pill gap">Remove</span> deleted from output · <span class="pill mand">Mandatory redact</span> non-overridable removal · <span class="pill synth">Synthetic</span> image swapped for a synthetic/placeholder asset. Detection codes reuse the taxonomy's own labels (Sec. 04/Sec. 05): <span class="pill prot">Deterministic / Regex+LLM / Consent lookup</span> run pre-LLM or as a lookup, <span class="pill skill">Vision-assisted / LLM-assisted</span> require the Detector or vision scan.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:180px">Entity type</th><th style="width:110px">Detection</th><th style="width:70px">L1</th><th style="width:100px">L2</th><th style="width:80px">L3</th><th style="width:80px">L4</th><th style="width:110px">Default action</th><th style="width:100px">Reviewer approval</th><th style="width:150px">Audit requirement</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">CLIENT_NAME / BRAND</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="small">Mask</td><td class="center"><span class="pill covered">No</span></td><td class="small">Logged</td></tr>
+        <tr><td class="anm">CLIENT_LOCATION</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="small">Mask</td><td class="center"><span class="pill covered">No</span></td><td class="small">Logged</td></tr>
+        <tr><td class="anm">CLIENT_PERSON / TITLE / PHONE</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="small">Mask</td><td class="center"><span class="pill covered">No</span></td><td class="small">Logged</td></tr>
+        <tr><td class="anm">INTERNAL_TEAM_MEMBER</td><td class="center"><span class="pill prot">Consent lookup</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">Keep if consented, else flag</td><td class="center"><span class="pill partial">Yes</span></td><td class="small">Logged + reviewer sign-off</td></tr>
+        <tr><td class="anm">INFRA_IDENTIFIER</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="small">Mask</td><td class="center"><span class="pill covered">No</span></td><td class="small">Logged</td></tr>
+        <tr><td class="anm">CREDENTIAL</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill mand">Redact</span></td><td class="center"><span class="pill mand">Redact</span></td><td class="center"><span class="pill mand">Redact</span></td><td class="center"><span class="pill mand">Redact</span></td><td class="small">Mandatory redact</td><td class="center"><span class="pill covered">No*</span></td><td class="small">Logged, non-overridable</td></tr>
+        <tr><td class="anm">COMMERCIAL_TERM</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill skill">Generalize</span></td><td class="center"><span class="pill gap">Remove</span></td><td class="small">Flag</td><td class="center"><span class="pill partial">Yes</span></td><td class="small">Logged + reviewer sign-off</td></tr>
+        <tr><td class="anm">DIAGRAM_LABEL_TEXT</td><td class="center"><span class="pill skill">Vision-assisted</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill tool">Mask</span></td><td class="center"><span class="pill gap">Remove</span></td><td class="center"><span class="pill gap">Remove</span></td><td class="small">Flag</td><td class="center"><span class="pill partial">Yes</span></td><td class="small">Logged + reviewer sign-off</td></tr>
+        <tr><td class="anm">DATA_SAMPLE_IMAGE</td><td class="center"><span class="pill skill">Vision-assisted</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="center"><span class="pill synth">Synthetic</span></td><td class="small">Flag</td><td class="center"><span class="pill partial">Yes</span></td><td class="small">Logged + reviewer sign-off</td></tr>
+        <tr><td class="anm">COMPETITOR_NAME</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill skill">Generalize</span></td><td class="center"><span class="pill gap">Remove</span></td><td class="small">Flag</td><td class="center"><span class="pill partial">Yes</span></td><td class="small">Logged + reviewer sign-off</td></tr>
+        <tr><td class="anm">STRATEGY_MENTION</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="center"><span class="pill gap">Remove</span></td><td class="small">Flag</td><td class="center"><span class="pill partial">Yes</span></td><td class="small">Logged + reviewer sign-off</td></tr>
+        <tr><td class="anm">NEGATIVE_OUTCOME</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="center"><span class="pill partial">Flag*</span></td><td class="center"><span class="pill partial">Flag*</span></td><td class="small">Flag — client sign-off</td><td class="center"><span class="pill partial">Yes</span></td><td class="small">Logged + client sign-off</td></tr>
+        <tr><td class="anm">OWN_COST_DETAIL</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill skill">Generalize</span></td><td class="center"><span class="pill gap">Remove</span></td><td class="small">Flag</td><td class="center"><span class="pill partial">Yes</span></td><td class="small">Logged + reviewer sign-off</td></tr>
+        <tr><td class="anm">ORG_CHART_STRUCTURE</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill covered">Keep</span></td><td class="center"><span class="pill skill">Generalize</span></td><td class="center"><span class="pill skill">Generalize</span></td><td class="center"><span class="pill gap">Remove</span></td><td class="small">Flag</td><td class="center"><span class="pill partial">Yes</span></td><td class="small">Logged + reviewer sign-off</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="sec-sub" style="margin-top:-10px;">* <code class="inline">CREDENTIAL</code> is Priority 0 (Sec. 12.1) — no reviewer override at any level. <code class="inline">NEGATIVE_OUTCOME</code> at L3/L4 specifically requires the <code class="inline">requires_client_signoff</code> resolution, not a generic flag-clear (mirrors Gap F, Sec. 11). Every row's Audit requirement is enforced by the immutable, version-stamped log described in Sec. 12.5 — "Logged" is never optional, only the sign-off tier above it varies.</p>
+
+    <h3>12.4 Rule evaluation pipeline</h3>
+    <p>The full run, upload to verification. Rule Engine and Hierarchical Policy Resolution Engine are the two new stops; every other box is an existing step from the Sec. 07 pipeline, now policy-aware.</p>
+    <figure class="diagram-fig">
+      <svg class="diagram" viewBox="0 0 900 260" role="img" aria-label="Phase 4 rule evaluation pipeline: Upload, then Rule Engine, then Entity Detection, then Hierarchical Policy Resolution Engine; on policy resolution the flow continues to LLM Validation, Human Review, Apply Sanitization, and Verification.">
+        <defs>
+          <marker id="arrowP4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="arrow-head"></path>
+          </marker>
+        </defs>
+
+        <g font-size="10.5">
+          <rect x="10" y="28" width="120" height="60" rx="8" class="box-rect"></rect>
+          <text x="70" y="55" text-anchor="middle">Upload</text>
+          <text x="70" y="70" text-anchor="middle" class="lbl-sub">existing</text>
+
+          <rect x="150" y="28" width="160" height="60" rx="8" class="box-rect box-new"></rect>
+          <text x="230" y="50" text-anchor="middle">Rule Engine</text>
+          <text x="230" y="64" text-anchor="middle" class="lbl-sub">new, 6 rule types</text>
+          <text x="230" y="77" text-anchor="middle" class="lbl-sub">(Sec. 12.1)</text>
+
+          <rect x="330" y="28" width="170" height="60" rx="8" class="box-rect"></rect>
+          <text x="415" y="50" text-anchor="middle">Entity Detection</text>
+          <text x="415" y="64" text-anchor="middle" class="lbl-sub">existing LLM Detector</text>
+          <text x="415" y="77" text-anchor="middle" class="lbl-sub">(Sec. 05/Sec. 07)</text>
+
+          <rect x="520" y="28" width="230" height="60" rx="8" class="box-rect box-new"></rect>
+          <text x="635" y="50" text-anchor="middle">Hierarchical Policy</text>
+          <text x="635" y="64" text-anchor="middle" class="lbl-sub">Resolution Engine</text>
+          <text x="635" y="77" text-anchor="middle" class="lbl-sub">resolves L1-L4 (Sec. 12.7)</text>
+
+          <path d="M130,58 L150,58" class="arrow" marker-end="url(#arrowP4)"></path>
+          <path d="M310,58 L330,58" class="arrow" marker-end="url(#arrowP4)"></path>
+          <path d="M500,58 L520,58" class="arrow" marker-end="url(#arrowP4)"></path>
+        </g>
+
+        <path d="M635,88 L635,120 L85,120 L85,158" class="arrow" marker-end="url(#arrowP4)"></path>
+        <text x="400" y="112" text-anchor="middle" class="edge-label">policy resolved per entity</text>
+
+        <g font-size="10.5">
+          <rect x="10" y="158" width="150" height="60" rx="8" class="box-rect"></rect>
+          <text x="85" y="185" text-anchor="middle">LLM Validation</text>
+          <text x="85" y="200" text-anchor="middle" class="lbl-sub">existing Detector pass</text>
+
+          <rect x="180" y="158" width="170" height="60" rx="8" class="box-rect box-new"></rect>
+          <text x="265" y="185" text-anchor="middle">Human Review</text>
+          <text x="265" y="200" text-anchor="middle" class="lbl-sub">+ override path (Sec. 12.5)</text>
+
+          <rect x="370" y="158" width="170" height="60" rx="8" class="box-rect"></rect>
+          <text x="455" y="185" text-anchor="middle">Apply Sanitization</text>
+          <text x="455" y="200" text-anchor="middle" class="lbl-sub">existing apply_masks</text>
+
+          <rect x="560" y="158" width="180" height="60" rx="8" class="box-rect box-ext"></rect>
+          <text x="650" y="185" text-anchor="middle">Verification</text>
+          <text x="650" y="200" text-anchor="middle" class="lbl-sub">existing, 6 channels</text>
+
+          <path d="M160,188 L180,188" class="arrow" marker-end="url(#arrowP4)"></path>
+          <path d="M350,188 L370,188" class="arrow" marker-end="url(#arrowP4)"></path>
+          <path d="M540,188 L560,188" class="arrow" marker-end="url(#arrowP4)"></path>
+        </g>
+
+        <rect x="10" y="232" width="14" height="14" class="box-rect box-new"></rect>
+        <text x="30" y="243" font-size="10">new Phase 4 component</text>
+        <rect x="230" y="232" width="14" height="14" class="box-rect"></rect>
+        <text x="250" y="243" font-size="10">existing pipeline step, reused unchanged</text>
+      </svg>
+      <figcaption>Upload — Rule Engine — Entity Detection — Hierarchical Policy Resolution Engine — LLM Validation — Human Review — Apply Sanitization — Verification.</figcaption>
+    </figure>
+
+    <h3>12.5 Reviewer overrides</h3>
+    <p>A reviewer can override any policy-matrix or rule-engine decision that isn't Priority 0 — for example, keeping a <code class="inline">COMMERCIAL_TERM</code> the L3 profile would otherwise generalize, because the reviewer judges this particular figure safe. Every override requires a reason code and is written to a new audit table before it takes effect; the entity's original (policy-computed) action is preserved alongside the override so the two are never conflated in the audit trail.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:260px">Call</th><th style="width:100px">Type</th><th>Role</th><th style="width:90px">Status</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">policy_override.record</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Writes a reviewer override (entity/span, original action, override action, reason code, reviewer_id) to <code class="inline">policy_overrides</code>. Rejected outright for any Priority-0 entity — same non-overridable enforcement already built for <code class="inline">CREDENTIAL</code> in Gap B (Sec. 11).</td><td class="center"><span class="pill new">New</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout danger">
+      <p class="ctitle">Mandatory items stay mandatory</p>
+      <p>Overrides exist so a case study doesn't lose its narrative value to an overly blunt policy default — they do not exist to let a reviewer republish a credential or bypass a client sign-off requirement. <code class="inline">policy_override.record</code> checks the entity's priority tier before writing anything; a Priority-0 attempt is rejected at the call itself, not merely discouraged in the UI.</p>
+    </div>
+
+    <h4 style="font-family:'Space Grotesk';font-weight:600;font-size:.98rem;color:var(--navy);margin:20px 0 8px;">Immutable audit logging &amp; policy versioning</h4>
+    <p>Every decision this pipeline makes — a rule-engine match, an LLM Detector finding, the Hierarchical Policy Resolution Engine's merged action, or a reviewer override — writes one append-only entry to the run's audit log. Entries are never updated or deleted, only superseded by a new entry that points back at the one it revises, so the full decision history for a run is always reconstructable, not just its final state.</p>
+    <ul class="plain">
+      <li><b>Tamper-evident, not just append-only.</b> Each entry stores a hash of the previous entry in the same run alongside its own content hash, so any out-of-band edit to a stored entry breaks the chain and is detectable on the next audit read — the same tamper-evidence property Sec. 09's legal/contractual gate implicitly assumes when it treats an attestation record as trustworthy.</li>
+      <li><b>Every entry is policy-version-stamped.</b> An entry doesn't just say "masked" — it records the exact <code class="inline">policy_version</code> of the profile that produced that action. If an organization later publishes a new version of its L3 profile, every prior run's audit trail still shows, correctly, which version governed it at the time.</li>
+      <li><b>Versioning is append-only too.</b> A published policy version is immutable once live — changing a rule means publishing version <i>n+1</i>, never editing version <i>n</i> in place. This is what makes a run reproducible months later: re-running the same document against the <code class="inline">policy_version</code> pinned in its audit trail must always yield the same decisions.</li>
+    </ul>
+
+    <h3>12.6 Configuration — policy as data</h3>
+    <p>Each policy level is a YAML/JSON profile, not a code path. Profiles can <code class="inline">extend</code> a parent level and layer an organization's own custom rules on top, so a client-specific compliance requirement never means a code deploy. Illustrative shape (not literal implementation):</p>
+    <div class="filetree">profile: level_3_external_partner<br>
+extends: level_2_cross_practice<br>
+<span class="comment"># rule engine additions layered on top of the built-in library</span><br>
+rules:<br>
+&nbsp;&nbsp;- type: regex<br>
+&nbsp;&nbsp;&nbsp;&nbsp;pattern: commercial_term_currency<br>
+&nbsp;&nbsp;&nbsp;&nbsp;action: generalize<br>
+&nbsp;&nbsp;&nbsp;&nbsp;priority: 2<br>
+&nbsp;&nbsp;- type: org_custom<br>
+&nbsp;&nbsp;&nbsp;&nbsp;org: acme-corp<br>
+&nbsp;&nbsp;&nbsp;&nbsp;pattern: internal_project_codename<br>
+&nbsp;&nbsp;&nbsp;&nbsp;action: remove<br>
+&nbsp;&nbsp;&nbsp;&nbsp;priority: 1<br>
+<span class="comment"># per-entity policy overrides for this level</span><br>
+entities:<br>
+&nbsp;&nbsp;COMMERCIAL_TERM: { action: generalize, reviewer_required: true }<br>
+&nbsp;&nbsp;INFRA_IDENTIFIER: { action: mask, reviewer_required: false }<br>
+&nbsp;&nbsp;CREDENTIAL: { action: mandatory_redact, reviewer_required: false, overridable: false }</div>
+    <p class="sec-sub" style="margin-top:0;">Four default profiles ship with the platform (L1-L4, Sec. 12.2). An organization's overlay is a separate file merged on top at load time by the Sanitization Profile Loader (Sec. 12.7) — the defaults stay intact for every other org. The Profile Loader never reads a profile off disk by mutable path — it fetches a specific, published version from the Policy Repository (Sec. 12.7), so a profile referenced by a run in progress can't change underneath it.</p>
+
+    <h3>12.7 Architecture changes</h3>
+    <p>Seven new components, all slotting into the existing detect — review — apply — verify pipeline (Sec. 07) — no new sub-agent, no new run state, matching the discipline already established for every gap in Sec. 03-11.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:220px">Component</th><th>Role</th><th style="width:260px">Sits in pipeline</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">Rule Engine</td><td class="small">Executes all six rule types (Sec. 12.1) pre-LLM; returns resolved spans plus candidates still needing contextual judgment.</td><td class="small">Between "Extract text" and "NER pre-pass" — extends the existing pre-pass, doesn't replace it.</td></tr>
+        <tr><td class="anm">Policy Repository</td><td class="small">System of record for sanitization profiles — every published version, immutable once live. Backs the Policy Manager rather than the Manager owning storage itself.</td><td class="small">Read by the Sanitization Profile Loader at run start; written only by the Policy Version Manager.</td></tr>
+        <tr><td class="anm">Policy Manager</td><td class="small">Resolves <code class="inline">entity_type — action</code> for a requested policy level by reading the active version from the Policy Repository (Sec. 12.6); exposes an org's custom-rule overlay.</td><td class="small">New service layer, called by both the Rule Engine and the Detector.</td></tr>
+        <tr><td class="anm">Policy Evaluator <span style="font-weight:400;color:var(--muted);">(Hierarchical Policy Resolution Engine)</span></td><td class="small">The single authority that merges Rule Engine matches, Policy Manager level defaults, and Detector findings into one per-entity decision (mask/flag/generalize/remove/keep) — see the precedence order below.</td><td class="small">Between "LLM Detector" and "Human review" in the existing pipeline (Sec. 07).</td></tr>
+        <tr><td class="anm">Sanitization Profile Loader</td><td class="small">Fetches and validates the specific published profile version for a run from the Policy Repository, including any org-specific custom rule overlay.</td><td class="small">Runs once per run, immediately after "Upload," before the Rule Engine.</td></tr>
+        <tr><td class="anm">Audit Logger</td><td class="small">Append-only write path for every rule match, policy decision, and override (Sec. 12.5) — hash-chains each entry to the previous one in the run and stamps it with the active <code class="inline">policy_version</code>.</td><td class="small">Called from every stage of both the detect and apply phases; never called from the review UI directly.</td></tr>
+        <tr><td class="anm">Policy Version Manager</td><td class="small">Owns the publish/rollback lifecycle for profiles in the Policy Repository — enforces that a published version is never edited in place, only superseded.</td><td class="small">Admin-time component, invoked from Policy Profile Admin (below), not from the per-run pipeline.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h4 style="font-family:'Space Grotesk';font-weight:600;font-size:.98rem;color:var(--navy);margin:20px 0 8px;">The Policy Evaluator's precedence order</h4>
+    <p>"Policy Resolution Engine" names the specific responsibility of the Policy Evaluator above: when the Rule Engine, the LLM Detector, an org-custom overlay, and a consent record can each suggest a different action for the same entity, exactly one component gets to decide — and it decides by a fixed, published order, not by whichever signal happened to run last:</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:80px">Order</th><th>Signal source</th><th>Beats</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">1</td><td class="small">Priority-0 mandatory rule (Sec. 12.1) — credentials, legal holds</td><td class="small">Everything, including an explicit reviewer override</td></tr>
+        <tr><td class="anm">2</td><td class="small">Organization-custom rule or consent record on file</td><td class="small">The built-in rule library and any Detector finding</td></tr>
+        <tr><td class="anm">3</td><td class="small">Rule Engine deterministic match (Priority 2-4, Sec. 12.1)</td><td class="small">A Detector finding with no rule-engine corroboration</td></tr>
+        <tr><td class="anm">4</td><td class="small">LLM Detector contextual finding</td><td class="small">The hierarchical level's bare default</td></tr>
+        <tr><td class="anm">5</td><td class="small">Hierarchical level default (Policy Matrix, Sec. 12.3)</td><td class="small">Nothing — fallback when no rule or Detector signal fired</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="sec-sub" style="margin-top:-10px;">This is the same "most restrictive action wins" tie-break from Sec. 12.1, generalized from ranking rules against each other to ranking every signal source the pipeline produces. The Policy Evaluator's output — one action, one confidence, and the full list of contributing signals — is exactly what the Audit Logger writes to the immutable log (Sec. 12.5).</p>
+
+    <h4 style="font-family:'Space Grotesk';font-weight:600;font-size:.98rem;color:var(--navy);margin:20px 0 8px;">Protected calls (extends Sec. 06)</h4>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:260px">Call</th><th style="width:100px">Type</th><th>Role</th><th style="width:90px">Status</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">rule_engine.evaluate</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Runs the six rule types against extracted text/metadata for a chunk or file; returns matches with priority, action, and rule ID for audit.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">policy_profile.load</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Loads and validates a run's policy profile (default level + any org overlay) at run start.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">hierarchical_policy.resolve</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Given a policy level and an entity's rule/Detector findings, returns the single resolved action per the precedence order above and the Policy Matrix (Sec. 12.3).</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">policy_repository.fetch</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Returns a specific published profile version (or the current default) by policy level and org — the only read path the Profile Loader is allowed to use.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">policy_version.publish / .rollback</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Publishes a new immutable profile version, or marks a previously published version as rolled back (never edits it) — the only write path into the Policy Repository.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">policy_override.record</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">See Sec. 12.5 — reviewer override with mandatory reason code and audit write.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">audit_log.write</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Existing call (Sec. 11.F), hardened for Phase 4: every write is now hash-chained to the prior entry in the run and stamped with the active <code class="inline">policy_version</code> (Sec. 12.5) rather than a plain timestamped row.</td><td class="center"><span class="pill ext">Extend</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h4 style="font-family:'Space Grotesk';font-weight:600;font-size:.98rem;color:var(--navy);margin:20px 0 8px;">Data model additions (extends Sec. 07)</h4>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:220px">Table / column</th><th>Purpose</th><th style="width:100px">Status</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">sanitization_profiles</td><td class="small">New table — <code class="inline">id, policy_level, org_id (nullable = platform default), rules_json, version, created_by, created_at</code>. Backing store for the Policy Repository.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">policy_versions</td><td class="small">New table — <code class="inline">id, profile_id, version_number, status (draft/published/archived), checksum, published_by, published_at, superseded_by</code>. A row is never updated after <code class="inline">status=published</code>; a new rule set is always a new row.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">agent_runs.policy_level</td><td class="small">New column — <code class="inline">level_1_internal / level_2_cross_practice / level_3_external_partner / level_4_public</code>. The existing <code class="inline">distribution_tier</code> enum (Sec. 07/Sec. 08) is retained and migration-mapped rather than dropped: <code class="inline">internal — L1</code>, <code class="inline">sales_marketing — L2</code>, <code class="inline">public_external — L4</code> — L3 (External Partner) is genuinely new, for NDA'd third parties the original 3-tier model had no slot for.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">agent_runs.policy_version_id</td><td class="small">New column — the exact <code class="inline">policy_versions</code> row active when the run executed, so a run stays reproducible even after the org publishes a newer profile version.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">policy_overrides</td><td class="small">New table — <code class="inline">run_id, entity_id/span, original_action, override_action, reason_code, reviewer_id, decided_at</code>. Feeds the same <code class="inline">audit_log.write</code> already used for negative-outcome resolutions (Sec. 11.F).</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">audit_log.prev_entry_hash / entry_hash</td><td class="small">New columns — hash-chain fields making the log tamper-evident (Sec. 12.5). <code class="inline">policy_version_id</code> added alongside them to stamp every entry with the version that produced it.</td><td class="center"><span class="pill ext">Extend</span></td></tr>
+        <tr><td class="anm">distribution_gate.evaluate</td><td class="small">Extended, not replaced — now accepts a <code class="inline">policy_level</code> parameter instead of a hardcoded tier enum, so it evaluates against whichever profile the run requested.</td><td class="center"><span class="pill ext">Extend</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h4 style="font-family:'Space Grotesk';font-weight:600;font-size:.98rem;color:var(--navy);margin:20px 0 8px;">File layout additions</h4>
+    <div class="filetree">backend/app/<br>
+&nbsp;&nbsp;<span class="new">policy/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">rule_engine.py</span> <span class="comment"># NEW — executes the 6 rule types, priority + conflict resolution (Sec. 12.1)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">policy_repository.py</span> <span class="comment"># NEW — versioned profile storage, read/write gated by the calls above</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">policy_manager.py</span> <span class="comment"># NEW — profile resolution, entity_type — action lookup</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">policy_evaluator.py</span> <span class="comment"># NEW — aka Hierarchical Policy Resolution Engine; precedence-order merge</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">policy_version_manager.py</span> <span class="comment"># NEW — publish/rollback workflow, enforces immutability once published</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">audit_logger.py</span> <span class="comment"># NEW — append-only, hash-chained writes; wraps audit_log.write</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">profile_loader.py</span> <span class="comment"># NEW — fetches/validates the run's profile version + org overlay</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">profiles/level_1_internal.yaml</span> <span class="comment"># NEW — default profile</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">profiles/level_2_cross_practice.yaml</span> <span class="comment"># NEW — default profile</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">profiles/level_3_external_partner.yaml</span> <span class="comment"># NEW — default profile</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">profiles/level_4_public.yaml</span> <span class="comment"># NEW — default profile</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">rules/regex_library.yaml</span> <span class="comment"># NEW — built-in Priority-2 rule set</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">rules/org_custom/</span> <span class="comment"># NEW — per-org Priority-1 rule overlays</span><br>
+&nbsp;&nbsp;<span class="ext">governance/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;distribution_gate.py <span class="comment"># EXTENDED — evaluate() takes policy_level, not just distribution_tier</span><br>
+frontend/src/pages/<br>
+&nbsp;&nbsp;ReviewDetailPage.jsx <span class="comment"># EXTENDED — override action + reason-code prompt next to resolve options</span><br>
+&nbsp;&nbsp;<span class="new">PolicyProfileAdmin.jsx</span> <span class="comment"># NEW — admin view to edit profiles, publish/rollback versions, preview active rules per level</span></div>
+
+    <h3>12.8 Implementation plan — Phase 4</h3>
+    <p>Ordered so infrastructure lands before anything depends on it — the same "build shared infrastructure once, extend it after" sequencing already used for <code class="inline">flagged_items</code> across Gaps A/C/E/F/G (Sec. 11).</p>
+
+    <div class="phase">
+      <div class="phead"><span class="pnum">4.1</span><h4>Rule Engine</h4><span class="pill p4">Foundation</span></div>
+      <p>Build <code class="inline">rule_engine.py</code> supporting all six rule types (Sec. 12.1). Ships with the existing regex pattern files migrated in as the built-in Priority-2 set — <code class="inline">commercial_terms.py</code>, <code class="inline">infra_credential.py</code>, <code class="inline">person_title_phone.py</code>, and <code class="inline">own_cost_prepass.py</code> (Sec. 11) become entries in <code class="inline">rules/regex_library.yaml</code> rather than separate modules, so nothing already built in P1-P3 is duplicated.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">4.2</span><h4>Policy Profiles</h4><span class="pill p4">Foundation</span></div>
+      <p>Build <code class="inline">policy_manager.py</code> + <code class="inline">profile_loader.py</code>; ship the four default YAML profiles (Sec. 12.2/12.6) matching L1-L4; create the <code class="inline">sanitization_profiles</code> table and the <code class="inline">policy_level</code> migration mapping from <code class="inline">distribution_tier</code> (Sec. 12.7).</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">4.3</span><h4>Hierarchical Sanitization</h4><span class="pill p4">Pipeline wiring</span></div>
+      <p>Build <code class="inline">policy_evaluator.py</code> (the Policy Evaluator / Hierarchical Policy Resolution Engine, Sec. 12.7) implementing the five-step precedence order; wire it into the pipeline between LLM Detector and Human Review (Sec. 12.4/12.7); extend <code class="inline">distribution_gate.evaluate</code> to accept a <code class="inline">policy_level</code> rather than a hardcoded tier.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">4.4</span><h4>Policy Testing</h4><span class="pill p4">Regression</span></div>
+      <p>New fixture set in <code class="inline">scripts/regression_check.py</code>: one fixture document run through all four profiles, asserting each entity type resolves to the exact action the Policy Matrix (Sec. 12.3) specifies for that level — the same offline-first discipline already used for every other gap (Sec. 11).</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">4.5</span><h4>Reviewer Override</h4><span class="pill p4">Review UI</span></div>
+      <p><code class="inline">policy_override.record</code> (Sec. 12.5) + the new <code class="inline">policy_overrides</code> table; <code class="inline">ReviewDetailPage.jsx</code> gets an override action next to the existing resolve options, gated to require a reason code, and rejected server-side for any Priority-0 entity.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">4.6</span><h4>Audit Trail</h4><span class="pill p4">Governance</span></div>
+      <p>Build <code class="inline">audit_logger.py</code> (Sec. 12.7) as a thin, mandatory wrapper around the existing <code class="inline">audit_log.write</code> call (Sec. 11.F): every rule match (winning or not), every policy decision, and every override is written through it, hash-chained to the prior entry and stamped with the active <code class="inline">policy_version</code> (Sec. 12.5) — Phase 4 hardens the existing mechanism, it does not add a second one.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">4.7</span><h4>Policy Governance &amp; Versioning</h4><span class="pill p4">Governance</span></div>
+      <p>Build <code class="inline">policy_repository.py</code> + <code class="inline">policy_version_manager.py</code> (Sec. 12.7); create the <code class="inline">policy_versions</code> table and migrate the four Sec. 12.2 default profiles in as v1 published versions; enforce immutability at the write path — <code class="inline">policy_version.publish</code> can only create a new version, never mutate a published one; <code class="inline">PolicyProfileAdmin.jsx</code> gets publish/rollback controls alongside the existing profile editor.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">4.8</span><h4>Compliance Validation</h4><span class="pill p4">Governance</span></div>
+      <p>New report generator maps every Policy Matrix (Sec. 12.3) row to the checklist categories it closes (reusing the "Closes" columns from Sec. 04/Sec. 11), producing an auditor-facing evidence document per run. Regression suite (Sec. 11) gains a policy-version-pinning test: the same fixture document run twice against the same <code class="inline">policy_version</code> must resolve every entity identically — the determinism property Sec. 12.5's audit trail depends on, proven before it's trusted.</p>
+    </div>
+  </section>
+
+>>>>>>> 2eb74f5 (Added case study and updated files)
 </main>
 
 <footer>
   <div class="wrap">
+<<<<<<< HEAD
     <span>NaviKnow · Case Study Sanitization Checklist — Full Audit, Gaps &amp; Implementation Plan · v2</span>
     <span>29 checklist items audited · 2 done · 5 partial · 19 gap · 3 process gap</span>
+=======
+    <span>NaviKnow · Case Study Sanitization Checklist — Full Audit, Gaps &amp; Implementation Plan · v3</span>
+    <span>29 checklist items audited · 2 done · 5 partial · 19 gap · 3 process gap</span>
+    <span>+ Phase 4: rule engine · 4-level policy hierarchy · policy matrix · reviewer overrides (design added)</span>
+>>>>>>> 2eb74f5 (Added case study and updated files)
   </div>
 </footer>
 
