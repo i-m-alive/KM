@@ -90,6 +90,13 @@ class RunOut(BaseModel):
     flags: list[FlagOut]
 
 
+class RevalidationApplyRequest(BaseModel):
+    # Indices into output.revalidation.residuals (as returned by GET
+    # /runs/{id}) that the reviewer has confirmed are real leaks - each
+    # becomes a new global dictionary entry and gets re-masked in place.
+    residual_indices: list[int]
+
+
 class RunSummaryOut(BaseModel):
     id: uuid.UUID
     agent_id: str
@@ -135,6 +142,15 @@ class AuditLogEntryOut(BaseModel):
     created_at: datetime
 
 
+class LogoReferenceOut(BaseModel):
+    id: int
+    created_at: datetime
+    # Whether a preview thumbnail exists to fetch from
+    # GET /governance/logo-references/{id}/thumbnail - some references have
+    # none (the source image bytes couldn't be opened when it was stored).
+    thumbnail_available: bool
+
+
 class MaskingEntityOut(BaseModel):
     id: uuid.UUID
     mask_token: str
@@ -147,6 +163,10 @@ class MaskingEntityOut(BaseModel):
     # pending_approval older than the hygiene window - a forgotten decision
     # (approve / skip) that will otherwise re-surface on every future run.
     stale: bool = False
+    # Every approved-image (logo) match recorded for this entity - see
+    # app.masking.logo_reference. Empty for entities that were only ever
+    # matched via text, never an image.
+    logos: list[LogoReferenceOut] = []
 
 
 # ---- Documents ----

@@ -1,6 +1,35 @@
 import { useEffect, useState } from "react";
-import { apiGet, apiPatch, apiPost, apiDelete } from "../api/client";
+import { apiBlobUrl, apiGet, apiPatch, apiPost, apiDelete } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+
+// Thumbnails need an Authorization header a plain <img src> can't attach -
+// same reason ComparePage.jsx fetches its previews via apiBlobUrl instead of
+// pointing an <img>/<iframe> straight at the API path.
+function LogoThumbnail({ logoId }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = null;
+    apiBlobUrl(`/governance/logo-references/${logoId}/thumbnail`).then((u) => {
+      if (cancelled) return;
+      objectUrl = u;
+      setUrl(u);
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [logoId]);
+  if (!url) return null;
+  return (
+    <img
+      src={url}
+      alt="matched logo"
+      title="Image matched to this entity via perceptual-hash logo matching"
+      style={{ width: 40, height: 40, objectFit: "contain", border: "1px solid var(--ink-200)", borderRadius: 4, background: "#fff" }}
+    />
+  );
+}
 
 const ROLES = ["admin", "km_governance", "km_reviewer", "practice_lead", "delivery", "read_only"];
 
@@ -234,6 +263,7 @@ function MaskingDictionarySection() {
           <tr>
             <th>Mask token</th>
             <th>Surface(s)</th>
+            <th>Logos</th>
             <th>Type</th>
             <th>Status</th>
             <th>Client account</th>
@@ -244,13 +274,43 @@ function MaskingDictionarySection() {
         <tbody>
           {entities.length === 0 && (
             <tr>
-              <td colSpan={7}>No masking entities yet.</td>
+              <td colSpan={8}>No masking entities yet.</td>
             </tr>
           )}
           {entities.map((e) => (
             <tr key={e.id}>
               <td className="agent-card__meta">{e.mask_token}</td>
               <td>{e.aliases.join(", ")}</td>
+              <td style={{ maxWidth: 260 }}>
+                {e.logos.length === 0 ? (
+                  <span className="agent-card__meta">—</span>
+                ) : (
+                  <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", maxWidth: 260 }}>
+                    {/* Capped display: a mis-attributed run (or a client whose logo
+                        genuinely recurs many times) must never be able to blow up
+                        this row's height and break the table below it. */}
+                    {e.logos.slice(0, 6).map((logo) =>
+                      logo.thumbnail_available ? (
+                        <LogoThumbnail key={logo.id} logoId={logo.id} />
+                      ) : (
+                        <span
+                          key={logo.id}
+                          className="agent-card__meta"
+                          title="Matched via perceptual hash, but no preview image was stored for this one"
+                          style={{ width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", border: "1px dashed var(--ink-200)", borderRadius: 4, fontSize: "0.7rem" }}
+                        >
+                          n/a
+                        </span>
+                      )
+                    )}
+                    {e.logos.length > 6 && (
+                      <span className="agent-card__meta" style={{ alignSelf: "center" }}>
+                        +{e.logos.length - 6} more
+                      </span>
+                    )}
+                  </div>
+                )}
+              </td>
               <td className="agent-card__meta">{e.entity_type}</td>
               <td>
                 <span className={`status-pill status-pill--${e.status === "approved" ? "completed" : e.status === "skipped" ? "failed" : "awaiting_review"}`}>
@@ -287,6 +347,72 @@ function MaskingDictionarySection() {
   );
 }
 
+function ReviewDeltasSection() {
+  const [summary, setSummary] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiGet("/governance/review-deltas")
+      .then(setSummary)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading)
+    return (
+      <div className="loading-state">
+        <span className="spinner" /> Loading review deltas…
+      </div>
+    );
+
+  const rows = summary?.by_entity_type || [];
+
+  return (
+    <div className="card section">
+      <h3 className="card__title">Review deltas (Task 3 accuracy signal)</h3>
+      <p className="card__sub">
+        Recall misses = entities the model missed that a reviewer added by hand; precision misses = entities the
+        model over-flagged that a reviewer removed. This is the cheapest real accuracy signal the system has —
+        {summary ? ` drawn from ${summary.runs_with_data} of ${summary.total_runs_checked} Sanitization run(s)` : ""}{" "}
+        with at least one reviewer edit — use it to decide which entity type's confidence gate
+        (<code>SANITIZATION_CONFIDENCE_THRESHOLDS</code>) is actually worth moving, instead of guessing.
+      </p>
+      {error && <p className="error-text">{error}</p>}
+      {rows.length === 0 ? (
+        <p className="agent-card__meta">No reviewer edits recorded yet — every run so far was approved as proposed.</p>
+      ) : (
+        <table className="run-table">
+          <thead>
+            <tr>
+              <th>Entity type</th>
+              <th>Recall misses (model missed)</th>
+              <th>Precision misses (model over-flagged)</th>
+              <th>Suggests</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.entity_type}>
+                <td className="agent-card__meta">{r.entity_type}</td>
+                <td>{r.recall_misses}</td>
+                <td>{r.precision_misses}</td>
+                <td className="agent-card__meta">
+                  {r.recall_misses > r.precision_misses * 2
+                    ? "consider a lower confidence gate — the model is missing more than it over-flags"
+                    : r.precision_misses > r.recall_misses * 2
+                      ? "consider a higher confidence gate — the model over-flags more than it misses"
+                      : "roughly balanced so far"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { user } = useAuth();
   const canManageUsers = user?.role === "admin";
@@ -308,6 +434,7 @@ export default function AdminPage() {
       {canManageUsers && <UsersSection />}
       {canManageAccounts && <AccountsSection />}
       {canViewMaskingDictionary && <MaskingDictionarySection />}
+      {canViewMaskingDictionary && <ReviewDeltasSection />}
     </div>
   );
 }

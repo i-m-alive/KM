@@ -116,6 +116,25 @@ def _finalize_completed(db: Session, run: AgentRun, result: AgentResult) -> None
     run.estimated_cost_usd = float(run.estimated_cost_usd or 0) + result.estimated_cost_usd
     run.output_file_path = result.output_file_path
     run.completed_at = datetime.utcnow()
+
+    # A detect-phase blocking flag (e.g. "N image(s) appear to reveal the
+    # client") can describe a state THIS SAME apply() call has since fixed -
+    # left in place, it keeps telling anyone reading the flag list the file
+    # is unsafe after it verified clean, indistinguishable from a flag that's
+    # still live. remediate.py already solved exactly this for its own repair
+    # path (_remove_resolved_flags); reuse it here too, BEFORE persisting
+    # apply()'s own new flags below, so run.flags still reflects only the
+    # pre-existing detect-phase flags when it runs.
+    if run.agent_id == "sanitization" and isinstance(result.output, dict):
+        from app.agents.sanitization.remediate import _remove_resolved_flags
+
+        channels_now_clean = [
+            ch for ch in ("text", "images", "metadata", "comments", "hyperlinks")
+            if result.output.get(f"verified_{ch}")
+        ]
+        if channels_now_clean:
+            _remove_resolved_flags(db, run, channels_now_clean, images_clean=bool(result.output.get("verified_images")))
+
     existing = db.query(RunStep).filter(RunStep.run_id == run.id).count()
     _persist_steps(db, run, result.steps, base_order=existing)
     _persist_flags(db, run, result.flags)

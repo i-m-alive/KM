@@ -24,6 +24,16 @@ export default function ReviewDetailPage() {
   const [clientEntitySurface, setClientEntitySurface] = useState("");
   // How masked surfaces are rendered in the output document.
   const [maskingStyle, setMaskingStyle] = useState("token");
+  // surface_text -> reviewer-chosen replacement string, used everywhere
+  // instead of the [CLIENT_N] token for that entity (validated server-side
+  // before being applied - a rejected alias falls back to the token and
+  // shows up as a flag on the resulting run, not as an error here).
+  const [aliases, setAliases] = useState({});
+  // surface_text -> another proposal surface_text the reviewer has
+  // recognized as the SAME real-world entity (e.g. "J&J" -> "Johnson &
+  // Johnson") - merged surfaces share one token/alias instead of getting
+  // their own.
+  const [merges, setMerges] = useState({});
 
   const MASKING_STYLES = [
     { value: "token", label: "Mask with token", example: "[CLIENT_1]", hint: "Traceable — the same stable token everywhere this entity appears." },
@@ -74,6 +84,41 @@ export default function ReviewDetailPage() {
     if (clientEntitySurface.toLowerCase() === surface.toLowerCase()) setClientEntitySurface("");
   }
 
+  function isIncluded(surface) {
+    return addedEntities.some((e) => e.surface_text.toLowerCase() === surface.toLowerCase());
+  }
+
+  function setAlias(surface, value) {
+    setAliases((prev) => {
+      const next = { ...prev };
+      if (value.trim()) next[surface] = value;
+      else delete next[surface];
+      return next;
+    });
+  }
+
+  function setMerge(surface, canonicalSurface) {
+    setMerges((prev) => {
+      const next = { ...prev };
+      if (canonicalSurface) next[surface] = canonicalSurface;
+      else delete next[surface];
+      return next;
+    });
+  }
+
+  // Excluded candidates share the SAME added-entity path as manually-typed
+  // ones (apply() merges edits.added_entities identically regardless of
+  // where the surface came from) - ticking one here is just a pre-filled
+  // "add entity" rather than a separate mechanism.
+  function toggleExcluded(candidate) {
+    setAddedEntities((prev) => {
+      if (isIncluded(candidate.surface_text)) {
+        return prev.filter((e) => e.surface_text.toLowerCase() !== candidate.surface_text.toLowerCase());
+      }
+      return [...prev, { surface_text: candidate.surface_text, entity_type: candidate.entity_type }];
+    });
+  }
+
   function willRedact(group) {
     if (group.mandatory_redaction) return true;
     const flipped = imageOverrides.has(group.group_index);
@@ -101,6 +146,8 @@ export default function ReviewDetailPage() {
         if (addedEntities.length > 0) edits.added_entities = addedEntities;
         if (clientEntitySurface) edits.client_entity_surface = clientEntitySurface;
         edits.masking_style = maskingStyle;
+        if (Object.keys(aliases).length > 0) edits.entity_aliases = aliases;
+        if (Object.keys(merges).length > 0) edits.entity_merges = merges;
       } else if (detail.agent_id === "tagging") {
         edits.removed_tags = (p.tags || [])
           .filter((t) => removed.has(`${t.category}:${t.value}`))
@@ -111,6 +158,8 @@ export default function ReviewDetailPage() {
         imageOverrides.size > 0 ||
         addedEntities.length > 0 ||
         Boolean(clientEntitySurface) ||
+        Object.keys(aliases).length > 0 ||
+        Object.keys(merges).length > 0 ||
         (detail.agent_id === "sanitization" && maskingStyle !== "token");
       const finalDecision = decision === "approved" && edited ? "edited" : decision;
       await apiPost(`/review/${runId}`, { decision: finalDecision, notes: notes || null, edits });
@@ -134,7 +183,17 @@ export default function ReviewDetailPage() {
   const p = detail.proposal || {};
   const documentId = p.document_id;
   const images = p.images || [];
-  const edited = removed.size > 0 || imageOverrides.size > 0 || addedEntities.length > 0 || Boolean(clientEntitySurface);
+  // Every proposed surface (agent-proposed + reviewer-added), for the
+  // "Merge into" dropdown - a surface can only merge into ANOTHER surface
+  // actually present in this run's proposal.
+  const allSurfaces = [...(p.entities || []).map((e) => e.surface_text), ...addedEntities.map((e) => e.surface_text)];
+  const edited =
+    removed.size > 0 ||
+    imageOverrides.size > 0 ||
+    addedEntities.length > 0 ||
+    Boolean(clientEntitySurface) ||
+    Object.keys(aliases).length > 0 ||
+    Object.keys(merges).length > 0;
 
   return (
     <div>
@@ -190,7 +249,9 @@ export default function ReviewDetailPage() {
             <h3 className="card__title">Proposed masks ({(p.entities || []).length + addedEntities.length})</h3>
             <p className="card__sub">
               Untick an entity to exclude it from masking, add any the agent missed, and mark which one is the client —
-              that's the only entity linked to a client account.
+              that's the only entity linked to a client account. Set an alias to replace the token with a chosen name
+              everywhere (validated before it's applied); merge a duplicate spelling ("J&amp;J") into its canonical
+              entity so they share one token/alias instead of two.
             </p>
             <div className="table-scroll">
               <table className="run-table">
@@ -204,6 +265,8 @@ export default function ReviewDetailPage() {
                     <th>Known?</th>
                     <th>Include</th>
                     <th>Client?</th>
+                    <th>Alias</th>
+                    <th>Merge into</th>
                     <th />
                   </tr>
                 </thead>
@@ -230,6 +293,33 @@ export default function ReviewDetailPage() {
                           onChange={() => setClientEntitySurface(e.surface_text)}
                         />
                       </td>
+                      <td>
+                        <input
+                          type="text"
+                          placeholder="e.g. Acme Pharma"
+                          value={aliases[e.surface_text] || ""}
+                          disabled={removed.has(e.surface_text) || Boolean(merges[e.surface_text])}
+                          onChange={(ev) => setAlias(e.surface_text, ev.target.value)}
+                          style={{ width: "140px" }}
+                        />
+                      </td>
+                      <td>
+                        <select
+                          value={merges[e.surface_text] || ""}
+                          disabled={removed.has(e.surface_text)}
+                          onChange={(ev) => setMerge(e.surface_text, ev.target.value)}
+                          style={{ width: "150px" }}
+                        >
+                          <option value="">(none)</option>
+                          {allSurfaces
+                            .filter((s) => s.toLowerCase() !== e.surface_text.toLowerCase())
+                            .map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                        </select>
+                      </td>
                       <td />
                     </tr>
                   ))}
@@ -251,6 +341,32 @@ export default function ReviewDetailPage() {
                           checked={clientEntitySurface.toLowerCase() === e.surface_text.toLowerCase()}
                           onChange={() => setClientEntitySurface(e.surface_text)}
                         />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          placeholder="e.g. Acme Pharma"
+                          value={aliases[e.surface_text] || ""}
+                          disabled={Boolean(merges[e.surface_text])}
+                          onChange={(ev) => setAlias(e.surface_text, ev.target.value)}
+                          style={{ width: "140px" }}
+                        />
+                      </td>
+                      <td>
+                        <select
+                          value={merges[e.surface_text] || ""}
+                          onChange={(ev) => setMerge(e.surface_text, ev.target.value)}
+                          style={{ width: "150px" }}
+                        >
+                          <option value="">(none)</option>
+                          {allSurfaces
+                            .filter((s) => s.toLowerCase() !== e.surface_text.toLowerCase())
+                            .map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                        </select>
                       </td>
                       <td>
                         <button type="button" className="btn--ghost btn--sm" onClick={() => removeAddedEntity(e.surface_text)}>
@@ -283,6 +399,43 @@ export default function ReviewDetailPage() {
               </button>
             </div>
           </div>
+
+          {(p.excluded_entities || []).length > 0 && (
+            <div className="card section">
+              <h3 className="card__title">Excluded candidates ({p.excluded_entities.length})</h3>
+              <p className="card__sub">
+                Below the confidence bar, so left out of the mask list above by default — often true for a name that
+                only appears once. Tick "Include" for any that are real; this adds it exactly like a manually-typed
+                entity above.
+              </p>
+              <div className="table-scroll">
+                <table className="run-table">
+                  <thead>
+                    <tr>
+                      <th>Surface</th>
+                      <th>Type</th>
+                      <th>Conf.</th>
+                      <th>Occurrences</th>
+                      <th>Include</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {p.excluded_entities.map((e, i) => (
+                      <tr key={`excluded-${i}`}>
+                        <td style={{ fontWeight: 550 }}>{e.surface_text}</td>
+                        <td className="agent-card__meta">{e.entity_type}</td>
+                        <td>{Math.round((e.confidence ?? 0) * 100)}%</td>
+                        <td>{e.occurrences}</td>
+                        <td>
+                          <input type="checkbox" checked={isIncluded(e.surface_text)} onChange={() => toggleExcluded(e)} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="card section">
             <h3 className="card__title">

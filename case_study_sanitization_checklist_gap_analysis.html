@@ -89,9 +89,12 @@
   .pill.prot{color:#8A5A10;background:var(--brass-bg);border-color:var(--brass-line);}
   .pill.new{color:var(--ready);background:var(--ready-bg);border-color:var(--ready-line);}
   .pill.ext{color:var(--archive);background:var(--archive-bg);border-color:var(--archive-line);}
+<<<<<<< HEAD
+=======
   .pill.p4{color:var(--archive);background:var(--archive-bg);border-color:var(--archive-line);}
   .pill.mand{color:#fff;background:var(--danger);border-color:var(--danger);font-weight:600;}
   .pill.synth{color:var(--archive);background:var(--archive-bg);border-color:var(--archive-line);}
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
   .callout{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--skill);border-radius:12px;padding:18px 20px;margin:20px 0;}
   .callout.blue{border-left-color:var(--signal);}
@@ -151,6 +154,8 @@
   .tiergate .tier.t3{border-top:4px solid var(--danger-line);}
   @media(max-width:900px){ .tiergate{grid-template-columns:1fr;} }
 
+<<<<<<< HEAD
+=======
   .tiergate4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:6px 0 20px;}
   .tiergate4 .tier{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
   .tiergate4 .tier h4{font-family:"Space Grotesk";margin:0 0 8px;color:var(--navy);font-size:.98rem;}
@@ -163,6 +168,7 @@
   @media(max-width:900px){ .tiergate4{grid-template-columns:1fr 1fr;} }
   @media(max-width:560px){ .tiergate4{grid-template-columns:1fr;} }
 
+>>>>>>> 2eb74f5 (Added case study and updated files)
   .phase{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:14px;}
   .phase .phead{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
   .phase .pnum{font-family:"IBM Plex Mono";font-weight:700;color:#fff;background:var(--navy);border-radius:7px;padding:2px 9px;font-size:12px;}
@@ -201,14 +207,21 @@
 
 <header class="mast">
   <div class="wrap">
+<<<<<<< HEAD
+    <p class="kicker"><span class="dot"></span> NaviKnow · Agent Platform <span class="dot"></span> A-01 Sanitization <span class="dot"></span> Full Checklist Audit &amp; Implementation Plan · v2</p>
+=======
     <p class="kicker"><span class="dot"></span> NaviKnow · Agent Platform <span class="dot"></span> A-01 Sanitization <span class="dot"></span> Full Checklist Audit &amp; Implementation Plan · v3 <span class="dot"></span> + Phase 4 policy engine</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <h1 class="title">Case Study Sanitization Checklist — every item, what's done, what's not, and how we close the rest</h1>
     <p class="lede">A full item-by-item audit of the 29 checks in the Case Study Sanitization Checklist against the Sanitization Agent (A-01) as actually built and debugged — not the design intent, the validated behavior. Where the checklist isn't met, this document designs the technical closure: new entity types, new skills, new protected calls, the data model and file changes they need, and the review/governance process that ties it all to the checklist's own distribution-approval field.</p>
     <div class="mast-meta">
       <span>SOURCE &nbsp;<b>Case_Study_Sanitization_Checklist.html — 10 categories, 29 checks</b></span>
       <span>BASELINE &nbsp;<b>A-01 design v3 + live debugging report (19 bugs fixed, 5/5 channels verified clean)</b></span>
       <span>RESULT &nbsp;<b>2 done · 5 partial · 19 gap · 3 process gap</b></span>
+<<<<<<< HEAD
+=======
       <span>PHASE 4 &nbsp;<b>Advanced Policy-Based Sanitization — rule engine, 4-level hierarchy, policy matrix (added this revision, Sec. 12)</b></span>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     </div>
   </div>
 </header>
@@ -227,7 +240,10 @@
     <a href="#plan">09 Build plan &amp; phasing</a>
     <a href="#decisions">10 Decisions log</a>
     <a href="#implementation">11 Detailed implementation plan</a>
+<<<<<<< HEAD
+=======
     <a href="#phase4">12 Phase 4 · Policy-based sanitization</a>
+>>>>>>> 2eb74f5 (Added case study and updated files)
   </div>
 </nav>
 
@@ -323,19 +339,31 @@
     <p class="sec-sub">The 24 partial/gap items above collapse into seven design problems (the People and Technical/Screenshots partial items close alongside their category's gap fix). Each states what's missing, why the current architecture doesn't catch it, and the technical closure design.</p>
 
     <div class="gapcard">
+<<<<<<< HEAD
+      <div class="ghead"><span class="pill p1">P1</span><h3>A · Commercial &amp; Financial Terms <span style="opacity:.7;font-size:.8em">(3.1–3.3)</span></h3></div>
+=======
       <div class="ghead"><span class="pill p1">P1</span><h3>A · Commercial &amp; Financial Terms <span style="opacity:.7;font-size:.8em">(3.1—3.3)</span></h3></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       <div class="gbody">
         <div class="gwhy"><b>Root cause:</b> the taxonomy has an explicit row keeping deal dollar amounts by default — correct for an internal record, wrong for something meant to leave the building.</div>
         <span class="glabel">Design</span>
         <ul class="gdesign">
           <li>New entity type <code class="inline">COMMERCIAL_TERM</code> — regex pre-pass for currency/percentage/payment-term patterns (free) feeding the Detector for contextual classification (a $ figure near "trial balance" isn't a commercial-term hit; one near "contract value" is).</li>
+<<<<<<< HEAD
+          <li>Default action is <b>flag</b>, not mask — a case study often needs a figure to stay credible ("saved $2M annually"). Reviewer chooses keep / generalize ("$2M" → "multi-million dollar") / remove.</li>
+=======
           <li>Default action is <b>flag</b>, not mask — a case study often needs a figure to stay credible ("saved $2M annually"). Reviewer chooses keep / generalize ("$2M" — "multi-million dollar") / remove.</li>
+>>>>>>> 2eb74f5 (Added case study and updated files)
         </ul>
       </div>
     </div>
 
     <div class="gapcard">
+<<<<<<< HEAD
+      <div class="ghead"><span class="pill p2">P2</span><h3>B · Infrastructure, Security &amp; Credentials <span style="opacity:.7;font-size:.8em">(4.1–4.3)</span></h3></div>
+=======
       <div class="ghead"><span class="pill p2">P2</span><h3>B · Infrastructure, Security &amp; Credentials <span style="opacity:.7;font-size:.8em">(4.1—4.3)</span></h3></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       <div class="gbody">
         <div class="gwhy"><b>Root cause:</b> the pre-pass pattern library only knows identity shapes (emails, org/person names) — nothing about hostnames, IP ranges, or secret formats.</div>
         <span class="glabel">Design</span>
@@ -348,7 +376,11 @@
     </div>
 
     <div class="gapcard">
+<<<<<<< HEAD
+      <div class="ghead"><span class="pill p1">P1</span><h3>C · Data Samples in Screenshots, Datasets &amp; Reports <span style="opacity:.7;font-size:.8em">(5.1–5.3)</span></h3></div>
+=======
       <div class="ghead"><span class="pill p1">P1</span><h3>C · Data Samples in Screenshots, Datasets &amp; Reports <span style="opacity:.7;font-size:.8em">(5.1—5.3)</span></h3></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       <div class="gbody">
         <div class="gwhy"><b>Root cause:</b> the vision call asks exactly one question — does this image reveal client <i>identity</i> (logo/wordmark). It's never asked whether the image's <i>content</i> is real, unmasked client data.</div>
         <span class="glabel">Design</span>
@@ -373,7 +405,11 @@
     </div>
 
     <div class="gapcard">
+<<<<<<< HEAD
+      <div class="ghead"><span class="pill p2">P2</span><h3>E · Competitive &amp; Strategic Information <span style="opacity:.7;font-size:.8em">(6.1–6.3)</span></h3></div>
+=======
       <div class="ghead"><span class="pill p2">P2</span><h3>E · Competitive &amp; Strategic Information <span style="opacity:.7;font-size:.8em">(6.1—6.3)</span></h3></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       <div class="gbody">
         <div class="gwhy"><b>Root cause:</b> this is contextual, judgment-heavy prose ("the client is evaluating a divestiture of...") — structurally not name-shaped or number-shaped, so no regex pre-pass can catch it and the current Detector skill is scoped to identity, not strategy.</div>
         <span class="glabel">Design</span>
@@ -385,7 +421,11 @@
     </div>
 
     <div class="gapcard">
+<<<<<<< HEAD
+      <div class="ghead"><span class="pill p2">P2</span><h3>F · Sensitive Outcomes <span style="opacity:.7;font-size:.8em">(7.1–7.3)</span></h3></div>
+=======
       <div class="ghead"><span class="pill p2">P2</span><h3>F · Sensitive Outcomes <span style="opacity:.7;font-size:.8em">(7.1—7.3)</span></h3></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       <div class="gbody">
         <div class="gwhy"><b>Root cause:</b> this is the clearest case where "detect and mask" is the wrong shape — a root-cause narrative or a negative metric is often exactly what makes a case study credible, and whether it's safe to publish is a client-relationship judgment call, not a text pattern.</div>
         <span class="glabel">Design</span>
@@ -413,11 +453,26 @@
   <!-- 04 TAXONOMY -->
   <section id="taxonomy">
     <div class="sec-head"><span class="num">04</span><h2>New entity taxonomy — additions to A-01's fixed table</h2></div>
+<<<<<<< HEAD
+    <p class="sec-sub">Appends to the existing taxonomy (A-01 design §06). Action follows the same three-value convention already in use, plus one new value this plan introduces: <span class="pill covered">Mask</span> exact deterministic replacement, <span class="pill gap">Mandatory redact</span> non-overridable removal, <span class="pill partial">Flag</span> a reviewer judgment call, <span class="pill covered">Keep</span> untouched.</p>
+=======
     <p class="sec-sub">Appends to the existing taxonomy (A-01 design Sec. 06). Action follows the same three-value convention already in use, plus one new value this plan introduces: <span class="pill covered">Mask</span> exact deterministic replacement, <span class="pill gap">Mandatory redact</span> non-overridable removal, <span class="pill partial">Flag</span> a reviewer judgment call, <span class="pill covered">Keep</span> untouched.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <div class="wrap-x">
     <table class="board">
       <thead><tr><th style="width:190px">Entity type</th><th>Examples</th><th style="width:120px">Detection</th><th style="width:130px">Default action</th><th style="width:100px">Closes</th></tr></thead>
       <tbody>
+<<<<<<< HEAD
+        <tr><td class="anm">COMMERCIAL_TERM</td><td class="small">Contract value, margins, discounts, pricing/payment terms, SLA-breach detail</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">3.1–3.3</td></tr>
+        <tr><td class="anm">INFRA_IDENTIFIER</td><td class="small">IP ranges, hostnames, internal domains, firewall/security config detail</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill covered">Mask</span></td><td class="small">4.1–4.2</td></tr>
+        <tr><td class="anm">CREDENTIAL</td><td class="small">API keys, tokens, connection strings, passwords</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill gap">Mandatory redact</span></td><td class="small">4.3</td></tr>
+        <tr><td class="anm">DIAGRAM_LABEL_TEXT</td><td class="small">System names / infra labels rendered inside a diagram image</td><td class="center"><span class="pill skill">Vision-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">4.4</td></tr>
+        <tr><td class="anm">DATA_SAMPLE_IMAGE</td><td class="small">Screenshot/dashboard image containing real (non-synthetic) client data</td><td class="center"><span class="pill skill">Vision-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">5.1, 5.3</td></tr>
+        <tr><td class="anm">COMPETITOR_NAME</td><td class="small">Named competing vendors, referenced client competitors</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag → mask on confirm</span></td><td class="small">6.1–6.2</td></tr>
+        <tr><td class="anm">STRATEGY_MENTION</td><td class="small">M&amp;A plans, unannounced initiatives, roadmaps</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">6.3</td></tr>
+        <tr><td class="anm">NEGATIVE_OUTCOME</td><td class="small">Failure/outage/breach root cause, negative metric, regulatory finding</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag — client sign-off</span></td><td class="small">7.1–7.3</td></tr>
+        <tr><td class="anm">OWN_COST_DETAIL</td><td class="small">Internal staffing ratios, day-rate/FTE figures, exact internal configs</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">8.1–8.2</td></tr>
+=======
         <tr><td class="anm">COMMERCIAL_TERM</td><td class="small">Contract value, margins, discounts, pricing/payment terms, SLA-breach detail</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">3.1—3.3</td></tr>
         <tr><td class="anm">INFRA_IDENTIFIER</td><td class="small">IP ranges, hostnames, internal domains, firewall/security config detail</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill covered">Mask</span></td><td class="small">4.1—4.2</td></tr>
         <tr><td class="anm">CREDENTIAL</td><td class="small">API keys, tokens, connection strings, passwords</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill gap">Mandatory redact</span></td><td class="small">4.3</td></tr>
@@ -427,6 +482,7 @@
         <tr><td class="anm">STRATEGY_MENTION</td><td class="small">M&amp;A plans, unannounced initiatives, roadmaps</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">6.3</td></tr>
         <tr><td class="anm">NEGATIVE_OUTCOME</td><td class="small">Failure/outage/breach root cause, negative metric, regulatory finding</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag — client sign-off</span></td><td class="small">7.1—7.3</td></tr>
         <tr><td class="anm">OWN_COST_DETAIL</td><td class="small">Internal staffing ratios, day-rate/FTE figures, exact internal configs</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">8.1—8.2</td></tr>
+>>>>>>> 2eb74f5 (Added case study and updated files)
         <tr><td class="anm">ORG_CHART_STRUCTURE</td><td class="small">Reporting-line diagrams, structured name/title pairs</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">2.3</td></tr>
         <tr><td class="anm">CLIENT_PERSON_TITLE / CLIENT_PHONE</td><td class="small">Job titles and phone numbers tied to a named client stakeholder</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill covered">Mask</span></td><td class="small">2.1</td></tr>
         <tr><td class="anm">INTERNAL_TEAM_MEMBER</td><td class="small">NaviKenz staff named/pictured alongside the client</td><td class="center"><span class="pill prot">Consent lookup</span></td><td class="center"><span class="pill partial">Keep if consented, else flag</span></td><td class="small">2.2</td></tr>
@@ -442,7 +498,11 @@
   <!-- 05 SKILLS ROSTER -->
   <section id="skillsroster">
     <div class="sec-head"><span class="num">05</span><h2>Skills roster remaining to implement</h2></div>
+<<<<<<< HEAD
+    <p class="sec-sub">Skills in the platform's own sense (A-01 design §09) — reusable prompt/behaviour modules the Detector, Summarizer, and vision-scan steps load. This section is <i>only</i> the LLM-reasoning additions; deterministic, code-only additions are tracked separately in §06 so the tool/skill separation A-01 already relies on stays intact.</p>
+=======
     <p class="sec-sub">Skills in the platform's own sense (A-01 design Sec. 09) — reusable prompt/behaviour modules the Detector, Summarizer, and vision-scan steps load. This section is <i>only</i> the LLM-reasoning additions; deterministic, code-only additions are tracked separately in Sec. 06 so the tool/skill separation A-01 already relies on stays intact.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <div class="wrap-x">
     <table class="board">
       <thead><tr><th style="width:250px">Skill</th><th style="width:130px">Used by</th><th>What it encodes</th><th style="width:90px">Status</th></tr></thead>
@@ -466,7 +526,11 @@
   <!-- 06 PROTECTED CALLS -->
   <section id="protcalls">
     <div class="sec-head"><span class="num">06</span><h2>Protected calls &amp; deterministic additions</h2></div>
+<<<<<<< HEAD
+    <p class="sec-sub">Following A-01's own tools-vs-protected-calls split (design §08): these run as agent code, never as a model tool call — the same discipline that keeps <code class="inline">document.apply_masks</code> exact and repeatable applies here.</p>
+=======
     <p class="sec-sub">Following A-01's own tools-vs-protected-calls split (design Sec. 08): these run as agent code, never as a model tool call — the same discipline that keeps <code class="inline">document.apply_masks</code> exact and repeatable applies here.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <div class="wrap-x">
     <table class="board">
       <thead><tr><th style="width:260px">Call</th><th style="width:100px">Type</th><th>Role</th><th style="width:90px">Status</th></tr></thead>
@@ -477,8 +541,13 @@
         <tr><td class="anm">flag_for_judgment.create</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Writes a new-style proposal item (commercial term / competitor / strategy / negative outcome / own-cost) distinct from a mask candidate — one shared mechanism for all five flag-based entity types.</td><td class="center"><span class="pill new">New</span></td></tr>
         <tr><td class="anm">flag_for_judgment.resolve</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Records the reviewer's decision (keep / generalize / remove / requires client sign-off) against a flagged item, part of the audit trail.</td><td class="center"><span class="pill new">New</span></td></tr>
         <tr><td class="anm">internal_team_consent.lookup / set</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Deterministic read/write of a named internal team member's consent status, checked before defaulting to "keep."</td><td class="center"><span class="pill new">New</span></td></tr>
+<<<<<<< HEAD
+        <tr><td class="anm">legal_attestation.record</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Governance-only write of the MSA/NDA, case-study clause, and compliance-confirmed booleans (§08).</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">distribution_gate.evaluate</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Checks a run's open flags + attestation record against the requested distribution tier before allowing it to be marked ready (§08).</td><td class="center"><span class="pill new">New</span></td></tr>
+=======
         <tr><td class="anm">legal_attestation.record</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Governance-only write of the MSA/NDA, case-study clause, and compliance-confirmed booleans (Sec. 08).</td><td class="center"><span class="pill new">New</span></td></tr>
         <tr><td class="anm">distribution_gate.evaluate</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Checks a run's open flags + attestation record against the requested distribution tier before allowing it to be marked ready (Sec. 08).</td><td class="center"><span class="pill new">New</span></td></tr>
+>>>>>>> 2eb74f5 (Added case study and updated files)
         <tr><td class="anm">document.apply_masks</td><td class="center"><span class="pill prot">Existing</span></td><td class="small">Unchanged — deterministic span replacement over reviewer-approved entities, now also covering the new mask-type entity additions.</td><td class="center"><span class="pill covered">Existing</span></td></tr>
       </tbody>
     </table>
@@ -488,7 +557,11 @@
   <!-- 07 ARCHITECTURE -->
   <section id="architecture">
     <div class="sec-head"><span class="num">07</span><h2>Architecture — extended pipeline, data model, and file layout</h2></div>
+<<<<<<< HEAD
+    <p class="sec-sub">No new sub-agents and no new run states. Every technical addition below slots into an existing step of the detect → review → apply → verify pipeline already proven on a real document.</p>
+=======
     <p class="sec-sub">No new sub-agents and no new run states. Every technical addition below slots into an existing step of the detect — review — apply — verify pipeline already proven on a real document.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
     <figure class="diagram-fig">
       <svg class="diagram" viewBox="0 0 1160 260" role="img" aria-label="Extended sanitization pipeline: detect phase runs extract text, NER pre-pass plus new infra/credential regex, dictionary lookup, LLM Detector with new skills, vision scan with new fields, then human review with new judgment flags; on approval the apply phase runs apply masks, render, redact images, a new EXIF strip step, scrub metadata, and verify across six channels.">
@@ -516,7 +589,11 @@
           <rect x="510" y="28" width="180" height="60" rx="8" class="box-rect box-new"></rect>
           <text x="600" y="50" text-anchor="middle">LLM Detector</text>
           <text x="600" y="64" text-anchor="middle" class="lbl-sub">+ 4 new skills</text>
+<<<<<<< HEAD
+          <text x="600" y="77" text-anchor="middle" class="lbl-sub">(§05)</text>
+=======
           <text x="600" y="77" text-anchor="middle" class="lbl-sub">(Sec. 05)</text>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
           <rect x="710" y="28" width="180" height="60" rx="8" class="box-rect box-new"></rect>
           <text x="800" y="50" text-anchor="middle">Vision scan</text>
@@ -526,7 +603,11 @@
           <rect x="910" y="28" width="230" height="60" rx="8" class="box-rect box-new"></rect>
           <text x="1025" y="50" text-anchor="middle">Human review</text>
           <text x="1025" y="64" text-anchor="middle" class="lbl-sub">+ judgment-flag queue</text>
+<<<<<<< HEAD
+          <text x="1025" y="77" text-anchor="middle" class="lbl-sub">(§06 flag_for_judgment)</text>
+=======
           <text x="1025" y="77" text-anchor="middle" class="lbl-sub">(Sec. 06 flag_for_judgment)</text>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
           <path d="M140,58 L160,58" class="arrow" marker-end="url(#arrowA)"></path>
           <path d="M340,58 L360,58" class="arrow" marker-end="url(#arrowA)"></path>
@@ -561,7 +642,11 @@
 
           <rect x="810" y="158" width="220" height="60" rx="8" class="box-rect box-ext"></rect>
           <text x="920" y="185" text-anchor="middle">Verify</text>
+<<<<<<< HEAD
+          <text x="920" y="200" text-anchor="middle" class="lbl-sub">5 → 6 channels (+ EXIF)</text>
+=======
           <text x="920" y="200" text-anchor="middle" class="lbl-sub">5 — 6 channels (+ EXIF)</text>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
           <path d="M140,188 L160,188" class="arrow" marker-end="url(#arrowA)"></path>
           <path d="M280,188 L300,188" class="arrow" marker-end="url(#arrowA)"></path>
@@ -583,7 +668,11 @@
     <table class="board">
       <thead><tr><th style="width:210px">Table / column</th><th>Purpose</th><th style="width:100px">Status</th></tr></thead>
       <tbody>
+<<<<<<< HEAD
+        <tr><td class="anm">masking_dictionary.entity_type</td><td class="small">Enum extended with the ten new entity types from §04.</td><td class="center"><span class="pill ext">Extend</span></td></tr>
+=======
         <tr><td class="anm">masking_dictionary.entity_type</td><td class="small">Enum extended with the ten new entity types from Sec. 04.</td><td class="center"><span class="pill ext">Extend</span></td></tr>
+>>>>>>> 2eb74f5 (Added case study and updated files)
         <tr><td class="anm">masking_dictionary.consent_status</td><td class="small">New column — <code class="inline">not_required</code> / <code class="inline">pending</code> / <code class="inline">granted</code>, for internal-team entities only.</td><td class="center"><span class="pill new">New</span></td></tr>
         <tr><td class="anm">flagged_items</td><td class="small">New table — <code class="inline">run_id, flag_type, chunk_id/image_id, surface_text, suggested_action, status (pending/resolved), reviewer_id, resolution, decided_at</code>. Backs <code class="inline">flag_for_judgment.*</code> for all five flag-based entity types.</td><td class="center"><span class="pill new">New</span></td></tr>
         <tr><td class="anm">legal_attestation</td><td class="small">New table — <code class="inline">run_id or client_account_id, msa_nda_reviewed, case_study_clause_status, compliance_confirmed, attested_by, attested_at, notes</code>.</td><td class="center"><span class="pill new">New</span></td></tr>
@@ -597,7 +686,11 @@
     <div class="filetree">backend/app/<br>
 &nbsp;&nbsp;agents/sanitization/<br>
 &nbsp;&nbsp;&nbsp;&nbsp;ner_prepass.py <span class="comment"># EXTENDED — + infra/credential + title/phone regex</span><br>
+<<<<<<< HEAD
+&nbsp;&nbsp;&nbsp;&nbsp;detector.py <span class="comment"># EXTENDED — loads 4 new skills (§05)</span><br>
+=======
 &nbsp;&nbsp;&nbsp;&nbsp;detector.py <span class="comment"># EXTENDED — loads 4 new skills (Sec. 05)</span><br>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 &nbsp;&nbsp;&nbsp;&nbsp;image_scan.py <span class="comment"># EXTENDED — + data-sample field, + diagram/screenshot text field</span><br>
 &nbsp;&nbsp;&nbsp;&nbsp;summarizer.py <span class="comment"># EXTENDED — + discusses_negative_outcome field</span><br>
 &nbsp;&nbsp;&nbsp;&nbsp;<span class="new">flags.py</span> <span class="comment"># NEW — flag_for_judgment.create / .resolve</span><br>
@@ -619,12 +712,20 @@ frontend/src/pages/<br>
   <!-- 08 PROCESS -->
   <section id="process">
     <div class="sec-head"><span class="num">08</span><h2>Process &amp; governance — the distribution-tier gate</h2></div>
+<<<<<<< HEAD
+    <p class="sec-sub">The checklist already has a natural gate built in — "Approved for Distribution To: Internal only / Sales-Marketing / Public-External." Not every category needs to be clean for an internal share; all of them do before something goes external. This reuses the tiered-strictness philosophy already proven in the SharePoint Cleanup Agent's Tier-1/Tier-2 model (sharepoint_cleaning_agent_master_design.html §07): what requires review is decided by the destination, not by model confidence.</p>
+=======
     <p class="sec-sub">The checklist already has a natural gate built in — "Approved for Distribution To: Internal only / Sales-Marketing / Public-External." Not every category needs to be clean for an internal share; all of them do before something goes external. This reuses the tiered-strictness philosophy already proven in the SharePoint Cleanup Agent's Tier-1/Tier-2 model (sharepoint_cleaning_agent_master_design.html Sec. 07): what requires review is decided by the destination, not by model confidence.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <div class="tiergate">
       <div class="tier t1">
         <h4>Internal only</h4>
         <ul>
+<<<<<<< HEAD
+          <li>Client identity masked (1–2)</li>
+=======
           <li>Client identity masked (1—2)</li>
+>>>>>>> 2eb74f5 (Added case study and updated files)
           <li>Credentials never allowed through, any tier</li>
           <li>No commercial/strategic/outcome gate required</li>
         </ul>
@@ -654,11 +755,19 @@ frontend/src/pages/<br>
       <p><code class="inline">distribution_gate.evaluate</code> blocks the "mark ready for public distribution" action in the review UI until the attestation record exists and every flag in the run is resolved — exactly the way A-03 blocks Tier-2 actions on a missing eligibility rule.</p>
     </div>
     <div class="states">
+<<<<<<< HEAD
+      <span class="state">draft</span><span class="arrow">→</span>
+      <span class="state run">flags open</span><span class="arrow">→</span>
+      <span class="state pause">tier requested</span><span class="arrow">→</span>
+      <span class="state bad">gate blocked</span><span style="color:var(--muted);margin:0 6px">or</span>
+      <span class="state done">gate cleared → ready to distribute</span>
+=======
       <span class="state">draft</span><span class="arrow">—</span>
       <span class="state run">flags open</span><span class="arrow">—</span>
       <span class="state pause">tier requested</span><span class="arrow">—</span>
       <span class="state bad">gate blocked</span><span style="color:var(--muted);margin:0 6px">or</span>
       <span class="state done">gate cleared — ready to distribute</span>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     </div>
   </section>
 
@@ -695,6 +804,8 @@ frontend/src/pages/<br>
         <li><code class="inline">exif_strip.py</code> + sixth verification channel (<code class="inline">verified_image_metadata</code>).</li>
       </ul>
     </div>
+<<<<<<< HEAD
+=======
     <div class="phase">
       <div class="phead"><span class="pnum">P4</span><h4>Advanced Policy-Based Sanitization</h4><span class="pill p4">Policy layer</span></div>
       <p>Sequenced after P1-P3 for the same reason the governance gate was: a configurable rule engine and a 4-level policy hierarchy have nothing to enforce until <code class="inline">flagged_items</code>, the entity taxonomy (Sec. 04), and the 3-tier distribution gate (Sec. 08) already exist. P4 doesn't rebuild that infrastructure — it generalizes it into an organization-configurable policy layer. Full design in Sec. 12.</p>
@@ -704,6 +815,7 @@ frontend/src/pages/<br>
         <li>Reviewer override path + audit trail, reusing the existing <code class="inline">audit_log.write</code> call from Gap F (Sec. 11).</li>
       </ul>
     </div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
   </section>
 
   <!-- 10 DECISIONS -->
@@ -714,17 +826,24 @@ frontend/src/pages/<br>
         <tr><td>Audit granularity</td><td class="small">Scored at the individual checklist-item level (29), not the 10-category level, so a category with mixed status isn't miscounted as fully done or fully missing.</td></tr>
         <tr><td>Mask vs. flag</td><td class="small">Every new category defaults to <b>flag-for-review</b>, not auto-mask — a case study's value is in real outcomes and figures; only identity-class entities and credentials get a hard mask/mandatory-redaction.</td></tr>
         <tr><td>No new sub-agents</td><td class="small">All seven gaps extend the existing Detector/Reconciler/Summarizer + pre-pass + image-scan steps. No new catalogued agent, no new run state.</td></tr>
+<<<<<<< HEAD
+        <tr><td>Deterministic-first</td><td class="small">Infra identifiers, credentials, titles/phones, and EXIF stripping are pure regex/code, zero LLM cost — same cost-lever logic already applied in A-01 §10.</td></tr>
+=======
         <tr><td>Deterministic-first</td><td class="small">Infra identifiers, credentials, titles/phones, and EXIF stripping are pure regex/code, zero LLM cost — same cost-lever logic already applied in A-01 Sec. 10.</td></tr>
+>>>>>>> 2eb74f5 (Added case study and updated files)
         <tr><td>Shared flag mechanism</td><td class="small">Commercial terms, competitive/strategic mentions, sensitive outcomes, own-IP/cost detail, and org-chart structure all route through one new <code class="inline">flagged_items</code> table / <code class="inline">flag_for_judgment</code> call rather than five bespoke UI additions.</td></tr>
         <tr><td>One vision call, three new fields</td><td class="small">Data-sample content, diagram/screenshot visible text, and (with Gap B) credential/hostname detection all extend the single existing per-image vision call rather than adding new vision passes — no added model cost per image.</td></tr>
         <tr><td>Legal &amp; Contractual is not agent detection</td><td class="small">Modeled as a governance attestation record + a distribution-tier gate, owned by km_governance — mirrors A-03's eligibility-rule gate pattern rather than inventing a new one.</td></tr>
         <tr><td>Distribution tiers reuse the checklist's own field</td><td class="small">"Approved for Distribution To" becomes the gate deciding which flags must be resolved before a run can be marked ready — Internal / Sales-Marketing / Public-External, increasing in strictness.</td></tr>
+<<<<<<< HEAD
+=======
         <tr><td>Rules run before the LLM, always</td><td class="small">Phase 4's rule engine (Sec. 12.1) is a strict pre-pass, never a replacement for the Detector — it resolves what's deterministic (regex/dictionary/keyword/metadata/file-type/org-custom) so the LLM only reasons over genuinely ambiguous spans. Same cost lever as the original regex/NER pre-pass, generalized and made org-configurable.</td></tr>
         <tr><td>4 levels, not 3</td><td class="small">The Sec. 08 distribution gate's Internal/Sales-Marketing/Public-External split is kept, not replaced — Phase 4's hierarchy (Sec. 12.2) refines it by splitting "Internal" into Internal Team and Internal Cross-Practice, and adding a new External Partner level between Sales-Marketing and Public for NDA'd third parties the original 3-tier model had no slot for.</td></tr>
         <tr><td>Policy is data, not code</td><td class="small">Sanitization profiles are YAML/JSON, loaded per run by a new Profile Loader (Sec. 12.6/12.7) — an organization tunes its own thresholds, custom rules, and level definitions without a code deploy, the same "config over code" preference already used for the masking-style skill's token format.</td></tr>
         <tr><td>Overrides are logged, mandatory items aren't overridable</td><td class="small">Any policy decision below Priority 0 can be reviewer-overridden with a reason code, written to a new audit table (Sec. 12.5) — but <code class="inline">CREDENTIAL</code> and other mandatory-redaction entities stay non-overridable at every level, unchanged from the rule already built in Gap B (Sec. 11).</td></tr>
         <tr><td>One arbitration authority, not two</td><td class="small">"Policy Resolution Engine" (Sec. 12.7) is a named responsibility of the Policy Evaluator, not a second component built alongside it — conflicts between the rule engine, the LLM Detector, org overlays, and consent records are arbitrated in exactly one place, by one published precedence order, so there's never a question of which of two arbiters ran last.</td></tr>
         <tr><td>Audit entries are append-only and policy-version-stamped</td><td class="small">Every decision writes a hash-chained, immutable entry naming the exact <code class="inline">policy_version</code> that produced it (Sec. 12.5/12.7) — a profile can be revised (a new published version) without invalidating what an already-completed run's audit trail says happened, which is what an auditor re-checking a run six months later actually needs.</td></tr>
+>>>>>>> 2eb74f5 (Added case study and updated files)
       </tbody>
     </table>
   </section>
@@ -732,7 +851,11 @@ frontend/src/pages/<br>
   <!-- 11 DETAILED IMPLEMENTATION PLAN -->
   <section id="implementation">
     <div class="sec-head"><span class="num">11</span><h2>Detailed implementation plan — resolving every gap against the current agent</h2></div>
+<<<<<<< HEAD
+    <p class="sec-sub">This is the "how," underneath §03's "what" and §09's "when." Each gap below is broken into concrete implementation steps against the actual current codebase (file names as listed in the live debugging report's appendix), in build order, ending with the regression-suite coverage that proves it before it ever touches a real document — the same discipline that caught real bugs (issues 16 and 17 in the debugging report) before they reached production. P1/P2/P3 labels match §03/§09 — this section doesn't re-sequence anything, it just fills in the steps under each label.</p>
+=======
     <p class="sec-sub">This is the "how," underneath Sec. 03's "what" and Sec. 09's "when." Each gap below is broken into concrete implementation steps against the actual current codebase (file names as listed in the live debugging report's appendix), in build order, ending with the regression-suite coverage that proves it before it ever touches a real document — the same discipline that caught real bugs (issues 16 and 17 in the debugging report) before they reached production. P1/P2/P3 labels match Sec. 03/Sec. 09 — this section doesn't re-sequence anything, it just fills in the steps under each label.</p>
+>>>>>>> 2eb74f5 (Added case study and updated files)
 
     <h3>A · Commercial &amp; Financial Terms <span class="pill p1">P1</span></h3>
     <div class="phase"><div class="phead"><span class="pnum">1</span><h4>Detection — new regex layer</h4></div><p>New <code class="inline">app/agents/sanitization/regex_patterns/commercial_terms.py</code>: currency amounts, percentage figures, and payment-term keyword phrases ("net 30", "penalty clause", "SLA credit", "rate card"). Wired into <code class="inline">ner_prepass.py</code>'s existing candidate-generation pass, free and on-CPU, same as today's regex/NER candidates.</p></div>
@@ -766,7 +889,11 @@ frontend/src/pages/<br>
     <h3>E · Competitive &amp; Strategic Information <span class="pill p2">P2</span></h3>
     <div class="phase"><div class="phead"><span class="pnum">1</span><h4>New skill</h4></div><p><code class="inline">competitive-strategic-detection</code>, loaded by <code class="inline">detector.py</code> alongside <code class="inline">sanitization-detection</code> — scans chunk text for named-competitor mentions and forward-looking strategic language (M&amp;A, unannounced initiative, roadmap).</p></div>
     <div class="phase"><div class="phead"><span class="pnum">2</span><h4>Flagged-item routing</h4></div><p>Detector emits <code class="inline">COMPETITOR_NAME</code> and <code class="inline">STRATEGY_MENTION</code> candidates into <code class="inline">flagged_items</code>, not directly into <code class="inline">masking_dictionary</code>, with the offending sentence(s) attached for reviewer context.</p></div>
+<<<<<<< HEAD
+    <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Resolve paths differ by type</h4></div><p>For <code class="inline">COMPETITOR_NAME</code>, resolving "mask" promotes it into <code class="inline">masking_dictionary</code> via the existing <code class="inline">pending_approval → approved</code> path, so it gets a consistent token if it recurs. For <code class="inline">STRATEGY_MENTION</code>, resolution is keep/generalize/remove text only — no token, since it's prose-level judgment rather than a named entity.</p></div>
+=======
     <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Resolve paths differ by type</h4></div><p>For <code class="inline">COMPETITOR_NAME</code>, resolving "mask" promotes it into <code class="inline">masking_dictionary</code> via the existing <code class="inline">pending_approval — approved</code> path, so it gets a consistent token if it recurs. For <code class="inline">STRATEGY_MENTION</code>, resolution is keep/generalize/remove text only — no token, since it's prose-level judgment rather than a named entity.</p></div>
+>>>>>>> 2eb74f5 (Added case study and updated files)
     <div class="phase"><div class="phead"><span class="pnum">4</span><h4>Regression</h4></div><p>Fixture chunk with a fictional competitor name and a "planned acquisition of X" sentence; assert both are flagged, never silently masked or silently ignored.</p></div>
 
     <h3>F · Sensitive Outcomes <span class="pill p2">P2</span></h3>
@@ -799,6 +926,8 @@ frontend/src/pages/<br>
     </ul>
   </section>
 
+<<<<<<< HEAD
+=======
   <!-- 12 PHASE 4 -->
   <section id="phase4">
     <div class="sec-head"><span class="num">12</span><h2>Phase 4 — Advanced Policy-Based Sanitization</h2></div>
@@ -1151,13 +1280,19 @@ frontend/src/pages/<br>
     </div>
   </section>
 
+>>>>>>> 2eb74f5 (Added case study and updated files)
 </main>
 
 <footer>
   <div class="wrap">
+<<<<<<< HEAD
+    <span>NaviKnow · Case Study Sanitization Checklist — Full Audit, Gaps &amp; Implementation Plan · v2</span>
+    <span>29 checklist items audited · 2 done · 5 partial · 19 gap · 3 process gap</span>
+=======
     <span>NaviKnow · Case Study Sanitization Checklist — Full Audit, Gaps &amp; Implementation Plan · v3</span>
     <span>29 checklist items audited · 2 done · 5 partial · 19 gap · 3 process gap</span>
     <span>+ Phase 4: rule engine · 4-level policy hierarchy · policy matrix · reviewer overrides (design added)</span>
+>>>>>>> 2eb74f5 (Added case study and updated files)
   </div>
 </footer>
 

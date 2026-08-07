@@ -10,43 +10,44 @@ import os
 import re
 
 from app.config import get_settings
+from app.documents import pptx_richcontent as rich
 from app.documents.pptx_walk import iter_shapes_recursive
-from app.masking.pattern import surface_pattern
+from app.masking.spans import apply_spans_to_runs, resolve_mask_spans
 from app.masking.style import DEFAULT_MASKING_STYLE, replacement_for
 
 settings = get_settings()
 
 
 def _replace_text(text: str, surface_to_token: dict[str, str], style: str = DEFAULT_MASKING_STYLE) -> str:
-    """Case-insensitive, longest-surface-first replacement (mirrors apply_masks)."""
+    """Case-insensitive, longest-surface-first replacement, using the SAME
+    span resolution apply_masks.py and _mask_paragraph_runs use (see
+    app.masking.spans) - one shared definition of "what counts as a match"
+    rather than several independently-written implementations that happen to
+    agree by convention."""
     if not text:
         return text
-    out = text
-    for surface in sorted(surface_to_token.keys(), key=len, reverse=True):
-        out = re.sub(
-            surface_pattern(surface),
-            lambda m: replacement_for(m.group(0), surface_to_token[surface], style),
-            out,
-            flags=re.IGNORECASE,
-        )
-    return out
+    spans = resolve_mask_spans(text, surface_to_token)
+    if not spans:
+        return text
+    out = []
+    cursor = 0
+    for sp in spans:
+        out.append(text[cursor : sp.start])
+        out.append(replacement_for(sp.surface, sp.token, style))
+        cursor = sp.end
+    out.append(text[cursor:])
+    return "".join(out)
 
 
 def _mask_paragraph_runs(p, surface_to_token: dict[str, str], style: str = DEFAULT_MASKING_STYLE) -> bool:
     """Shared by DOCX and PPTX: rewrite a paragraph's runs so the concatenated
-    text is masked. Returns True if anything changed."""
-    joined = "".join(run.text for run in p.runs)
-    if not joined:
-        return False
-    masked = _replace_text(joined, surface_to_token, style)
-    if masked == joined or not p.runs:
-        return False
-    # Put the whole masked text in the first run; clear the rest (keeps the
-    # paragraph's leading formatting; surfaces often span runs anyway).
-    p.runs[0].text = masked
-    for run in p.runs[1:]:
-        run.text = ""
-    return True
+    text is masked, preserving per-run formatting. Delegates to
+    app.masking.spans.apply_spans_to_runs - the SAME run-boundary-aware
+    rewrite pptx_richcontent.py's SmartArt masking uses, so a client name
+    split across runs is handled identically everywhere it can occur,
+    rather than two independently-written (and easy to let drift)
+    implementations of the same algorithm."""
+    return apply_spans_to_runs(list(p.runs), surface_to_token, style)
 
 
 # ---- DOCX ----
@@ -147,26 +148,75 @@ def _pptx_mask_table(table, surface_to_token: dict[str, str], style: str) -> Non
                 _mask_paragraph_runs(p, surface_to_token, style)
 
 
+def _mask_pptx_shapes(shapes, surface_to_token: dict[str, str], style: str) -> None:
+    """Mask every text-bearing shape in a shape tree - shared by the
+    per-slide walk and the layout/master walk below, same source-tree-
+    agnostic split images.py/pptx_richcontent.py already use elsewhere.
+    Recurses into grouped shapes - the same gap fixed in extract.py.
+    Without this, anything inside a PowerPoint "Group" (logo+label, org
+    charts, diagrams) is silently left unmasked in the output file even
+    though it may have been detected via the slide's full text."""
+    for shape in iter_shapes_recursive(shapes):
+        if shape.has_text_frame:
+            for p in shape.text_frame.paragraphs:
+                _mask_paragraph_runs(p, surface_to_token, style)
+        elif getattr(shape, "has_table", False):
+            _pptx_mask_table(shape.table, surface_to_token, style)
+        elif getattr(shape, "has_chart", False):
+            rich.mask_chart(
+                shape,
+                lambda t: _replace_text(t, surface_to_token, style),
+                lambda p: _mask_paragraph_runs(p, surface_to_token, style),
+            )
+        elif rich.is_smartart(shape):
+            rich.mask_smartart(shape, surface_to_token, style)
+        elif rich.is_ole(shape):
+            rich.mask_ole(shape, lambda t: _replace_text(t, surface_to_token, style), surface_to_token, style)
+
+
 def _render_pptx(src: str, dst: str, surface_to_token: dict[str, str], style: str) -> None:
     from pptx import Presentation
 
+    from app.documents.images import _show_master_sp
+
     prs = Presentation(src)
 
+    # A distinct layout/master is masked at most once (not once per slide) -
+    # unlike extract.py's per-slide emission (which intentionally repeats to
+    # keep occurrence counts accurate), mutating the same shapes twice here
+    # would just be redundant work, not a correctness concern.
+    masked_layouts: set[int] = set()
+    masked_masters: set[int] = set()
+
     for slide in prs.slides:
-        # Recurse into grouped shapes - the same gap fixed in extract.py.
-        # Without this, anything inside a PowerPoint "Group" (logo+label,
-        # org charts, diagrams) is silently left unmasked in the output file
-        # even though it may have been detected via the slide's full text.
-        for shape in iter_shapes_recursive(slide.shapes):
-            if shape.has_text_frame:
-                for p in shape.text_frame.paragraphs:
-                    _mask_paragraph_runs(p, surface_to_token, style)
-            elif getattr(shape, "has_table", False):
-                _pptx_mask_table(shape.table, surface_to_token, style)
+        _mask_pptx_shapes(slide.shapes, surface_to_token, style)
         # Speaker notes can also carry client-identifying text.
         if slide.has_notes_slide:
             for p in slide.notes_slide.notes_text_frame.paragraphs:
                 _mask_paragraph_runs(p, surface_to_token, style)
+
+        # Layout/master text - same asymmetry extract.py's layout-text/
+        # master-text chunks exist to close: a slide's own shape tree never
+        # includes shapes inherited from its layout/master, so a client name
+        # baked into a template footer would otherwise be correctly
+        # DETECTED but never actually masked in the rendered file -
+        # verification would then flag it forever with no way to fix it via
+        # apply(). Gated by the same showMasterSp flag images.py/extract.py
+        # already use, so a slide with "hide background graphics" doesn't
+        # get its layout/master masked on its account (harmless either way
+        # since masking is idempotent, but consistent with what extraction
+        # actually counted as visible).
+        layout = slide.slide_layout
+        master = layout.slide_master if layout is not None else None
+        slide_shows_background = _show_master_sp(slide._element)
+        layout_shows_master = _show_master_sp(layout._element) if layout is not None else True
+        if slide_shows_background and layout is not None:
+            if id(layout) not in masked_layouts:
+                masked_layouts.add(id(layout))
+                _mask_pptx_shapes(layout.shapes, surface_to_token, style)
+            if master is not None and layout_shows_master and id(master) not in masked_masters:
+                masked_masters.add(id(master))
+                _mask_pptx_shapes(master.shapes, surface_to_token, style)
 
     prs.save(dst)
 
@@ -214,7 +264,12 @@ def _mask_xlsx_sheet_names_and_headers(wb, surface_to_token: dict[str, str], sty
 
 
 def _render_xlsx(
-    src: str, dst: str, surface_to_token: dict[str, str], style: str, approved_image_refs: list | None = None
+    src: str,
+    dst: str,
+    surface_to_token: dict[str, str],
+    style: str,
+    approved_image_refs: list | None = None,
+    image_labels: dict[int, str] | None = None,
 ) -> int:
     """Text masking AND image redaction happen in this ONE load->mutate->save
     pass, deliberately - openpyxl renumbers every image's media partname on
@@ -239,9 +294,16 @@ def _render_xlsx(
 
     images_redacted = 0
     if approved_image_refs:
-        from app.documents.image_redact import placeholder_png
+        from app.documents.image_redact import PLACEHOLDER_LABEL, placeholder_png
 
-        approved_bytes = {ref.image_bytes for ref in approved_image_refs if ref.locator.get("kind") == "xlsx"}
+        image_labels = image_labels or {}
+        # bytes -> label, not just a set of approved bytes: each approved
+        # image may carry its own reviewer-chosen alias (Task C) instead of
+        # the default "REDACTED" text.
+        approved_bytes_to_label = {
+            ref.image_bytes: image_labels.get(ref.index, PLACEHOLDER_LABEL)
+            for ref in approved_image_refs if ref.locator.get("kind") == "xlsx"
+        }
         for ws in wb.worksheets:
             for im in ws._images:
                 try:
@@ -252,8 +314,8 @@ def _render_xlsx(
                     data = im.ref.getvalue()
                 except Exception:
                     continue
-                if data in approved_bytes:
-                    im.ref = io.BytesIO(placeholder_png(im.width, im.height))
+                if data in approved_bytes_to_label:
+                    im.ref = io.BytesIO(placeholder_png(im.width, im.height, label=approved_bytes_to_label[data]))
                     im.format = "png"
                     images_redacted += 1
 
@@ -347,12 +409,19 @@ def render_masked_document(
     surface_to_token: dict[str, str],
     style: str = DEFAULT_MASKING_STYLE,
     approved_image_refs: list | None = None,
+    image_labels: dict[int, str] | None = None,
 ) -> tuple[str, int]:
     """Produce a masked copy in the original format. Returns (path,
     xlsx_images_redacted) - the second element is only ever non-zero for
     xlsx, where image redaction must happen in this same pass (see
     _render_xlsx); every other format redacts images separately, after this
-    call, via image_redact.redact_images()."""
+    call, via image_redact.redact_images().
+
+    `image_labels` (Task C): ImageRef.index -> reviewer-chosen alias text,
+    for images whose logo resolved to an entity with a custom replacement -
+    rendered into the placeholder box instead of "REDACTED". Only actually
+    consumed here for xlsx (whose image redaction happens in this same
+    pass); every other format's redact_images() call takes it directly."""
     out_dir = os.path.join(settings.OUTPUTS_DIR, "sanitization")
     os.makedirs(out_dir, exist_ok=True)
     stem, ext = os.path.splitext(os.path.basename(filename))
@@ -368,8 +437,8 @@ def render_masked_document(
     elif lower.endswith(".pptx") or "presentationml" in content_type:
         _render_pptx(src_path, dst, surface_to_token, style)
     elif lower.endswith(".xlsx") or "spreadsheetml" in content_type:
-        xlsx_images_redacted = _render_xlsx(src_path, dst, surface_to_token, style, approved_image_refs)
+        xlsx_images_redacted = _render_xlsx(src_path, dst, surface_to_token, style, approved_image_refs, image_labels)
     else:
-        with open(dst, "w") as f:
+        with open(dst, "w", encoding="utf-8") as f:
             f.write("\n".join(f"{k} -> {v}" for k, v in surface_to_token.items()))
     return dst, xlsx_images_redacted

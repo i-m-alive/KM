@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     TIMESTAMP,
+    Boolean,
     ForeignKey,
     Integer,
     Numeric,
@@ -178,6 +179,12 @@ class MaskingEntity(Base):
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending_approval")  # pending_approval | approved
     created_by_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agent_runs.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+    # Reviewer-chosen replacement string (e.g. "Acme Pharma"), used everywhere
+    # instead of mask_token when set - same global scope as mask_token itself,
+    # so it's reused consistently across every future document for this
+    # entity too. NULL (the default) reproduces today's [CLIENT_N] behavior
+    # exactly - see masking.dictionary.resolved_replacement().
+    custom_replacement: Mapped[str | None] = mapped_column(String, nullable=True)
 
     aliases: Mapped[list["MaskingAlias"]] = relationship(
         "MaskingAlias", back_populates="entity", cascade="all, delete-orphan"
@@ -211,6 +218,39 @@ class LogoReference(Base):
     mask_entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("masking_entities.id", ondelete="CASCADE"), nullable=False)
     phash: Mapped[str] = mapped_column(String, nullable=False)
     source_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agent_runs.id"), nullable=True)
+    # Local-disk path to a small preview PNG of the actual approved image, so
+    # governance can SEE what got matched instead of trusting a bare hex hash -
+    # best-effort: None if the source bytes couldn't be opened by PIL (an
+    # unsupported/corrupt raster format), same degrade-gracefully contract as
+    # compute_phash itself.
+    thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class VisionVerdictCache(Base):
+    """Memoizes the RAW vision-model response (not the deterministic
+    post-processing built on top of it) for one image's content, scoped to a
+    single run - so the same image content gets an identical vision verdict
+    whether it's scanned at detect() time (the worker process) or apply()'s
+    post-render verify time (the API server process; these are genuinely
+    different processes, so an in-memory cache can't bridge them). Scoped per
+    run, not global, so verification still independently re-derives its
+    answer for every new run - only the SAME run asking the SAME question
+    about the SAME bytes twice is short-circuited. Only the model's own
+    contains_client_identity/description/confidence/ocr_text are cached; the
+    deterministic OCR-match, own-firm, and logo-hash overrides in
+    image_scan.py always re-run fresh against current dictionary/logo state."""
+
+    __tablename__ = "vision_verdict_cache"
+    __table_args__ = (UniqueConstraint("run_id", "content_key", name="uq_vision_verdict_run_content"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    content_key: Mapped[str] = mapped_column(String, nullable=False)  # phash, or "sha256:<hex>" when unhashable
+    contains_client_identity: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    confidence: Mapped[float] = mapped_column(REAL, nullable=False)
+    ocr_text: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
 

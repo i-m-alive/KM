@@ -7,6 +7,8 @@ stays meaningful and Sanitization can apply masks by exact character offset.
 from dataclasses import dataclass
 
 from app.config import get_settings
+from app.documents import pptx_richcontent as rich
+from app.documents.images import _show_master_sp
 from app.documents.pptx_walk import iter_shapes_recursive
 
 settings = get_settings()
@@ -44,26 +46,144 @@ def _pptx_table_lines(table) -> list[str]:
     return lines
 
 
+def _pptx_shape_content_lines(shapes) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Every text-bearing kind of content in a shape tree - text frames,
+    tables, charts, SmartArt, and OLE objects - as four separate line lists
+    (text, chart, smartart, ole). Shared by the per-slide walk and the
+    layout/master walk so both see exactly the same shape kinds - before
+    this, the layout/master walk only handled text frames/tables, so a
+    chart/SmartArt/OLE object placed directly on a layout or master (rare,
+    but the same asymmetry images.py originally had for pictures) was
+    invisible to extraction even though render.py's masking pass (which
+    reuses _mask_pptx_shapes for both slide and layout/master shape trees)
+    still walks those same shapes looking for something to mask."""
+    text_lines: list[str] = []
+    chart_lines: list[str] = []
+    smartart_lines: list[str] = []
+    ole_lines: list[str] = []
+    # Recurse into grouped shapes - a plain top-level loop misses any text
+    # nested inside a PowerPoint "Group" (very common for logo+label
+    # graphics, org charts, diagrams).
+    for shape in iter_shapes_recursive(shapes):
+        if shape.has_text_frame:
+            for para in shape.text_frame.paragraphs:
+                text = "".join(run.text for run in para.runs).strip()
+                if text:
+                    text_lines.append(text)
+        elif getattr(shape, "has_table", False):
+            text_lines.extend(_pptx_table_lines(shape.table))
+        elif getattr(shape, "has_chart", False):
+            chart_lines.extend(rich.chart_text_lines(shape))
+        elif rich.is_smartart(shape):
+            smartart_lines.extend(rich.smartart_text_lines(shape))
+        elif rich.is_ole(shape):
+            ole_lines.extend(rich.ole_text_lines(shape))
+    return text_lines, chart_lines, smartart_lines, ole_lines
+
+
 def _extract_pptx(path: str) -> list[Chunk]:
     from pptx import Presentation
 
     prs = Presentation(path)
     chunks: list[Chunk] = []
+    notes_lines: list[str] = []
+    # Text placeholders inherited from the slide LAYOUT or MASTER (a footer,
+    # a confidentiality line, a template-level client name set once) - the
+    # same asymmetry images.py already fixed for pictures (_show_master_sp),
+    # applied to text: a slide's OWN shape tree never includes shapes
+    # inherited from its layout/master, so this text was previously
+    # invisible to extraction (and therefore detection, masking, and
+    # verification) entirely. Emitted once per slide that actually shows it
+    # (not deduped to once per distinct layout), so occurrence counts stay
+    # accurate rather than under-reporting a name shown on every slide as a
+    # single hit - the same reasoning images.py's per-slide ImageRef
+    # emission already documents.
+    layout_lines: list[str] = []
+    master_lines: list[str] = []
+    # Charts, SmartArt, and OLE objects are relationship-graph nodes (a chart
+    # part, a diagram data part, an embedded object part) that the shape-tree
+    # walk below never descends into on its own - without pptx_richcontent,
+    # a client name in a chart's category axis or a SmartArt node was
+    # invisible to extraction, detection, masking, AND post-render
+    # verification simultaneously, since all of those reuse this function.
+    # Collected as their own channels (same convention as speaker notes
+    # below), tagged per-slide, rather than merged into each slide's own text.
+    chart_lines: list[str] = []
+    smartart_lines: list[str] = []
+    ole_lines: list[str] = []
+    # A layout/master's OWN content never varies per slide - only the
+    # per-slide LABEL does - so it's computed once per distinct
+    # layout/master (keyed by identity) and reused for every slide that
+    # shares it, rather than re-walking the same shape tree for every one
+    # of potentially many slides built on the same handful of layouts.
+    layout_content_cache: dict[int, tuple[list[str], list[str], list[str], list[str]]] = {}
+    master_content_cache: dict[int, tuple[list[str], list[str], list[str], list[str]]] = {}
+
     for i, slide in enumerate(prs.slides):
-        lines: list[str] = []
-        # Recurse into grouped shapes - a plain top-level loop misses any text
-        # nested inside a PowerPoint "Group" (very common for logo+label
-        # graphics, org charts, diagrams).
-        for shape in iter_shapes_recursive(slide.shapes):
-            if shape.has_text_frame:
-                for para in shape.text_frame.paragraphs:
-                    text = "".join(run.text for run in para.runs).strip()
-                    if text:
-                        lines.append(text)
-            elif getattr(shape, "has_table", False):
-                lines.extend(_pptx_table_lines(shape.table))
+        text_lines, slide_chart, slide_smartart, slide_ole = _pptx_shape_content_lines(slide.shapes)
+        chart_lines.extend(f"[slide {i + 1} chart] {t}" for t in slide_chart)
+        smartart_lines.extend(f"[slide {i + 1} smartart] {t}" for t in slide_smartart)
+        ole_lines.extend(f"[slide {i + 1} embedded object] {t}" for t in slide_ole)
         # Preserve slide boundaries so Deck Drafting (A-06) can reuse them later.
-        chunks.append(Chunk(chunk_id=i, kind="slide", label=f"slide {i + 1}", text="\n".join(lines)))
+        chunks.append(Chunk(chunk_id=i, kind="slide", label=f"slide {i + 1}", text="\n".join(text_lines)))
+
+        # Layout/master content - gated by the SAME showMasterSp flag
+        # images.py already established: a slide's own showMasterSp gates
+        # BOTH the layout's and the master's inherited graphics (if the
+        # slide hides background graphics, neither shows), and the
+        # layout's own showMasterSp additionally gates whether the
+        # MASTER's graphics reach slides using that layout at all.
+        layout = slide.slide_layout
+        master = layout.slide_master if layout is not None else None
+        slide_shows_background = _show_master_sp(slide._element)
+        layout_shows_master = _show_master_sp(layout._element) if layout is not None else True
+        if slide_shows_background and layout is not None:
+            key = id(layout)
+            if key not in layout_content_cache:
+                layout_content_cache[key] = _pptx_shape_content_lines(layout.shapes)
+            l_text, l_chart, l_smartart, l_ole = layout_content_cache[key]
+            layout_lines.extend(f"[slide {i + 1} layout] {t}" for t in l_text)
+            chart_lines.extend(f"[slide {i + 1} layout chart] {t}" for t in l_chart)
+            smartart_lines.extend(f"[slide {i + 1} layout smartart] {t}" for t in l_smartart)
+            ole_lines.extend(f"[slide {i + 1} layout embedded object] {t}" for t in l_ole)
+            if master is not None and layout_shows_master:
+                key = id(master)
+                if key not in master_content_cache:
+                    master_content_cache[key] = _pptx_shape_content_lines(master.shapes)
+                m_text, m_chart, m_smartart, m_ole = master_content_cache[key]
+                master_lines.extend(f"[slide {i + 1} master] {t}" for t in m_text)
+                chart_lines.extend(f"[slide {i + 1} master chart] {t}" for t in m_chart)
+                smartart_lines.extend(f"[slide {i + 1} master smartart] {t}" for t in m_smartart)
+                ole_lines.extend(f"[slide {i + 1} master embedded object] {t}" for t in m_ole)
+
+        # Speaker notes are a real content channel presenters use for client
+        # context - render.py already masks them, but extraction (and
+        # therefore NER pre-pass, the LLM Detector, the dictionary full-text
+        # sweep, AND post-render verification, which all reuse this function)
+        # previously never read them at all. A client name that ONLY appears
+        # in a note was invisible end-to-end: never proposed for masking, and
+        # verification couldn't have caught the miss either since it can't
+        # see text it never extracts. Appended as one extra chunk (not merged
+        # into the slide's own chunk_id) so existing per-slide numbering -
+        # which Deck Drafting is expected to rely on - is untouched.
+        if slide.has_notes_slide:
+            note_text = "\n".join(
+                p.text.strip() for p in slide.notes_slide.notes_text_frame.paragraphs if p.text.strip()
+            )
+            if note_text:
+                notes_lines.append(f"[slide {i + 1} notes] {note_text}")
+    if chart_lines:
+        chunks.append(Chunk(chunk_id=len(chunks), kind="chart", label="chart text", text="\n".join(chart_lines)))
+    if smartart_lines:
+        chunks.append(Chunk(chunk_id=len(chunks), kind="smartart", label="smartart text", text="\n".join(smartart_lines)))
+    if ole_lines:
+        chunks.append(Chunk(chunk_id=len(chunks), kind="ole", label="embedded objects", text="\n".join(ole_lines)))
+    if layout_lines:
+        chunks.append(Chunk(chunk_id=len(chunks), kind="layout-text", label="layout text", text="\n".join(layout_lines)))
+    if master_lines:
+        chunks.append(Chunk(chunk_id=len(chunks), kind="master-text", label="master text", text="\n".join(master_lines)))
+    if notes_lines:
+        chunks.append(Chunk(chunk_id=len(chunks), kind="notes", label="speaker notes", text="\n".join(notes_lines)))
     return chunks
 
 

@@ -13,7 +13,7 @@ from app.db import get_db
 from app.documents.convert import ConversionUnavailableError, to_pdf_cached
 from app.models import AgentRun, User
 from app.runs.service import RoleNotAllowedError, UnknownAgentError, execute_run
-from app.schemas import FlagOut, RunCreateRequest, RunOut, RunSummaryOut, StepOut
+from app.schemas import FlagOut, RevalidationApplyRequest, RunCreateRequest, RunOut, RunSummaryOut, StepOut
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -193,6 +193,43 @@ async def remediate(run_id: uuid.UUID, user: User = Depends(get_current_user), d
     try:
         await remediate_run(db, run)
     except RemediationError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    db.refresh(run)
+    return _to_run_out(run)
+
+
+@router.post("/{run_id}/revalidate/apply", response_model=RunOut)
+async def apply_revalidation(
+    run_id: uuid.UUID,
+    payload: RevalidationApplyRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RunOut:
+    """Reviewer-approved fix-up for revalidation residuals (see revalidate.py)
+    - fresh-eyes leaks the dictionary-based verifier structurally can't see,
+    either a total detection miss or a partial-name fragment left next to its
+    own mask token. Turns the selected residuals into new global dictionary
+    entries and re-masks the already-rendered file in place."""
+    from app.agents.sanitization.revalidate import RevalidationError, reapply_with_additional_entities
+
+    run = (
+        db.query(AgentRun)
+        .options(joinedload(AgentRun.steps), joinedload(AgentRun.flags))
+        .filter(AgentRun.id == run_id)
+        .first()
+    )
+    if run is None or (run.created_by != user.id and not has_capability(user, "review_queue_manage")):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found")
+
+    output = run.output_json if isinstance(run.output_json, dict) else {}
+    residuals = ((output.get("revalidation") or {}).get("residuals")) or []
+    approved = [residuals[i] for i in payload.residual_indices if 0 <= i < len(residuals)]
+    if not approved:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No valid residual_indices given")
+
+    try:
+        reapply_with_additional_entities(db, run, approved)
+    except RevalidationError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
     db.refresh(run)
     return _to_run_out(run)
