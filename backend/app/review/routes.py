@@ -8,7 +8,7 @@ from app.agents.registry import get_agent, is_background
 from app.auth.permissions import require_capability
 from app.db import get_db
 from app.models import AgentRun, AuditLog, ReviewItem, User
-from app.runs.background import mark_rejected, run_application
+from app.runs.background import mark_failed, mark_rejected, run_application
 from app.schemas import (
     FlagOut,
     ReviewDecisionRequest,
@@ -97,6 +97,27 @@ async def submit_review(
     if agent is None or not is_background(agent):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Run's agent is not a reviewable background agent")
 
+    # Sensitive Outcomes (Phase 3): a non-dismissible gate, not just a UI
+    # callout - a reviewer approving/editing a run that discusses a
+    # negative outcome MUST record how they're handling it. Rejection is
+    # exempt (killing the run is itself a resolution). Enforced server-side,
+    # same "not just discouraged in the UI" discipline as CREDENTIAL's
+    # mandatory masking (Phase 2).
+    proposal_for_gate = (run.output_json or {}).get("proposal") if isinstance(run.output_json, dict) else None
+    _valid_outcome_resolutions = {"approve_as_is", "requires_client_signoff", "remove_section"}
+    negative_outcome_resolution = (payload.edits or {}).get("negative_outcome_resolution") if payload.edits else None
+    if (
+        payload.decision != "rejected"
+        and isinstance(proposal_for_gate, dict)
+        and proposal_for_gate.get("discusses_negative_outcome")
+        and negative_outcome_resolution not in _valid_outcome_resolutions
+    ):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "This document discusses a sensitive outcome - set edits.negative_outcome_resolution to one of "
+            "'approve_as_is', 'requires_client_signoff', or 'remove_section' before approving.",
+        )
+
     # Record the reviewer decision on the (agent-filed) review item, or create one.
     item = db.query(ReviewItem).filter(ReviewItem.run_id == run.id).order_by(ReviewItem.id.desc()).first()
     if item is None:
@@ -108,6 +129,14 @@ async def submit_review(
     item.edits_json = payload.edits
     item.decided_at = datetime.utcnow()
     db.add(AuditLog(run_id=run.id, actor_id=reviewer.id, action=f"review_{payload.decision}: {run.agent_id}"))
+    if negative_outcome_resolution in _valid_outcome_resolutions:
+        # Directly satisfies checklist item 7.2 ("checked for client
+        # approval before sharing exact figures") - this record IS the
+        # approval trail: who resolved it, how, and when.
+        db.add(AuditLog(
+            run_id=run.id, actor_id=reviewer.id,
+            action=f"negative_outcome_resolution: {negative_outcome_resolution}",
+        ))
     db.commit()
 
     if payload.decision == "rejected":
@@ -115,7 +144,18 @@ async def submit_review(
     else:
         proposal = (run.output_json or {}).get("proposal") if isinstance(run.output_json, dict) else None
         decision = {"decision": payload.decision, "proposal": proposal, "edits": payload.edits or {}}
-        await run_application(db, run, agent, decision)
+        # apply() calling out to Bedrock (summarizer, revalidation, ...) can
+        # fail for reasons that have nothing to do with the reviewer's
+        # request (expired credentials, a transient throttle) - unlike the
+        # worker's run_detection path (worker.py's _process(), which already
+        # wraps this in mark_failed), this call was previously unguarded, so
+        # any such failure surfaced as an opaque 500 instead of a normal
+        # "failed" run the reviewer can see and retry. Same safety net,
+        # applied to the synchronous review-triggered path.
+        try:
+            await run_application(db, run, agent, decision)
+        except Exception as exc:
+            mark_failed(db, run, str(exc))
 
     db.refresh(run)
     return RunOut(

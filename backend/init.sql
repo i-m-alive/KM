@@ -108,14 +108,18 @@ CREATE TABLE IF NOT EXISTS masking_entities (
   -- Reviewer-chosen replacement string (e.g. "Acme Pharma") used instead of
   -- mask_token when set. Global scope, same as mask_token - reused across
   -- every future document for this entity. See app.models.MaskingEntity.
-  custom_replacement TEXT
+  custom_replacement TEXT,
+  -- Phase 3 (Internal Team consent workflow) - meaningful only for
+  -- entity_type = 'INTERNAL_TEAM_MEMBER'. See app.models.MaskingEntity.
+  consent_status TEXT
 );
 
 -- CREATE TABLE IF NOT EXISTS is a no-op against an already-existing table,
--- so on a database created before custom_replacement existed, the column
--- above never actually gets added - this is the ALTER equivalent of that,
--- safe to re-run.
+-- so on a database created before custom_replacement/consent_status
+-- existed, the columns above never actually get added - these are the
+-- ALTER equivalent of that, safe to re-run.
 ALTER TABLE masking_entities ADD COLUMN IF NOT EXISTS custom_replacement TEXT;
+ALTER TABLE masking_entities ADD COLUMN IF NOT EXISTS consent_status TEXT;
 
 CREATE TABLE IF NOT EXISTS masking_aliases (
   id SERIAL PRIMARY KEY,
@@ -151,9 +155,16 @@ CREATE TABLE IF NOT EXISTS vision_verdict_cache (
   description TEXT NOT NULL DEFAULT '',
   confidence REAL NOT NULL,
   ocr_text JSONB NOT NULL DEFAULT '[]',
+  -- Phase 2 (Data Samples) - see app.agents.sanitization.image_scan.
+  contains_real_data_sample BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE (run_id, content_key)
 );
+
+-- Additive - safe to re-run against an existing database created before
+-- contains_real_data_sample existed (see the masking_entities/logo_references
+-- ALTERs above for why CREATE TABLE IF NOT EXISTS alone isn't enough).
+ALTER TABLE vision_verdict_cache ADD COLUMN IF NOT EXISTS contains_real_data_sample BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS masking_occurrences (
   id SERIAL PRIMARY KEY,

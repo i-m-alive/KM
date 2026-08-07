@@ -28,7 +28,7 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -1466,6 +1466,446 @@ def check_logo_thumbnail() -> None:
         shutil.rmtree(workdir, ignore_errors=True)
 
 
+def check_infra_credential_detection() -> None:
+    """Phase 2 acceptance test: the regex module backing INFRA_IDENTIFIER/
+    CREDENTIAL candidate detection must catch the documented shapes (IPv4,
+    internal hostnames, AWS-style access key IDs, Bearer tokens, connection
+    strings) and must NOT flag an ordinary public IP or ordinary prose as a
+    credential - CREDENTIAL's mandatory/non-overridable contract only holds
+    up if this stays high-precision (see the module's own docstring)."""
+    print("\n== infra/credential regex detection (Phase 2) ==")
+    from app.agents.sanitization.regex_patterns import infra_credential
+
+    text = (
+        "Reach the internal panel at admin.corp.internal or 10.0.4.17. "
+        "AWS access key AKIAIOSFODNN7EXAMPLE leaked in a log. "
+        "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abcdefghijklmnop "
+        "Connection string: postgresql://dbuser:S3cretPass@prod-db.internal:5432/appdb"
+    )
+    found = infra_credential.scan(text)
+    by_type: dict[str, list[str]] = {}
+    for surface, etype in found:
+        by_type.setdefault(etype, []).append(surface)
+
+    check("finds the internal hostname as INFRA_IDENTIFIER", "admin.corp.internal" in by_type.get("INFRA_IDENTIFIER", []), f"got: {by_type}")
+    check("finds the private IPv4 as INFRA_IDENTIFIER", "10.0.4.17" in by_type.get("INFRA_IDENTIFIER", []), f"got: {by_type}")
+    check("finds the AWS-style access key ID as CREDENTIAL", "AKIAIOSFODNN7EXAMPLE" in by_type.get("CREDENTIAL", []), f"got: {by_type}")
+    check("finds the Bearer token as CREDENTIAL", any(s.startswith("Bearer ") for s in by_type.get("CREDENTIAL", [])), f"got: {by_type}")
+    check("finds the connection string as CREDENTIAL", any("prod-db.internal" in s and "S3cretPass" in s for s in by_type.get("CREDENTIAL", [])), f"got: {by_type}")
+
+    clean = "Revenue grew 12% year over year across all regions."
+    check("ordinary prose with no technical shapes produces no candidates", infra_credential.scan(clean) == [], f"got: {infra_credential.scan(clean)}")
+
+    public_ip_only = "Our public DNS resolver is 8.8.8.8."
+    public_hits = infra_credential.scan(public_ip_only)
+    check("a bare public IP is still flagged as INFRA_IDENTIFIER (a candidate, not a final verdict - the LLM/reviewer judges public vs. internal)",
+          any(t == "INFRA_IDENTIFIER" for _, t in public_hits), f"got: {public_hits}")
+    check("a bare public IP is never flagged as CREDENTIAL", not any(t == "CREDENTIAL" for _, t in public_hits), f"got: {public_hits}")
+
+
+def check_credential_mandatory_no_override() -> None:
+    """Phase 2 acceptance test: a reviewer's removed_surfaces edit must be
+    silently ignored for a CREDENTIAL entity (mandatory, non-overridable),
+    while an ordinary CLIENT_NAME/INFRA_IDENTIFIER removal in the SAME
+    request still goes through normally - the override doesn't leak into
+    unrelated entities."""
+    print("\n== CREDENTIAL mandatory, non-overridable removal (Phase 2) ==")
+    # _filter_removed_entities was generalized into _resolve_entity_inclusion
+    # in Phase 3 (now takes default_action-aware entities plus an `included`
+    # opt-in set) - this test still exercises the original Phase 2 contract
+    # specifically (CREDENTIAL alone, via the mask-vs-mandatory split), kept
+    # separate from check_flag_vs_mask_vs_mandatory_inclusion's broader
+    # Phase 3 coverage rather than deleting a working, named regression.
+    from app.agents.sanitization.agent import _resolve_entity_inclusion
+
+    proposed = [
+        {"surface_text": "Acme Corp", "entity_type": "CLIENT_NAME", "default_action": "mask"},
+        {"surface_text": "admin.corp.internal", "entity_type": "INFRA_IDENTIFIER", "default_action": "mask"},
+        {"surface_text": "AKIAIOSFODNN7EXAMPLE", "entity_type": "CREDENTIAL", "default_action": "mandatory"},
+    ]
+    removed = {"acme corp", "admin.corp.internal", "akiaiosfodnn7example"}  # reviewer tries to exclude all three
+
+    kept, blocked = _resolve_entity_inclusion(proposed, removed, included=set())
+    kept_surfaces = {e["surface_text"] for e in kept}
+
+    check("CREDENTIAL survives the removal attempt", "AKIAIOSFODNN7EXAMPLE" in kept_surfaces, f"got: {kept_surfaces}")
+    check("CLIENT_NAME removal is honored normally", "Acme Corp" not in kept_surfaces, f"got: {kept_surfaces}")
+    check("INFRA_IDENTIFIER removal is honored normally (only CREDENTIAL is mandatory)", "admin.corp.internal" not in kept_surfaces, f"got: {kept_surfaces}")
+    check("the blocked-removal list names exactly the CREDENTIAL surface", blocked == ["AKIAIOSFODNN7EXAMPLE"], f"got: {blocked}")
+
+    no_removal_attempt = _resolve_entity_inclusion(proposed, set(), included=set())
+    check("no removal attempted -> blocked list is empty (no false positive flag)", no_removal_attempt[1] == [], f"got: {no_removal_attempt[1]}")
+
+
+def check_exif_strip() -> None:
+    """Phase 2 acceptance test: strip_exif must actually remove EXIF from a
+    JPEG that has it, leave an image with no EXIF untouched (reported count
+    excludes it), and never corrupt the image (still opens, same dimensions)
+    - and must be a no-op for PDF (out of scope for this phase, see module
+    docstring) rather than raising."""
+    print("\n== EXIF stripping (Phase 2) ==")
+    from PIL import Image
+    from PIL.ExifTags import Base as ExifTags
+
+    from app.documents.exif_strip import strip_exif
+
+    workdir = Path(tempfile.mkdtemp(prefix="naviknow-exif-"))
+    try:
+        im = Image.new("RGB", (100, 80), color=(200, 50, 50))
+        exif = Image.Exif()
+        exif[ExifTags.Make.value] = "TestCameraCo"
+        exif[ExifTags.Model.value] = "TestModel-9000"
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", exif=exif.tobytes())
+        jpeg_with_exif = buf.getvalue()
+
+        plain_buf = io.BytesIO()
+        Image.new("RGB", (40, 40), color=(10, 10, 10)).save(plain_buf, format="PNG")
+        png_no_exif = plain_buf.getvalue()
+
+        docx_path = str(workdir / "exif_test.docx")
+        with zipfile.ZipFile(docx_path, "w") as z:
+            z.writestr("word/media/image1.jpeg", jpeg_with_exif)
+            z.writestr("word/media/image2.png", png_no_exif)
+            z.writestr("[Content_Types].xml", "<Types/>")
+
+        stripped = strip_exif(
+            docx_path, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "exif_test.docx",
+        )
+        check("exactly one image (the JPEG with real EXIF) reports as stripped", stripped == 1, f"got: {stripped}")
+
+        with zipfile.ZipFile(docx_path) as z:
+            result_jpeg = z.read("word/media/image1.jpeg")
+            result_png = z.read("word/media/image2.png")
+
+        result_im = Image.open(io.BytesIO(result_jpeg))
+        check("EXIF is actually gone after stripping", not bool(result_im.getexif()), f"got: {dict(result_im.getexif())}")
+        check("the image still opens and keeps its original dimensions", result_im.size == (100, 80), f"got: {result_im.size}")
+        check("the no-EXIF PNG is byte-identical (left untouched, not blindly re-encoded)", result_png == png_no_exif)
+
+        pdf_calls = strip_exif(docx_path, "application/pdf", "whatever.pdf")
+        check("PDF is a no-op (0), not an error - out of scope for this phase", pdf_calls == 0, f"got: {pdf_calls}")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def check_data_sample_and_sensitive_text_image_fields() -> None:
+    """Phase 2 acceptance test: the vision call's new contains_real_data_sample
+    field must survive _scan_one_group into the returned ImageGroup, and text
+    read off an image (ocr_text) that matches an INFRA_IDENTIFIER/CREDENTIAL
+    shape must populate sensitive_text_matches and drive mandatory_redaction
+    for a CREDENTIAL - the same non-overridable contract CREDENTIAL gets in
+    body text, now for images too. db is a minimal mock (not None): unlike
+    the vision-cache test above, this run's ocr_text is non-empty, so
+    _ocr_match's dictionary.lookup(db, ...) call must not crash - configured
+    to always miss (None/[]), same as a document with an empty dictionary."""
+    print("\n== data-sample + sensitive-text image fields (Phase 2, mocked Bedrock) ==")
+    import uuid as uuid_mod
+
+    from app.agents.sanitization import image_scan
+    from app.documents.images import ImageRef
+    from app.llm import bedrock_client
+
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    db.query.return_value.filter.return_value.all.return_value = []
+
+    async def fake_converse_vision(**kwargs):
+        return bedrock_client.BedrockResponse(
+            text="",
+            parsed={
+                "contains_client_identity": False,
+                "description": "a dashboard screenshot",
+                "confidence": 0.4,
+                "ocr_text": ["Revenue Dashboard", "Host: prod-db.internal", "AKIAIOSFODNN7EXAMPLE"],
+                "contains_real_data_sample": True,
+            },
+            input_tokens=40, output_tokens=15, estimated_cost_usd=0.0004,
+        )
+
+    png = _png_bytes((80, 80, 80))
+    ref = ImageRef(index=0, location_label="slide 4", image_bytes=png, image_format="png", locator={})
+
+    with patch.object(image_scan.vision_cache, "load_cached_verdict", return_value=None), \
+         patch.object(image_scan.vision_cache, "store_verdict"), \
+         patch.object(bedrock_client, "converse_vision", side_effect=fake_converse_vision):
+        group, _, _, _ = asyncio.run(image_scan._scan_one_group(
+            db, 0, [ref], png, "png", None, logo_references=[], run_id=uuid_mod.uuid4(),
+        ))
+
+    check("contains_real_data_sample survives from the vision response", group.contains_real_data_sample is True, f"got: {group.contains_real_data_sample}")
+    sensitive_types = {etype for _, etype in group.sensitive_text_matches}
+    check("hostname read off the image is classified as INFRA_IDENTIFIER", "INFRA_IDENTIFIER" in sensitive_types, f"got: {group.sensitive_text_matches}")
+    check("credential read off the image is classified as CREDENTIAL", "CREDENTIAL" in sensitive_types, f"got: {group.sensitive_text_matches}")
+
+    # Build the same images_proposal payload shape agent.py's detect() emits,
+    # to check the mandatory_redaction derivation without needing the full
+    # detect() pipeline (Bedrock Detector call, document fixtures, etc.).
+    mandatory = any(etype in {"CREDENTIAL"} for _, etype in group.sensitive_text_matches)
+    check("a CREDENTIAL read off an image drives mandatory_redaction=True", mandatory is True)
+
+
+def check_dataset_provenance() -> None:
+    """Phase 2 acceptance test: a new upload whose text matches an APPROVED,
+    account-linked entity gets an advisory provenance warning naming that
+    account; a document naming only entities with NO account link, or none
+    at all, gets no warning - this must never block the upload either way,
+    it only ever returns a message or None."""
+    print("\n== dataset provenance check (Phase 2) ==")
+    from app.documents import dataset_provenance
+
+    workdir = Path(tempfile.mkdtemp(prefix="naviknow-provenance-"))
+    try:
+        import docx
+
+        doc = docx.Document()
+        doc.add_paragraph("This deck was prepared for Acme Robotics Inc. by our delivery team.")
+        linked_path = str(workdir / "linked.docx")
+        doc.save(linked_path)
+
+        doc2 = docx.Document()
+        doc2.add_paragraph("A completely unrelated internal planning note with no client names at all.")
+        unlinked_path = str(workdir / "unlinked.docx")
+        doc2.save(unlinked_path)
+
+        docx_content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+        class _FakeAccount:
+            name = "Acme Robotics"
+
+        class _FakeAlias:
+            raw_value = "Acme Robotics Inc."
+
+        class _FakeEntity:
+            client_account_id = "11111111-1111-1111-1111-111111111111"
+            client_account = _FakeAccount()
+            aliases = [_FakeAlias()]
+
+        with patch.object(dataset_provenance.dictionary, "find_in_text", return_value=[(_FakeEntity(), "Acme Robotics Inc.")]):
+            warning = dataset_provenance.check(None, linked_path, docx_content_type, "linked.docx")
+        check("a document matching an account-linked entity gets a named warning", warning is not None and "Acme Robotics" in warning, f"got: {warning}")
+
+        with patch.object(dataset_provenance.dictionary, "find_in_text", return_value=[]):
+            no_warning = dataset_provenance.check(None, unlinked_path, docx_content_type, "unlinked.docx")
+        check("a document matching nothing gets no warning (None, not an error)", no_warning is None, f"got: {no_warning}")
+
+        class _FakeEntityNoAccount:
+            client_account_id = None
+            client_account = None
+            aliases = []
+
+        with patch.object(dataset_provenance.dictionary, "find_in_text", return_value=[(_FakeEntityNoAccount(), "some match")]):
+            unlinked_entity_warning = dataset_provenance.check(None, linked_path, docx_content_type, "linked.docx")
+        check("a matched entity with NO account link produces no warning (link is what matters, not the match itself)",
+              unlinked_entity_warning is None, f"got: {unlinked_entity_warning}")
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def check_entity_actions_default_resolution() -> None:
+    """Phase 3 acceptance test: entity_actions.resolve_default_action must
+    return "mask" for every Phase 1/2 type (unchanged), "mandatory" for
+    CREDENTIAL (unchanged), "flag" for exactly the five Phase 3 flag-default
+    types, and a consent-dependent "mask"/"keep" for INTERNAL_TEAM_MEMBER -
+    the single source of truth every other Phase 3 check below builds on."""
+    print("\n== entity default-action resolution (Phase 3) ==")
+    from app.agents.sanitization import entity_actions
+
+    check("CLIENT_NAME (Phase 1) still defaults to mask", entity_actions.resolve_default_action("CLIENT_NAME") == "mask")
+    check("PERSON (Phase 1) still defaults to mask", entity_actions.resolve_default_action("PERSON") == "mask")
+    check("INFRA_IDENTIFIER (Phase 2) still defaults to mask", entity_actions.resolve_default_action("INFRA_IDENTIFIER") == "mask")
+    check("CREDENTIAL (Phase 2) is still mandatory", entity_actions.resolve_default_action("CREDENTIAL") == "mandatory")
+
+    for flag_type in ("COMMERCIAL_TERM", "COMPETITOR_NAME", "STRATEGY_MENTION", "OWN_COST_DETAIL", "ORG_CHART_STRUCTURE"):
+        check(f"{flag_type} defaults to flag", entity_actions.resolve_default_action(flag_type) == "flag")
+
+    check("CLIENT_PERSON_TITLE defaults to mask (an ordinary CLIENT_* type)", entity_actions.resolve_default_action("CLIENT_PERSON_TITLE") == "mask")
+    check("CLIENT_PHONE defaults to mask (an ordinary CLIENT_* type)", entity_actions.resolve_default_action("CLIENT_PHONE") == "mask")
+
+    check("INTERNAL_TEAM_MEMBER with no consent record defaults to mask",
+          entity_actions.resolve_default_action("INTERNAL_TEAM_MEMBER", None) == "mask")
+    check("INTERNAL_TEAM_MEMBER with pending consent defaults to mask",
+          entity_actions.resolve_default_action("INTERNAL_TEAM_MEMBER", "pending") == "mask")
+    check("INTERNAL_TEAM_MEMBER with granted consent defaults to keep",
+          entity_actions.resolve_default_action("INTERNAL_TEAM_MEMBER", "granted") == "keep")
+
+
+def check_commercial_term_and_title_detection() -> None:
+    """Phase 3 acceptance test: the regex module backing COMMERCIAL_TERM/
+    CLIENT_PERSON_TITLE candidate detection must catch documented shapes
+    (currency amounts, payment-term keywords, multi-word job titles) and
+    must NOT flag a bare generic noun ("Manager") that would otherwise
+    flood the proposal with noise."""
+    print("\n== commercial-term / client-title regex detection (Phase 3) ==")
+    from app.agents.sanitization.regex_patterns import commercial_terms
+
+    text = (
+        "The contract value was $2.5M with net 30 payment terms. Our main contact is the "
+        "Vice President of Operations, who reports to the Chief Financial Officer."
+    )
+    found = commercial_terms.scan(text)
+    by_type: dict[str, list[str]] = {}
+    for surface, etype in found:
+        by_type.setdefault(etype, []).append(surface)
+
+    check("finds the currency amount as COMMERCIAL_TERM", any("2.5M" in s for s in by_type.get("COMMERCIAL_TERM", [])), f"got: {by_type}")
+    check("finds 'net 30' as COMMERCIAL_TERM", any("net 30" in s.lower() for s in by_type.get("COMMERCIAL_TERM", [])), f"got: {by_type}")
+    check("finds 'Vice President of Operations' as CLIENT_PERSON_TITLE", "Vice President of Operations" in by_type.get("CLIENT_PERSON_TITLE", []), f"got: {by_type}")
+    check("finds 'Chief Financial Officer' as CLIENT_PERSON_TITLE", "Chief Financial Officer" in by_type.get("CLIENT_PERSON_TITLE", []), f"got: {by_type}")
+
+    noisy = "The manager asked the director to review the report."
+    check("a bare 'manager'/'director' with no distinguishing continuation produces no CLIENT_PERSON_TITLE candidate",
+          not any(etype == "CLIENT_PERSON_TITLE" for _, etype in commercial_terms.scan(noisy)), f"got: {commercial_terms.scan(noisy)}")
+
+
+def check_flag_vs_mask_vs_mandatory_inclusion() -> None:
+    """Phase 3 acceptance test: _resolve_entity_inclusion (the generalized
+    form of Phase 2's CREDENTIAL-only _filter_removed_entities) must apply
+    each of the three default_action contracts correctly, in one request:
+    a mask-default entity is kept unless removed; a flag-default entity is
+    EXCLUDED unless explicitly included; a mandatory entity is always kept
+    regardless of either edit."""
+    print("\n== flag vs. mask vs. mandatory entity inclusion (Phase 3) ==")
+    from app.agents.sanitization.agent import _resolve_entity_inclusion
+
+    proposed = [
+        {"surface_text": "Acme Corp", "entity_type": "CLIENT_NAME", "default_action": "mask"},
+        {"surface_text": "$2.5M contract", "entity_type": "COMMERCIAL_TERM", "default_action": "flag"},
+        {"surface_text": "Rival Inc", "entity_type": "COMPETITOR_NAME", "default_action": "flag"},
+        {"surface_text": "AKIAIOSFODNN7EXAMPLE", "entity_type": "CREDENTIAL", "default_action": "mandatory"},
+        {"surface_text": "Jane Doe", "entity_type": "INTERNAL_TEAM_MEMBER", "default_action": "keep"},
+    ]
+
+    # Untouched: mask-default entities stay in, flag/keep-default entities
+    # stay out, mandatory stays in.
+    kept, blocked = _resolve_entity_inclusion(proposed, removed=set(), included=set())
+    kept_surfaces = {e["surface_text"] for e in kept}
+    check("untouched mask-default entity is kept", "Acme Corp" in kept_surfaces, f"got: {kept_surfaces}")
+    check("untouched flag-default COMMERCIAL_TERM is excluded", "$2.5M contract" not in kept_surfaces, f"got: {kept_surfaces}")
+    check("untouched flag-default COMPETITOR_NAME is excluded", "Rival Inc" not in kept_surfaces, f"got: {kept_surfaces}")
+    check("untouched mandatory CREDENTIAL is kept", "AKIAIOSFODNN7EXAMPLE" in kept_surfaces, f"got: {kept_surfaces}")
+    check("untouched keep-default INTERNAL_TEAM_MEMBER is excluded", "Jane Doe" not in kept_surfaces, f"got: {kept_surfaces}")
+    check("no removal attempted -> nothing blocked", blocked == [], f"got: {blocked}")
+
+    # Reviewer opts the COMMERCIAL_TERM IN, tries to opt CLIENT_NAME out,
+    # and tries (futilely) to remove the CREDENTIAL.
+    kept2, blocked2 = _resolve_entity_inclusion(
+        proposed,
+        removed={"acme corp", "akiaiosfodnn7example"},
+        included={"$2.5m contract"},
+    )
+    kept_surfaces2 = {e["surface_text"] for e in kept2}
+    check("opted-in flag-default COMMERCIAL_TERM is now kept", "$2.5M contract" in kept_surfaces2, f"got: {kept_surfaces2}")
+    check("still-untouched flag-default COMPETITOR_NAME stays excluded", "Rival Inc" not in kept_surfaces2, f"got: {kept_surfaces2}")
+    check("opted-out mask-default CLIENT_NAME is now excluded", "Acme Corp" not in kept_surfaces2, f"got: {kept_surfaces2}")
+    check("CREDENTIAL survives the removal attempt regardless", "AKIAIOSFODNN7EXAMPLE" in kept_surfaces2, f"got: {kept_surfaces2}")
+    check("the blocked-removal list names exactly the CREDENTIAL surface", blocked2 == ["AKIAIOSFODNN7EXAMPLE"], f"got: {blocked2}")
+
+    # A legacy proposal entity with no default_action field at all (written
+    # before this field existed) must fall back to "mask", not crash.
+    legacy = [{"surface_text": "Legacy Co", "entity_type": "CLIENT_NAME"}]
+    kept3, _ = _resolve_entity_inclusion(legacy, removed=set(), included=set())
+    check("an entity with no default_action field falls back to mask-default", len(kept3) == 1, f"got: {kept3}")
+
+
+def check_immediate_consent_grant() -> None:
+    """Phase 3 acceptance test (regression for a real bug caught during
+    smoke testing): granting consent for an INTERNAL_TEAM_MEMBER in
+    edits.consent_updates must exempt THIS run's occurrence immediately,
+    not only future ones - the entity's default_action was computed at
+    detect() time, before this consent existed, so without this fold-in
+    the person's name still got masked in the very run where consent was
+    just granted. Must also leave an unrelated surface (no matching
+    consent_updates entry, or a different entity_type) untouched."""
+    print("\n== immediate consent grant exempts this run too (Phase 3) ==")
+    from app.agents.sanitization.agent import _apply_immediate_consent_grants
+
+    entities = [
+        {"surface_text": "John Smith", "entity_type": "INTERNAL_TEAM_MEMBER", "default_action": "mask"},
+        {"surface_text": "Jane Doe", "entity_type": "INTERNAL_TEAM_MEMBER", "default_action": "mask"},
+        {"surface_text": "Acme Corp", "entity_type": "CLIENT_NAME", "default_action": "mask"},
+    ]
+    updated = _apply_immediate_consent_grants(entities, removed=set(), consent_updates={"John Smith": "granted"})
+    check("consent-granted INTERNAL_TEAM_MEMBER is folded into removed (exempt this run)", "john smith" in updated, f"got: {updated}")
+    check("an untouched INTERNAL_TEAM_MEMBER with no consent update is NOT added", "jane doe" not in updated, f"got: {updated}")
+    check("an unrelated CLIENT_NAME is never affected by consent_updates", "acme corp" not in updated, f"got: {updated}")
+
+    # A "pending"/"not_required" consent update must NOT exempt this run -
+    # only an explicit "granted" does.
+    updated2 = _apply_immediate_consent_grants(entities, removed=set(), consent_updates={"John Smith": "pending"})
+    check("a 'pending' consent update does not exempt this run", "john smith" not in updated2, f"got: {updated2}")
+
+    # Pre-existing removed_surfaces entries survive untouched alongside the merge.
+    updated3 = _apply_immediate_consent_grants(entities, removed={"acme corp"}, consent_updates={"John Smith": "granted"})
+    check("a pre-existing removed entry is preserved", "acme corp" in updated3, f"got: {updated3}")
+    check("the new consent grant is added alongside it", "john smith" in updated3, f"got: {updated3}")
+
+
+def check_internal_team_consent() -> None:
+    """Phase 3 acceptance test: dictionary.get_consent_status/set_consent_status
+    must read/write MaskingEntity.consent_status by name lookup, and a name
+    with no prior record must return None (not crash, not default to a
+    truthy value) - entity_actions treats None the same as "pending"."""
+    print("\n== internal team consent lookup/set (Phase 3) ==")
+    from app.masking import dictionary
+
+    class _FakeEntity:
+        def __init__(self):
+            self.consent_status = None
+
+    fake_entity = _FakeEntity()
+    fake_db = MagicMock()
+
+    with patch.object(dictionary, "lookup", return_value=None):
+        check("an unseen name has no consent record (None, not a crash)",
+              dictionary.get_consent_status(fake_db, "Jane Doe") is None)
+
+    with patch.object(dictionary, "lookup", return_value=fake_entity):
+        check("a known name with no consent yet returns None",
+              dictionary.get_consent_status(fake_db, "Jane Doe") is None)
+        dictionary.set_consent_status(fake_db, fake_entity, "granted")
+        check("set_consent_status writes the status onto the entity", fake_entity.consent_status == "granted")
+        check("get_consent_status now reflects the granted status",
+              dictionary.get_consent_status(fake_db, "Jane Doe") == "granted")
+
+
+def check_sensitive_outcome_detection() -> None:
+    """Phase 3 acceptance test: sensitive_outcome.check_negative_outcome must
+    surface the model's discusses_negative_outcome/excerpts/summary fields
+    unchanged (Bedrock mocked - this is a plumbing test, same discipline as
+    check_reidentify_qa) - and must return a well-formed false/empty result
+    for an ordinary document with nothing sensitive in it."""
+    print("\n== sensitive outcome detection (Phase 3, mocked Bedrock) ==")
+    from app.agents.sanitization import sensitive_outcome
+    from app.llm import bedrock_client
+
+    outage_text = (
+        "During the migration, a misconfigured firewall rule caused a two-hour outage affecting "
+        "customer checkout. Root cause: an unreviewed change to the security group."
+    )
+    canned_hit = {
+        "discusses_negative_outcome": True,
+        "excerpts": ["a misconfigured firewall rule caused a two-hour outage affecting customer checkout"],
+        "summary": "A firewall misconfiguration caused a two-hour customer-facing outage.",
+    }
+    mock_hit = bedrock_client.BedrockResponse(text="", parsed=canned_hit, input_tokens=80, output_tokens=40, estimated_cost_usd=0.001)
+    with patch.object(bedrock_client, "converse", new=AsyncMock(return_value=mock_hit)):
+        resp = asyncio.run(sensitive_outcome.check_negative_outcome(outage_text))
+    parsed = resp.parsed or {}
+    check("flags the outage narrative as a negative outcome", parsed.get("discusses_negative_outcome") is True, f"got: {parsed}")
+    check("carries the verbatim excerpt through unchanged", "two-hour outage" in (parsed.get("excerpts") or [""])[0], f"got: {parsed}")
+    check("carries a reviewer-facing summary through unchanged", "outage" in parsed.get("summary", ""), f"got: {parsed}")
+
+    clean_text = "This engagement delivered a new reporting dashboard on time and under budget."
+    canned_clean = {"discusses_negative_outcome": False, "excerpts": [], "summary": ""}
+    mock_clean = bedrock_client.BedrockResponse(text="", parsed=canned_clean, input_tokens=60, output_tokens=10, estimated_cost_usd=0.0006)
+    with patch.object(bedrock_client, "converse", new=AsyncMock(return_value=mock_clean)):
+        resp2 = asyncio.run(sensitive_outcome.check_negative_outcome(clean_text))
+    parsed2 = resp2.parsed or {}
+    check("an ordinary positive-outcome document is not flagged", parsed2.get("discusses_negative_outcome") is False, f"got: {parsed2}")
+    check("no excerpts for the clean case", parsed2.get("excerpts") == [], f"got: {parsed2}")
+
+
 def main() -> int:
     workdir = Path(tempfile.mkdtemp(prefix="naviknow-regression-"))
     try:
@@ -1685,6 +2125,94 @@ def main() -> int:
 
             traceback.print_exc()
             failures.append(f"logo reference thumbnail: crashed - {exc}")
+
+        try:
+            check_infra_credential_detection()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"infra/credential regex detection: crashed - {exc}")
+
+        try:
+            check_credential_mandatory_no_override()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"CREDENTIAL mandatory non-override: crashed - {exc}")
+
+        try:
+            check_exif_strip()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"EXIF stripping: crashed - {exc}")
+
+        try:
+            check_data_sample_and_sensitive_text_image_fields()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"data-sample + sensitive-text image fields: crashed - {exc}")
+
+        try:
+            check_dataset_provenance()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"dataset provenance check: crashed - {exc}")
+
+        try:
+            check_entity_actions_default_resolution()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"entity default-action resolution: crashed - {exc}")
+
+        try:
+            check_commercial_term_and_title_detection()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"commercial-term / client-title regex detection: crashed - {exc}")
+
+        try:
+            check_flag_vs_mask_vs_mandatory_inclusion()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"flag vs. mask vs. mandatory inclusion: crashed - {exc}")
+
+        try:
+            check_immediate_consent_grant()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"immediate consent grant: crashed - {exc}")
+
+        try:
+            check_internal_team_consent()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"internal team consent: crashed - {exc}")
+
+        try:
+            check_sensitive_outcome_detection()
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+            failures.append(f"sensitive outcome detection: crashed - {exc}")
 
         print(f"\n{'=' * 50}\n{passes} checks passed, {len(failures)} failed")
         for f in failures:

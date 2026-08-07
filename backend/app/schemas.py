@@ -178,6 +178,9 @@ class DocumentOut(BaseModel):
     content_type: str
     uploaded_at: datetime
     chunk_count: int | None = None
+    # Phase 2 (Data Samples / dataset provenance) - advisory only, never
+    # blocks upload. See app.documents.dataset_provenance.
+    provenance_warning: str | None = None
 
 
 # ---- Review ----

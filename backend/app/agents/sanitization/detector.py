@@ -28,6 +28,30 @@ ENTITY_TYPES = [
     "EMAIL",
     "PHONE",
     "ADDRESS",
+    # Infrastructure & Security (Phase 2). INFRA_IDENTIFIER is an ordinary,
+    # reviewer-overridable mask; CREDENTIAL is mandatory and non-overridable
+    # once confirmed - see agent.py's apply() and regex_patterns/
+    # infra_credential.py's docstring for why that split exists.
+    "INFRA_IDENTIFIER",
+    "CREDENTIAL",
+    # Phase 3. Five of these default to FLAG (proposed, but NOT masked
+    # unless the reviewer opts in) rather than mask-by-default - see
+    # entity_actions.py's FLAG_DEFAULT_TYPES for exactly which and why.
+    # CLIENT_PERSON_TITLE/CLIENT_PHONE mask by default like every other
+    # CLIENT_* type. INTERNAL_TEAM_MEMBER's default depends on a per-person
+    # consent lookup, not a static rule.
+    # NEGATIVE_OUTCOME is deliberately NOT in this list - it's a document-
+    # level signal (does this document discuss a failure/breach/negative
+    # metric AT ALL), not a span/surface_text entity like everything else
+    # here. See sensitive_outcome.py and agent.py's detect().
+    "COMMERCIAL_TERM",
+    "COMPETITOR_NAME",
+    "STRATEGY_MENTION",
+    "OWN_COST_DETAIL",
+    "ORG_CHART_STRUCTURE",
+    "INTERNAL_TEAM_MEMBER",
+    "CLIENT_PERSON_TITLE",
+    "CLIENT_PHONE",
 ]
 
 DETECT_SCHEMA = {
@@ -64,8 +88,37 @@ SYSTEM_PROMPT = (
     "types strictly for information that identifies the client. If you're genuinely unsure whether a "
     "name belongs to the client or a third party, prefer the CLIENT_* type (a missed client identifier "
     "is a worse failure than an over-cautious mask).\n\n"
-    "Do NOT mask: our own consultants' names, generic industry or technology terms (retail, AWS, "
-    "Kafka...), public email domains (gmail.com), or dollar amounts.\n\n"
+    "You must ALSO find infrastructure and security identifiers: internal hostnames, IP addresses, "
+    "internal domains, and firewall/network identifiers - classify these as INFRA_IDENTIFIER. And you "
+    "must find credentials: API keys, access tokens, bearer tokens, passwords, or database connection "
+    "strings with embedded credentials - classify these as CREDENTIAL. A CREDENTIAL you confirm will be "
+    "removed unconditionally (a reviewer cannot choose to keep it), so only use CREDENTIAL for something "
+    "that is actually a secret/credential shape, not a generic-looking number or identifier - when "
+    "unsure whether a technical string is a credential or just an identifier, prefer INFRA_IDENTIFIER.\n\n"
+    "You must ALSO find (Phase 3) - these are proposed for review but, unlike everything above, are NOT "
+    "masked by default (a case study's value is in its real numbers and methodology, so over-redacting "
+    "them would gut its credibility - a human decides what to do with each one):\n"
+    "- COMMERCIAL_TERM: contract value, deal size, margins, discounts, pricing/billing structure, "
+    "payment terms, penalty clauses, SLA-breach details.\n"
+    "- COMPETITOR_NAME: a named vendor who competed for or lost this engagement, or any other named "
+    "competitor of the client.\n"
+    "- STRATEGY_MENTION: M&A plans, unannounced initiatives, roadmaps, or other forward-looking business "
+    "strategy.\n"
+    "- OWN_COST_DETAIL: OUR OWN delivery firm's internal staffing ratios, day-rate/FTE figures, or exact "
+    "internal accelerator/framework configurations (not the client's costs - those are COMMERCIAL_TERM).\n"
+    "- ORG_CHART_STRUCTURE: a reporting-line diagram or a structured block of name/title pairs that maps "
+    "to real individuals (client or internal).\n\n"
+    "You must ALSO find CLIENT_PERSON_TITLE (a job title tied to a named client stakeholder, e.g. 'VP of "
+    "Operations') and CLIENT_PHONE (a phone number tied to a named client stakeholder, as opposed to a "
+    "generic PHONE with no clear stakeholder link, or a CLIENT_CONTRACT_ID account/contract number) - "
+    "both mask by default like any other CLIENT_* type.\n\n"
+    "You must ALSO find INTERNAL_TEAM_MEMBER: OUR OWN consultants' names (and any of them named/pictured "
+    "alongside the client) - classify these as INTERNAL_TEAM_MEMBER instead of silently ignoring them. "
+    "Whether that name actually gets masked depends on a consent record you don't have visibility into; "
+    "your job is only to identify them, not to decide.\n\n"
+    "Do NOT mask: generic industry or technology terms (retail, AWS, Kafka...), public email domains "
+    "(gmail.com), or a dollar amount with no commercial-term context (e.g. a KPI like \"grew revenue by "
+    "$2M\" is not itself a COMMERCIAL_TERM unless it's describing the deal/contract itself).\n\n"
     "You may call fs_read_document(document_id, start_chunk, end_chunk) to read the document in "
     "chunk ranges. Read enough to be exhaustive — a missed client identifier is a data leak. "
     "Return every client-identifying surface string once, with its type and your confidence (0-1). "

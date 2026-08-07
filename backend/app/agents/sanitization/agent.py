@@ -14,7 +14,17 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.agents.base import AgentFlag, AgentResult, AgentStep, BackgroundAgent, ReviewProposal
-from app.agents.sanitization import alias_validate, detector, precision_check, reidentify, revalidate, review_deltas, summarizer
+from app.agents.sanitization import (
+    alias_validate,
+    detector,
+    entity_actions,
+    precision_check,
+    reidentify,
+    revalidate,
+    review_deltas,
+    sensitive_outcome,
+    summarizer,
+)
 from app.agents.sanitization.apply_masks import apply_masks
 from app.agents.sanitization.image_scan import (
     MAX_IMAGES_SCANNED,
@@ -23,12 +33,14 @@ from app.agents.sanitization.image_scan import (
     scan_document_images,
 )
 from app.agents.sanitization.ner_prepass import extract_candidates, presidio_available, regex_candidates_for_text
+from app.agents.sanitization.regex_patterns import infra_credential
 from app.config import get_settings
 from app.documents.alttext_scan import extract_alt_text
 from app.documents.alttext_scrub import scrub_alt_text
 from app.documents.channel_coverage import audit_channel_coverage
 from app.documents.comment_scan import find_residual_comments
 from app.documents.comment_scrub import scrub_comments
+from app.documents.exif_strip import strip_exif
 from app.documents.extract import extract_chunks
 from app.documents.hyperlink_scan import find_residual_hyperlinks
 from app.documents.hyperlink_scrub import scrub_hyperlinks
@@ -47,6 +59,69 @@ from app.models import AgentRun, DocumentMetadata, MaskingEntity, MaskingOccurre
 from app.storage.local_store import save_masked_document, save_run_output
 
 settings = get_settings()
+
+
+def _resolve_entity_inclusion(
+    proposed_entities: list[dict], removed: set[str], included: set[str]
+) -> tuple[list[dict], list[str]]:
+    """The single place that decides which PROPOSED entities actually get
+    masked, given the reviewer's edits and each entity's default_action
+    (Phase 3's entity_actions.resolve_default_action, stamped onto every
+    entity during detect()) - generalizes Phase 2's CREDENTIAL-only
+    enforcement into all three defaults:
+
+      "mandatory" - always kept, regardless of removed/included (CREDENTIAL,
+                    unchanged from Phase 2 - a live credential should never
+                    be reviewer-optional).
+      "mask"      - kept unless the reviewer explicitly opted OUT via
+                    removed_surfaces (Phase 1/2 behavior, unchanged).
+      "flag"/"keep" - excluded UNLESS the reviewer explicitly opted IN via
+                    included_surfaces - the new, opposite-default path for
+                    COMMERCIAL_TERM/COMPETITOR_NAME/STRATEGY_MENTION/
+                    OWN_COST_DETAIL/ORG_CHART_STRUCTURE and a non-consented
+                    INTERNAL_TEAM_MEMBER.
+
+    A proposal entity written before this field existed (defensive only -
+    every entity detect() emits now sets it) falls back to "mask", the
+    historical default. Returns (kept_entities, blocked_removal_surfaces) -
+    the second is empty unless a removal was actually attempted against a
+    mandatory entity, so callers can flag it without re-deriving which
+    surfaces were blocked."""
+    blocked = [
+        e["surface_text"] for e in proposed_entities
+        if e.get("default_action", "mask") == "mandatory" and e["surface_text"].lower() in removed
+    ]
+    kept = []
+    for e in proposed_entities:
+        action = e.get("default_action", "mask")
+        surface_key = e["surface_text"].lower()
+        if action == "mandatory":
+            kept.append(e)
+        elif action in ("flag", "keep"):
+            if surface_key in included:
+                kept.append(e)
+        else:  # "mask"
+            if surface_key not in removed:
+                kept.append(e)
+    return kept, blocked
+
+
+def _apply_immediate_consent_grants(entities: list[dict], removed: set[str], consent_updates: dict) -> set[str]:
+    """Returns `removed` with a fresh "granted" consent (edits.consent_updates)
+    folded in for any INTERNAL_TEAM_MEMBER entity in `entities` - granting
+    consent in THIS SAME submission must exempt this run's occurrence too,
+    not only future ones. An entity's default_action was frozen at
+    detect() time, before this consent existed, so
+    _resolve_entity_inclusion alone would still mask someone the reviewer
+    just explicitly cleared - without this, "grant consent" would silently
+    do nothing until the NEXT run. Scoped to INTERNAL_TEAM_MEMBER only, so
+    an unrelated surface can't be affected by an incidental key collision
+    in consent_updates."""
+    updated = set(removed)
+    for e in entities:
+        if e["entity_type"] == "INTERNAL_TEAM_MEMBER" and consent_updates.get(e["surface_text"]) == "granted":
+            updated.add(e["surface_text"].lower())
+    return updated
 
 
 def _count_occurrences(surface: str, chunks) -> int:
@@ -275,6 +350,43 @@ class SanitizationAgent(BackgroundAgent):
             for key in group_keys:
                 image_occurrences_by_key[key] = image_occurrences_by_key.get(key, 0) + len(g.all_indices)
 
+        # Infrastructure & Security / Technical Diagrams (Phase 2): text read
+        # off ANY image - not gated on contains_client_identity/
+        # needs_human_judgment like the OCR merge above, since a hostname or
+        # credential can appear in an otherwise unremarkable screenshot that
+        # never trips the client-identity signal at all. Same merge-into-the-
+        # same-entity-pipeline principle as OCR'd client names: a credential
+        # read off a diagram gets a proper mask token, reviewer visibility,
+        # and (via the mandatory_redaction flag below) the same
+        # non-overridable treatment as one found in body text.
+        sensitive_text_occurrences_by_key: dict[str, int] = {}
+        credential_group_indices: set[int] = set()
+        for g in image_groups:
+            if not g.sensitive_text_matches:
+                continue
+            for surface, etype in g.sensitive_text_matches:
+                if etype in infra_credential.CREDENTIAL_TYPES:
+                    credential_group_indices.add(g.group_index)
+                key = dictionary.normalize(surface)
+                sensitive_text_occurrences_by_key[key] = sensitive_text_occurrences_by_key.get(key, 0) + len(g.all_indices)
+                if key in merged:
+                    continue
+                merged[key] = {
+                    "surface_text": surface, "entity_type": etype, "confidence": 0.9,
+                    "known": False, "mask_token": None, "source": "image_ocr",
+                }
+        data_sample_groups = [g for g in image_groups if g.contains_real_data_sample]
+        if credential_group_indices:
+            flags.append(AgentFlag(
+                message=f"{len(credential_group_indices)} embedded image(s) contain a possible credential (API key, token, or connection string) baked into the pixels — this will be masked unconditionally.",
+                severity="blocking",
+            ))
+        if data_sample_groups:
+            flags.append(AgentFlag(
+                message=f"{len(data_sample_groups)} embedded image(s) appear to show real (non-synthetic) data — consider replacing with a synthetic/representative example before distributing.",
+                severity="warning",
+            ))
+
         # Alt-text (descr/title on cNvPr/docPr) - the same seam as image OCR,
         # but for text a producer TYPED rather than pixels a model transcribes.
         # Known/approved entities are already caught by the dictionary
@@ -354,11 +466,23 @@ class SanitizationAgent(BackgroundAgent):
                 _count_occurrences(ent["surface_text"], chunks)
                 + image_occurrences_by_key.get(key, 0)
                 + alt_text_occurrences_by_key.get(key, 0)
+                + sensitive_text_occurrences_by_key.get(key, 0)
             )
             # Surfaced for the reviewer/frontend even though nothing sets it
             # yet - default null reproduces today's [CLIENT_N] behavior
             # exactly; a reviewer can set edits.entity_aliases at review time.
             ent.setdefault("custom_replacement", None)
+            # Phase 3: what happens to this entity if the reviewer never
+            # touches it - "mask" (Phase 1/2 behavior, unchanged), "flag"
+            # (proposed but NOT masked by default), or "mandatory" (Phase
+            # 2's CREDENTIAL). INTERNAL_TEAM_MEMBER's default depends on a
+            # per-person consent lookup, computed fresh here rather than
+            # threaded through every merge site above.
+            consent_status = (
+                dictionary.get_consent_status(db, ent["surface_text"])
+                if ent["entity_type"] == "INTERNAL_TEAM_MEMBER" else None
+            )
+            ent["default_action"] = entity_actions.resolve_default_action(ent["entity_type"], consent_status)
             entity_threshold = settings.SANITIZATION_CONFIDENCE_THRESHOLDS.get(ent["entity_type"], 0.6)
             if not ent["known"] and ent["confidence"] < entity_threshold:
                 skipped_low_confidence.append(ent)
@@ -378,7 +502,41 @@ class SanitizationAgent(BackgroundAgent):
                 severity="info",
             ))
 
-        # Step 5: file the review. Direct write, not a model-callable tool -
+        # Step 5: Sensitive Outcomes (Phase 3) - a document-level read over
+        # the ORIGINAL text, separate from every span-level detector above.
+        # Must run here, not folded into summarizer.py's pass (which only
+        # ever sees the masked text, in apply(), after approval) - a
+        # reviewer needs to see this BEFORE deciding whether to approve.
+        discusses_negative_outcome = False
+        negative_outcome_excerpts: list[str] = []
+        negative_outcome_summary = ""
+        if settings.SANITIZATION_NEGATIVE_OUTCOME_CHECK_ENABLED and full_text.strip():
+            t = time.monotonic()
+            outcome_resp = await sensitive_outcome.check_negative_outcome(full_text)
+            outcome_parsed = outcome_resp.parsed or {}
+            discusses_negative_outcome = bool(outcome_parsed.get("discusses_negative_outcome", False))
+            negative_outcome_excerpts = [s for s in (outcome_parsed.get("excerpts") or []) if isinstance(s, str)]
+            negative_outcome_summary = outcome_parsed.get("summary", "") or ""
+            if discusses_negative_outcome:
+                flags.append(AgentFlag(
+                    message=(
+                        f"This document discusses a sensitive outcome: {negative_outcome_summary or '(see excerpts)'} "
+                        "— a reviewer must explicitly resolve this before the run can be approved."
+                    ),
+                    severity="warning",
+                ))
+            steps.append(AgentStep(
+                order=5, name="sensitive outcome check", tool="bedrock",
+                detail=(
+                    f"discusses_negative_outcome={discusses_negative_outcome}"
+                    f"; {outcome_resp.input_tokens}+{outcome_resp.output_tokens} tok"
+                ),
+                duration_ms=int((time.monotonic() - t) * 1000),
+            ))
+        else:
+            outcome_resp = None
+
+        # Step 6: file the review. Direct write, not a model-callable tool -
         # this was never actually reachable from the LLM tool-use loop even
         # under the old MCP setup (agent code called it directly), so it's
         # a "protected call" by the same guardrail sanitization/tools.py
@@ -389,7 +547,7 @@ class SanitizationAgent(BackgroundAgent):
         )
         db.add(ReviewItem(run_id=run.id, notes=summary))
         db.commit()
-        steps.append(AgentStep(order=5, name="file review", tool=None, detail=summary))
+        steps.append(AgentStep(order=6, name="file review", tool=None, detail=summary))
 
         images_proposal = [
             {
@@ -411,6 +569,9 @@ class SanitizationAgent(BackgroundAgent):
                 "logo_match_distance": g.logo_match_distance,
                 "needs_human_judgment": g.needs_human_judgment,
                 "phash": g.phash,
+                # Phase 2 (Data Samples / Infra & Security).
+                "contains_real_data_sample": g.contains_real_data_sample,
+                "sensitive_text_matches": [{"surface_text": s, "entity_type": t} for s, t in g.sensitive_text_matches],
                 # A confirmed perceptual-hash match to an entity that's
                 # ALREADY approved in the masking dictionary is a governance
                 # decision that was already made (when that entity was
@@ -419,12 +580,18 @@ class SanitizationAgent(BackgroundAgent):
                 # image got excluded three runs in a row despite increasingly
                 # explicit description text, because the vision model's own
                 # free-text commentary kept arguing the opposite. apply()
-                # enforces this regardless of excluded_image_groups.
+                # enforces this regardless of excluded_image_groups. A
+                # CREDENTIAL read off this image (Phase 2) gets the exact
+                # same non-overridable treatment - a live credential should
+                # never be reviewer-optional, image or text.
                 "mandatory_redaction": (
-                    g.logo_match_distance is not None
-                    and g.logo_match_distance <= MATCH_THRESHOLD
-                    and g.logo_match_entity_id is not None
-                    and db.get(MaskingEntity, g.logo_match_entity_id).status == "approved"
+                    (
+                        g.logo_match_distance is not None
+                        and g.logo_match_distance <= MATCH_THRESHOLD
+                        and g.logo_match_entity_id is not None
+                        and db.get(MaskingEntity, g.logo_match_entity_id).status == "approved"
+                    )
+                    or any(etype in infra_credential.CREDENTIAL_TYPES for _, etype in g.sensitive_text_matches)
                 ),
             }
             for g in image_groups
@@ -437,12 +604,19 @@ class SanitizationAgent(BackgroundAgent):
                 "document_id": str(document_id), "filename": doc.filename, "total_chunks": len(chunks),
                 "entities": entities, "images": images_proposal, "images_skipped": skipped,
                 "excluded_entities": skipped_low_confidence,
+                # Phase 3 (Sensitive Outcomes) - document-level, see Step 5
+                # above. discusses_negative_outcome gates review submission
+                # (review/routes.py's submit_review) rather than the mask
+                # table's per-entity checkboxes.
+                "discusses_negative_outcome": discusses_negative_outcome,
+                "negative_outcome_excerpts": negative_outcome_excerpts,
+                "negative_outcome_summary": negative_outcome_summary,
             },
             steps=steps,
             flags=flags,
-            input_tokens=resp.input_tokens + img_in,
-            output_tokens=resp.output_tokens + img_out,
-            estimated_cost_usd=resp.estimated_cost_usd + img_cost,
+            input_tokens=resp.input_tokens + img_in + (outcome_resp.input_tokens if outcome_resp else 0),
+            output_tokens=resp.output_tokens + img_out + (outcome_resp.output_tokens if outcome_resp else 0),
+            estimated_cost_usd=resp.estimated_cost_usd + img_cost + (outcome_resp.estimated_cost_usd if outcome_resp else 0.0),
             working_status="detecting",
         )
 
@@ -452,12 +626,51 @@ class SanitizationAgent(BackgroundAgent):
         proposal = decision.get("proposal") or (run.output_json or {}).get("proposal") or {}
         edits = decision.get("edits") or {}
         removed = {s.lower() for s in edits.get("removed_surfaces", [])}
+        # Phase 3: the opt-IN counterpart to removed_surfaces, for every
+        # entity whose default_action is "flag"/"keep" - see
+        # _resolve_entity_inclusion.
+        included = {s.lower() for s in edits.get("included_surfaces", [])}
+        # Phase 3 (Internal Team consent) - see _apply_immediate_consent_grants.
+        consent_updates = edits.get("consent_updates") or {}
+        removed = _apply_immediate_consent_grants(proposal.get("entities", []), removed, consent_updates)
 
         document_id = proposal["document_id"]
         doc = db.get(UploadedDocument, uuid.UUID(str(document_id)))
         chunks = extract_chunks(doc.stored_path, doc.content_type, doc.filename)
 
-        entities = [e for e in proposal.get("entities", []) if e["surface_text"].lower() not in removed]
+        # CREDENTIAL is mandatory and non-overridable, the same "reviewer
+        # cannot exclude this" contract already enforced for a confirmed
+        # own-firm logo match (see the images path below) - a live
+        # credential should never be reviewer-optional. Ignoring the removal
+        # request here (rather than validating it earlier and rejecting the
+        # whole submission) mirrors the existing pattern for entity_merges'
+        # unresolvable-canonical-surface case: degrade to the safe behavior
+        # and flag it, don't fail the run.
+        entities, blocked_credential_removals = _resolve_entity_inclusion(proposal.get("entities", []), removed, included)
+        if blocked_credential_removals:
+            flags.append(AgentFlag(
+                message=(
+                    f"{len(blocked_credential_removals)} CREDENTIAL entit"
+                    f"{'y' if len(blocked_credential_removals) == 1 else 'ies'} cannot be excluded from masking "
+                    f"(mandatory, non-overridable): {', '.join(blocked_credential_removals)}."
+                ),
+                severity="warning",
+            ))
+
+        # Phase 3 (Internal Team consent workflow): persisted globally so
+        # every FUTURE run also sees it (same as an alias or a client-
+        # account link) - this run's own masking outcome was already
+        # decided above, by folding a fresh "granted" into `removed`.
+        consent_updated = 0
+        for surface, status in consent_updates.items():
+            if status not in ("not_required", "pending", "granted"):
+                continue
+            consent_entity = dictionary.get_or_create(db, surface, "INTERNAL_TEAM_MEMBER", run.id, approved=True)
+            dictionary.set_consent_status(db, consent_entity, status)
+            consent_updated += 1
+        if consent_updated:
+            steps.append(AgentStep(order=1, name="internal team consent", tool="masking_dictionary",
+                                   detail=f"{consent_updated} consent record(s) updated"))
 
         # Reviewer-edit deltas as precision/recall signal (Task 3) - see
         # review_deltas.py. Purely additive instrumentation: does not change
@@ -715,7 +928,17 @@ class SanitizationAgent(BackgroundAgent):
         approved_refs = []
         approved_groups = []
         for g in image_groups_proposal:
-            recommended = g.get("contains_client_identity") and g["group_index"] not in excluded_groups
+            # contains_real_data_sample (Phase 2) is recommended-by-default
+            # the same way contains_client_identity already is - this MUST
+            # match the frontend's default checkbox state (willRedact() in
+            # ReviewDetailPage.jsx), or a data-sample image the reviewer
+            # leaves untouched (no explicit include/exclude entry, because
+            # nothing was toggled away from its default) would show as
+            # checked in the UI but silently not be redacted here.
+            recommended = (
+                (g.get("contains_client_identity") or g.get("contains_real_data_sample"))
+                and g["group_index"] not in excluded_groups
+            )
             opted_in = g["group_index"] in included_groups
             # A confirmed logo-hash match to an already-approved entity can't
             # be excluded via the checkbox - see mandatory_redaction above.
@@ -802,6 +1025,17 @@ class SanitizationAgent(BackgroundAgent):
                 message=f"{images_unlocated} approved image redaction(s) could not be located on the rendered page (a rare PDF pattern-fill case) and were NOT redacted — check manually.",
                 severity="blocking",
             ))
+
+        # Strip EXIF from EVERY embedded image, not only ones flagged for
+        # redaction - a non-logo photo (site visit, whiteboard snapshot) can
+        # carry GPS/device metadata that redaction, which only touches
+        # flagged images, never reaches. Runs after redaction so an already-
+        # redacted image is just our own placeholder PNG (no EXIF, no-op).
+        exif_stripped = 0
+        if rendered_natively:
+            exif_stripped = strip_exif(masked_doc_path, doc.content_type, doc.filename)
+            if exif_stripped:
+                steps.append(AgentStep(order=7, name="strip image EXIF", tool=None, detail=f"{exif_stripped} image(s) had EXIF/metadata removed"))
 
         # Scrub image alt-text (descr/title/name on cNvPr/docPr) - redacting
         # a logo's PIXELS above does nothing to its alt-text, a completely
@@ -1010,6 +1244,7 @@ class SanitizationAgent(BackgroundAgent):
             },
             "occurrence_count": len(occurrences),
             "images_redacted": images_redacted,
+            "images_exif_stripped": exif_stripped,
             "revalidation": revalidation,
             "sanitized_summary": parsed.get("sanitized_summary"),
             "metadata": parsed.get("metadata", {}),

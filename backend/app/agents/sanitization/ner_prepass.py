@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from app.agents.sanitization.regex_patterns import commercial_terms, infra_credential
 from app.documents.extract import Chunk as DocChunk
 
 # ---- Regex for structured identifiers (always available, zero cost) ----
@@ -80,6 +81,18 @@ def _regex_candidates(text: str) -> list[tuple[str, str]]:
         domain = m.group(1).lower()
         if domain not in _PUBLIC_DOMAINS:
             found.append((domain, "CLIENT_EMAIL_DOMAIN"))
+    # Infrastructure & Security (Phase 2) - IP/hostname/credential shapes.
+    # Deliberately checked BEFORE the looser _PHONE_RE/_ACCOUNT_RE below: an
+    # IPv4 address ("10.0.4.17") also happens to satisfy _PHONE_RE's broad
+    # "digit, then 7+ punctuation/digits, then digit" shape, and
+    # extract_candidates() below keeps only the FIRST guess seen for a given
+    # surface - so whichever regex runs first wins the (non-binding, but
+    # ideally still accurate) hint shown to the LLM Detector. Kept in their
+    # own module (regex_patterns/infra_credential.py) rather than inlined
+    # here, since CREDENTIAL carries a different downstream contract
+    # (mandatory, non-overridable masking) worth documenting and testing in
+    # one dedicated place - see that module's docstring.
+    found.extend(infra_credential.scan(text))
     for m in _PHONE_RE.finditer(text):
         found.append((m.group(0).strip(), "CLIENT_CONTRACT_ID"))
     for m in _ACCOUNT_RE.finditer(text):
@@ -93,6 +106,8 @@ def _regex_candidates(text: str) -> list[tuple[str, str]]:
         found.append((m.group(0).strip(), "ADDRESS"))
     for m in _CITY_STATE_ZIP_RE.finditer(text):
         found.append((m.group(0).strip(), "ADDRESS"))
+    # Commercial & Financial Terms / client-stakeholder job titles (Phase 3).
+    found.extend(commercial_terms.scan(text))
     return found
 
 

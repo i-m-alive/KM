@@ -10,6 +10,7 @@ from app.auth.permissions import has_capability, require_capability
 from app.db import get_db
 from app.documents import storage
 from app.documents.convert import ConversionUnavailableError, to_pdf_cached
+from app.documents.dataset_provenance import check as check_dataset_provenance
 from app.documents.extract import UnsupportedDocumentError, extract_chunks
 from app.documents.images import extract_images
 from app.models import UploadedDocument, User
@@ -72,12 +73,16 @@ async def upload_document(
     db.commit()
     db.refresh(doc)
 
+    # Advisory only (Phase 2) - never blocks the upload, see module docstring.
+    provenance_warning = check_dataset_provenance(db, doc.stored_path, doc.content_type, doc.filename)
+
     return DocumentOut(
         id=doc.id,
         filename=doc.filename,
         content_type=doc.content_type,
         uploaded_at=doc.uploaded_at,
         chunk_count=len(chunks),
+        provenance_warning=provenance_warning,
     )
 
 

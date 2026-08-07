@@ -10,6 +10,19 @@ export default function ReviewDetailPage() {
   const navigate = useNavigate();
   const [detail, setDetail] = useState(null);
   const [removed, setRemoved] = useState(new Set());
+  // Phase 3: the opt-IN counterpart to `removed` - for an entity whose
+  // default_action is "flag"/"keep" (COMMERCIAL_TERM, COMPETITOR_NAME,
+  // STRATEGY_MENTION, OWN_COST_DETAIL, ORG_CHART_STRUCTURE, or a non-
+  // consented INTERNAL_TEAM_MEMBER), it is NOT masked unless the reviewer
+  // explicitly opts it in here.
+  const [included, setIncluded] = useState(new Set());
+  // surface_text -> consent_status the reviewer has set for an
+  // INTERNAL_TEAM_MEMBER row (not_required | pending | granted).
+  const [consentUpdates, setConsentUpdates] = useState({});
+  // One of approve_as_is | requires_client_signoff | remove_section - only
+  // meaningful (and required before Approve) when the proposal's
+  // discusses_negative_outcome is true.
+  const [negativeOutcomeResolution, setNegativeOutcomeResolution] = useState("");
   // Image groups default to the model's recommendation (contains_client_identity);
   // this set holds groups whose recommendation the reviewer has FLIPPED.
   const [imageOverrides, setImageOverrides] = useState(new Set());
@@ -54,6 +67,29 @@ export default function ReviewDetailPage() {
     "EMAIL",
     "PHONE",
     "ADDRESS",
+    // Infrastructure & Security (Phase 2). CREDENTIAL is mandatory/non-
+    // overridable once proposed - see the locked "Include" checkbox below.
+    "INFRA_IDENTIFIER",
+    "CREDENTIAL",
+    // Phase 3. Five of these default to NOT masked (flag-for-review) rather
+    // than masked-by-default - the "Include" checkbox for these starts
+    // UNCHECKED, driven by each entity's own default_action from the
+    // proposal (see the table below), not a hardcoded list here.
+    "COMMERCIAL_TERM",
+    "COMPETITOR_NAME",
+    "STRATEGY_MENTION",
+    "OWN_COST_DETAIL",
+    "ORG_CHART_STRUCTURE",
+    "INTERNAL_TEAM_MEMBER",
+    "CLIENT_PERSON_TITLE",
+    "CLIENT_PHONE",
+  ];
+
+  const MANDATORY_ENTITY_TYPES = new Set(["CREDENTIAL"]);
+  const OUTCOME_RESOLUTIONS = [
+    { value: "approve_as_is", label: "Approve as-is", hint: "This outcome is fine to share as written." },
+    { value: "requires_client_signoff", label: "Requires client sign-off", hint: "Hold distribution until the client explicitly approves sharing this." },
+    { value: "remove_section", label: "Remove this section", hint: "Cut the sensitive passage before distributing (do this manually, then approve)." },
   ];
 
   useEffect(() => {
@@ -66,6 +102,23 @@ export default function ReviewDetailPage() {
     setRemoved((prev) => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
+  function toggleInclude(surface) {
+    setIncluded((prev) => {
+      const next = new Set(prev);
+      next.has(surface) ? next.delete(surface) : next.add(surface);
+      return next;
+    });
+  }
+
+  function setConsent(surface, status) {
+    setConsentUpdates((prev) => {
+      const next = { ...prev };
+      if (status) next[surface] = status;
+      else delete next[surface];
       return next;
     });
   }
@@ -127,8 +180,14 @@ export default function ReviewDetailPage() {
 
   function willRedact(group) {
     if (group.mandatory_redaction) return true;
+    // contains_real_data_sample (Phase 2) is recommended-by-default the
+    // same way contains_client_identity already is - MUST match apply()'s
+    // own re-derivation of "recommended" server-side (agent.py), or a
+    // data-sample image left untouched would show checked here but not
+    // actually get redacted.
+    const recommended = group.contains_client_identity || group.contains_real_data_sample;
     const flipped = imageOverrides.has(group.group_index);
-    return flipped ? !group.contains_client_identity : group.contains_client_identity;
+    return flipped ? !recommended : recommended;
   }
 
   async function decide(decision) {
@@ -139,21 +198,25 @@ export default function ReviewDetailPage() {
       const p = detail.proposal || {};
       if (detail.agent_id === "sanitization") {
         edits.removed_surfaces = (p.entities || []).filter((e) => removed.has(e.surface_text)).map((e) => e.surface_text);
-        const excluded = [];
-        const included = [];
+        const excludedImageGroups = [];
+        const includedImageGroups = [];
         for (const g of p.images || []) {
           const flipped = imageOverrides.has(g.group_index);
           if (!flipped) continue;
-          if (g.contains_client_identity) excluded.push(g.group_index); // was recommended, reviewer unchecked it
-          else included.push(g.group_index); // was not recommended, reviewer opted it in
+          if (g.contains_client_identity) excludedImageGroups.push(g.group_index); // was recommended, reviewer unchecked it
+          else includedImageGroups.push(g.group_index); // was not recommended, reviewer opted it in
         }
-        edits.excluded_image_groups = excluded;
-        edits.included_image_groups = included;
+        edits.excluded_image_groups = excludedImageGroups;
+        edits.included_image_groups = includedImageGroups;
         if (addedEntities.length > 0) edits.added_entities = addedEntities;
         if (clientEntitySurface) edits.client_entity_surface = clientEntitySurface;
         edits.masking_style = maskingStyle;
         if (Object.keys(aliases).length > 0) edits.entity_aliases = aliases;
         if (Object.keys(merges).length > 0) edits.entity_merges = merges;
+        // Phase 3: opt-IN surfaces for flag/keep-default entities.
+        if (included.size > 0) edits.included_surfaces = Array.from(included);
+        if (Object.keys(consentUpdates).length > 0) edits.consent_updates = consentUpdates;
+        if (p.discusses_negative_outcome) edits.negative_outcome_resolution = negativeOutcomeResolution;
       } else if (detail.agent_id === "tagging") {
         edits.removed_tags = (p.tags || [])
           .filter((t) => removed.has(`${t.category}:${t.value}`))
@@ -161,6 +224,8 @@ export default function ReviewDetailPage() {
       }
       const edited =
         removed.size > 0 ||
+        included.size > 0 ||
+        Object.keys(consentUpdates).length > 0 ||
         imageOverrides.size > 0 ||
         addedEntities.length > 0 ||
         Boolean(clientEntitySurface) ||
@@ -195,11 +260,18 @@ export default function ReviewDetailPage() {
   const allSurfaces = [...(p.entities || []).map((e) => e.surface_text), ...addedEntities.map((e) => e.surface_text)];
   const edited =
     removed.size > 0 ||
+    included.size > 0 ||
+    Object.keys(consentUpdates).length > 0 ||
     imageOverrides.size > 0 ||
     addedEntities.length > 0 ||
     Boolean(clientEntitySurface) ||
     Object.keys(aliases).length > 0 ||
     Object.keys(merges).length > 0;
+  // Phase 3: a non-dismissible gate, not just a callout - Approve/Reject
+  // stay enabled (rejecting doesn't need a resolution), but Approve is
+  // disabled until the reviewer picks one, mirroring the server-side
+  // enforcement in review/routes.py's submit_review.
+  const outcomeResolutionMissing = Boolean(p.discusses_negative_outcome) && !negativeOutcomeResolution;
 
   return (
     <div>
@@ -215,6 +287,51 @@ export default function ReviewDetailPage() {
       )}
       {error && <p className="error-text">{error}</p>}
       <FlagList flags={detail.flags} />
+
+      {detail.agent_id === "sanitization" && p.discusses_negative_outcome && (
+        <div className="card section" style={{ borderColor: "var(--bad-fg)", borderWidth: "2px" }}>
+          <h3 className="card__title" style={{ color: "var(--bad-fg)" }}>⚠ Sensitive outcome detected</h3>
+          <p className="card__sub">
+            {p.negative_outcome_summary || "This document discusses a failure, breach, negative metric, or regulatory finding."}
+          </p>
+          {p.negative_outcome_excerpts && p.negative_outcome_excerpts.length > 0 && (
+            <ul style={{ fontSize: "0.88rem", color: "var(--ink-soft)" }}>
+              {p.negative_outcome_excerpts.map((ex, i) => (
+                <li key={i}>"{ex}"</li>
+              ))}
+            </ul>
+          )}
+          <p className="card__sub" style={{ marginTop: "0.5rem" }}>
+            You must resolve this before approving or editing this run:
+          </p>
+          <div className="agent-grid">
+            {OUTCOME_RESOLUTIONS.map((r) => (
+              <label
+                key={r.value}
+                className="agent-card"
+                style={{
+                  display: "block",
+                  cursor: "pointer",
+                  borderColor: negativeOutcomeResolution === r.value ? "var(--brand-500)" : undefined,
+                  boxShadow: negativeOutcomeResolution === r.value ? "0 0 0 3px var(--brand-100)" : undefined,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <input
+                    type="radio"
+                    name="negative-outcome-resolution"
+                    value={r.value}
+                    checked={negativeOutcomeResolution === r.value}
+                    onChange={() => setNegativeOutcomeResolution(r.value)}
+                  />
+                  <strong>{r.label}</strong>
+                </div>
+                <p className="agent-card__meta" style={{ margin: "0.35rem 0 0" }}>{r.hint}</p>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       {detail.agent_id === "sanitization" && (
         <>
@@ -254,10 +371,11 @@ export default function ReviewDetailPage() {
           <div className="card section">
             <h3 className="card__title">Proposed masks ({(p.entities || []).length + addedEntities.length})</h3>
             <p className="card__sub">
-              Untick an entity to exclude it from masking, add any the agent missed, and mark which one is the client —
-              that's the only entity linked to a client account. Set an alias to replace the token with a chosen name
-              everywhere (validated before it's applied); merge a duplicate spelling ("J&amp;J") into its canonical
-              entity so they share one token/alias instead of two.
+              Untick a masked-by-default entity to exclude it; tick a flagged (not-masked-by-default) one — commercial
+              terms, competitors, strategy, own-cost detail, org charts — to include it instead. Add any the agent
+              missed, and mark which one is the client — that's the only entity linked to a client account. Set an
+              alias to replace the token with a chosen name everywhere (validated before it's applied); merge a
+              duplicate spelling ("J&amp;J") into its canonical entity so they share one token/alias instead of two.
             </p>
             <div className="table-scroll">
               <table className="run-table">
@@ -270,6 +388,7 @@ export default function ReviewDetailPage() {
                     <th>Occurrences</th>
                     <th>Known?</th>
                     <th>Include</th>
+                    <th>Consent</th>
                     <th>Client?</th>
                     <th>Alias</th>
                     <th>Merge into</th>
@@ -277,24 +396,62 @@ export default function ReviewDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(p.entities || []).map((e, i) => (
-                    <tr key={i} style={removed.has(e.surface_text) ? { opacity: 0.45 } : undefined}>
+                  {(p.entities || []).map((e, i) => {
+                    const isMandatory = MANDATORY_ENTITY_TYPES.has(e.entity_type);
+                    // Phase 3: the entity's own default_action from the
+                    // proposal is the single source of truth for which
+                    // opt-in/opt-out set drives its checkbox - see
+                    // agent.py's entity_actions.resolve_default_action.
+                    const isFlagDefault = e.default_action === "flag" || e.default_action === "keep";
+                    const isInternalTeamMember = e.entity_type === "INTERNAL_TEAM_MEMBER";
+                    // Unified "is this row currently excluded from masking"
+                    // signal, spanning both opt-out (mask-default) and
+                    // opt-in (flag-default) semantics - everything below
+                    // (client radio, alias, merge) should disable the same
+                    // way regardless of which default this entity has.
+                    const isExcluded = isMandatory ? false : isFlagDefault ? !included.has(e.surface_text) : removed.has(e.surface_text);
+                    return (
+                    <tr key={i} style={isExcluded ? { opacity: 0.45 } : undefined}>
                       <td><code>{e.mask_token || `[new ${e.entity_type}]`}</code></td>
                       <td style={{ fontWeight: 550 }}>{e.surface_text}</td>
-                      <td className="agent-card__meta">{e.entity_type}</td>
+                      <td className="agent-card__meta">
+                        {e.entity_type}{isMandatory ? " (mandatory)" : isFlagDefault ? " (flagged)" : ""}
+                      </td>
                       <td>{Math.round((e.confidence ?? 0) * 100)}%</td>
                       <td>{e.occurrences}</td>
                       <td>
                         <span className={`chip ${e.known ? "" : ""}`}>{e.known ? "known" : "new"}</span>
                       </td>
                       <td>
-                        <input type="checkbox" checked={!removed.has(e.surface_text)} onChange={() => toggle(e.surface_text)} />
+                        <input
+                          type="checkbox"
+                          checked={isMandatory || (isFlagDefault ? included.has(e.surface_text) : !removed.has(e.surface_text))}
+                          disabled={isMandatory}
+                          title={isMandatory ? "CREDENTIAL is masked unconditionally and cannot be excluded" : undefined}
+                          onChange={() => (isFlagDefault ? toggleInclude(e.surface_text) : toggle(e.surface_text))}
+                        />
+                      </td>
+                      <td>
+                        {isInternalTeamMember ? (
+                          <select
+                            value={consentUpdates[e.surface_text] || ""}
+                            onChange={(ev) => setConsent(e.surface_text, ev.target.value)}
+                            style={{ width: "120px" }}
+                          >
+                            <option value="">(unset)</option>
+                            <option value="pending">pending</option>
+                            <option value="granted">granted</option>
+                            <option value="not_required">not required</option>
+                          </select>
+                        ) : (
+                          <span className="agent-card__meta">—</span>
+                        )}
                       </td>
                       <td>
                         <input
                           type="radio"
                           name="client-entity"
-                          disabled={removed.has(e.surface_text)}
+                          disabled={isExcluded}
                           checked={clientEntitySurface.toLowerCase() === e.surface_text.toLowerCase()}
                           onChange={() => setClientEntitySurface(e.surface_text)}
                         />
@@ -304,7 +461,7 @@ export default function ReviewDetailPage() {
                           type="text"
                           placeholder="e.g. Acme Pharma"
                           value={aliases[e.surface_text] || ""}
-                          disabled={removed.has(e.surface_text) || Boolean(merges[e.surface_text])}
+                          disabled={isExcluded || Boolean(merges[e.surface_text])}
                           onChange={(ev) => setAlias(e.surface_text, ev.target.value)}
                           style={{ width: "140px" }}
                         />
@@ -312,7 +469,7 @@ export default function ReviewDetailPage() {
                       <td>
                         <select
                           value={merges[e.surface_text] || ""}
-                          disabled={removed.has(e.surface_text)}
+                          disabled={isExcluded}
                           onChange={(ev) => setMerge(e.surface_text, ev.target.value)}
                           style={{ width: "150px" }}
                         >
@@ -328,7 +485,8 @@ export default function ReviewDetailPage() {
                       </td>
                       <td />
                     </tr>
-                  ))}
+                    );
+                  })}
                   {addedEntities.map((e, i) => (
                     <tr key={`added-${i}`}>
                       <td><code>[new {e.entity_type}]</code></td>
@@ -339,6 +497,9 @@ export default function ReviewDetailPage() {
                       <td><span className="chip">reviewer-added</span></td>
                       <td>
                         <input type="checkbox" checked disabled />
+                      </td>
+                      <td>
+                        <span className="agent-card__meta">—</span>
                       </td>
                       <td>
                         <input
@@ -461,7 +622,9 @@ export default function ReviewDetailPage() {
                     ? "#fcd34d"
                     : g.contains_client_identity
                       ? "#fda4af"
-                      : undefined;
+                      : g.contains_real_data_sample
+                        ? "#fcd34d"
+                        : undefined;
                 return (
                   <div key={g.group_index} className="agent-card" style={{ borderColor }}>
                     {documentId && (
@@ -493,10 +656,21 @@ export default function ReviewDetailPage() {
                         manually.
                       </p>
                     )}
+                    {g.contains_real_data_sample && (
+                      <p style={{ margin: "0.4rem 0 0", color: "var(--warn-fg)", fontSize: "0.8rem" }}>
+                        📊 Looks like real (non-synthetic) data — consider a synthetic/representative replacement.
+                      </p>
+                    )}
+                    {g.sensitive_text_matches && g.sensitive_text_matches.length > 0 && (
+                      <p style={{ margin: "0.4rem 0 0", color: "var(--bad-fg)", fontSize: "0.8rem" }}>
+                        🔒 Text in image: {g.sensitive_text_matches.map((m) => `${m.entity_type} "${m.surface_text}"`).join(", ")}
+                      </p>
+                    )}
                     {g.mandatory_redaction && (
                       <p style={{ margin: "0.4rem 0 0", color: "var(--bad-fg)", fontSize: "0.8rem", fontWeight: 600 }}>
-                        Locked: confirmed match to an already-approved masked entity ({g.logo_match_token}) — always
-                        redacted, regardless of the description above.
+                        Locked: {g.logo_match_token
+                          ? `confirmed match to an already-approved masked entity (${g.logo_match_token})`
+                          : "contains a CREDENTIAL"} — always redacted, regardless of the description above.
                       </p>
                     )}
                     <label
@@ -570,8 +744,13 @@ export default function ReviewDetailPage() {
           Notes (optional)
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
         </label>
+        {outcomeResolutionMissing && (
+          <p className="error-text" style={{ marginTop: "0.5rem" }}>
+            Resolve the sensitive outcome above before approving.
+          </p>
+        )}
         <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.9rem" }}>
-          <button onClick={() => decide("approved")} disabled={busy}>
+          <button onClick={() => decide("approved")} disabled={busy || outcomeResolutionMissing}>
             {busy ? "Submitting…" : `Approve${edited ? " (edited)" : ""}`}
           </button>
           <button className="btn--danger" onClick={() => decide("rejected")} disabled={busy}>

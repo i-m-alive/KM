@@ -185,6 +185,11 @@ class MaskingEntity(Base):
     # entity too. NULL (the default) reproduces today's [CLIENT_N] behavior
     # exactly - see masking.dictionary.resolved_replacement().
     custom_replacement: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Phase 3 (Internal Team consent workflow) - meaningful only for
+    # entity_type == INTERNAL_TEAM_MEMBER: null/pending -> default action is
+    # "mask" (see entity_actions.resolve_default_action); "granted" ->
+    # default action is "keep". Every other entity_type leaves this null.
+    consent_status: Mapped[str | None] = mapped_column(String, nullable=True)
 
     aliases: Mapped[list["MaskingAlias"]] = relationship(
         "MaskingAlias", back_populates="entity", cascade="all, delete-orphan"
@@ -251,6 +256,8 @@ class VisionVerdictCache(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     confidence: Mapped[float] = mapped_column(REAL, nullable=False)
     ocr_text: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    # Phase 2 (Data Samples) - see app.agents.sanitization.image_scan.
+    contains_real_data_sample: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
 

@@ -9,10 +9,10 @@ independently re-derives its answer for every new run; only the SAME run
 asking about the SAME image bytes twice is short-circuited.
 
 Deliberately caches ONLY the raw model response (contains_client_identity,
-description, confidence, ocr_text) - never the deterministic post-processing
-(OCR-match, own-firm exclusion, logo-hash override) image_scan.py builds on
-top of it, which must always re-run fresh against current dictionary/logo
-state.
+description, confidence, ocr_text, contains_real_data_sample) - never the
+deterministic post-processing (OCR-match, own-firm exclusion, logo-hash
+override, sensitive-text regex match) image_scan.py builds on top of it,
+which must always re-run fresh against current dictionary/logo/regex state.
 """
 
 import uuid
@@ -40,6 +40,7 @@ def load_cached_verdict(db: Session, run_id: uuid.UUID | None, content_key: str)
         "description": row.description,
         "confidence": row.confidence,
         "ocr_text": row.ocr_text,
+        "contains_real_data_sample": row.contains_real_data_sample,
     }
 
 
@@ -53,5 +54,6 @@ def store_verdict(db: Session, run_id: uuid.UUID | None, content_key: str, parse
         description=parsed.get("description", "") or "",
         confidence=float(parsed.get("confidence", 0.0)),
         ocr_text=[s for s in (parsed.get("ocr_text") or []) if isinstance(s, str)],
+        contains_real_data_sample=bool(parsed.get("contains_real_data_sample", False)),
     ))
     db.flush()

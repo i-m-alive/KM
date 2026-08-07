@@ -82,7 +82,33 @@ class Settings(BaseSettings):
         "EMAIL": 0.6,
         "PHONE": 0.6,
         "ADDRESS": 0.6,
+        # Infrastructure & Security (Phase 2). CREDENTIAL is deliberately
+        # left at the same untuned 0.6 as everything else, not raised, even
+        # though it's mandatory/non-overridable once confirmed - the
+        # precision guarantee for that comes from regex_patterns/
+        # infra_credential.py's high-precision shapes, not from a higher
+        # confidence bar here.
+        "INFRA_IDENTIFIER": 0.6,
+        "CREDENTIAL": 0.6,
+        # Phase 3. Same untuned 0.6 default as every type above.
+        "COMMERCIAL_TERM": 0.6,
+        "COMPETITOR_NAME": 0.6,
+        "STRATEGY_MENTION": 0.6,
+        "OWN_COST_DETAIL": 0.6,
+        "ORG_CHART_STRUCTURE": 0.6,
+        "INTERNAL_TEAM_MEMBER": 0.6,
+        "CLIENT_PERSON_TITLE": 0.6,
+        "CLIENT_PHONE": 0.6,
     }
+
+    # Sensitive-outcome document-level check (Phase 3) - a separate,
+    # lightweight Bedrock pass over the ORIGINAL (unmasked) text, run during
+    # detect() so a reviewer sees it before approving, not after. Unlike
+    # precision/reidentify (Sec 2 QA passes), this is on by default: a
+    # missed negative-outcome disclosure is a real client-relationship risk,
+    # not just a quality signal, so gating it behind manual opt-in would
+    # defeat the point (same reasoning as SANITIZATION_REVALIDATION_ENABLED).
+    SANITIZATION_NEGATIVE_OUTCOME_CHECK_ENABLED: bool = True
 
     # Precision QA: an extra Bedrock pass over the MASKED text that flags mask
     # tokens whose surrounding grammar suggests a common/generic word was

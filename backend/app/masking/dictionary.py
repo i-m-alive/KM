@@ -32,6 +32,18 @@ _TOKEN_PREFIX = {
     "EMAIL": "EMAIL",
     "PHONE": "PHONE",
     "ADDRESS": "ADDRESS",
+    # Infrastructure & Security (Phase 2).
+    "INFRA_IDENTIFIER": "INFRA",
+    "CREDENTIAL": "CREDENTIAL",
+    # Phase 3.
+    "COMMERCIAL_TERM": "COMMERCIAL_TERM",
+    "COMPETITOR_NAME": "COMPETITOR",
+    "STRATEGY_MENTION": "STRATEGY",
+    "OWN_COST_DETAIL": "OWN_COST",
+    "ORG_CHART_STRUCTURE": "ORG_CHART",
+    "INTERNAL_TEAM_MEMBER": "INTERNAL_TEAM",
+    "CLIENT_PERSON_TITLE": "CLIENT_TITLE",
+    "CLIENT_PHONE": "CLIENT_PHONE",
 }
 
 
@@ -183,6 +195,28 @@ def approve(db: Session, entity: MaskingEntity, client_account_id: uuid.UUID | N
 def skip(db: Session, entity: MaskingEntity) -> None:
     """Governance decision: never propose this term again (see is_skipped)."""
     entity.status = "skipped"
+    db.flush()
+
+
+def get_consent_status(db: Session, raw_value: str) -> str | None:
+    """Phase 3 (Internal Team consent workflow): the recorded consent_status
+    for a named INTERNAL_TEAM_MEMBER, or None if this name has never been
+    seen before - entity_actions.resolve_default_action treats None the
+    same as "pending" (default action stays "mask" absent an explicit
+    grant). Deliberately does not check entity_type - a name is looked up by
+    surface alone, same as lookup()/is_skipped(), since a name is only ever
+    proposed as INTERNAL_TEAM_MEMBER in the first place by the Detector's
+    own classification."""
+    entity = lookup(db, raw_value)
+    return entity.consent_status if entity is not None else None
+
+
+def set_consent_status(db: Session, entity: MaskingEntity, status: str) -> None:
+    """Governance decision, same shape as approve()/skip(): a reviewer (or
+    the team member themselves, via whatever process captures that outside
+    this system) records consent for THIS entity - global scope, so it's
+    remembered for every future document, not just the run that asked."""
+    entity.consent_status = status
     db.flush()
 
 

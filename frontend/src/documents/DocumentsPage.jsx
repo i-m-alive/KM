@@ -17,6 +17,7 @@ export default function DocumentsPage() {
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState(null);
   const [startingId, setStartingId] = useState(null);
+  const [provenanceWarning, setProvenanceWarning] = useState(null);
 
   function load() {
     apiGet("/documents").then(setDocs).catch((e) => setError(e.message));
@@ -27,9 +28,13 @@ export default function DocumentsPage() {
     e.preventDefault();
     if (!file) return;
     setError(null);
+    setProvenanceWarning(null);
     setBusy(true);
     try {
-      await apiUpload("/documents", file);
+      const doc = await apiUpload("/documents", file);
+      // Advisory only (Phase 2 dataset provenance check) - never blocks
+      // the upload, just surfaced so it isn't silently missed.
+      if (doc.provenance_warning) setProvenanceWarning(doc.provenance_warning);
       setFile(null);
       e.target.reset();
       load();
@@ -76,6 +81,7 @@ export default function DocumentsPage() {
         </div>
       </div>
       {error && <p className="error-text">{error}</p>}
+      {provenanceWarning && <div className="callout">{provenanceWarning}</div>}
 
       <div className="card">
         <h3 className="card__title">

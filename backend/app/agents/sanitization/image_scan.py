@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.sanitization import vision_cache
 from app.agents.sanitization.ner_prepass import regex_candidates_for_text
+from app.agents.sanitization.regex_patterns import infra_credential
 from app.config import get_settings
 from app.documents.images import ImageRef, extract_images, guess_image_format
 from app.llm import bedrock_client
@@ -53,8 +54,14 @@ VISION_SCHEMA = {
         "description": {"type": "string"},
         "confidence": {"type": "number"},
         "ocr_text": {"type": "array", "items": {"type": "string"}},
+        # Phase 2 (Data Samples): does this image's CONTENT - not its
+        # branding - look like real, non-synthetic operational/financial/
+        # customer data, as opposed to a generic chart template, placeholder
+        # content, a logo, or an illustration. Same call, no added vision
+        # cost - see module docstring's three-signal framing above.
+        "contains_real_data_sample": {"type": "boolean"},
     },
-    "required": ["contains_client_identity", "description", "confidence", "ocr_text"],
+    "required": ["contains_client_identity", "description", "confidence", "ocr_text", "contains_real_data_sample"],
 }
 
 def _system_prompt() -> str:
@@ -80,8 +87,11 @@ def _system_prompt() -> str:
         f"{own_firm_clause}"
         "Do NOT flag: generic charts/diagrams/icons, our own firm's branding, stock photography, or screenshots "
         "with no client name/logo visible. Also transcribe every literal string of text visible anywhere in the "
-        "image (wordmarks, captions, labels) into ocr_text, even short fragments - list each as its own entry, "
-        "empty list if none. Give a confidence (0-1)."
+        "image (wordmarks, captions, labels, diagram labels, system/host names) into ocr_text, even short "
+        "fragments - list each as its own entry, empty list if none. Give a confidence (0-1). Separately, judge "
+        "contains_real_data_sample: does this image's CONTENT (a dashboard, table, report, or screenshot) show "
+        "what looks like real, specific operational/financial/customer data (actual numbers, names, or records) "
+        "as opposed to a generic chart template, placeholder/lorem-ipsum content, a logo, or an illustration."
     )
 
 
@@ -100,6 +110,13 @@ class ImageGroup:
     logo_match_distance: int | None = None
     needs_human_judgment: bool = False
     phash: str | None = None
+    # Phase 2 (Data Samples): real (non-synthetic) data visible in the image.
+    contains_real_data_sample: bool = False
+    # Phase 2 (Infra & Security / Technical Diagrams): (surface, entity_type)
+    # pairs from ocr_text that match INFRA_IDENTIFIER/CREDENTIAL shapes -
+    # deterministic, recomputed fresh every scan (never cached raw) since
+    # it's derived from the already-cached ocr_text via a pure regex scan.
+    sensitive_text_matches: list[tuple[str, str]] = field(default_factory=list)
 
 
 # Real decks with broadened enumeration (masters/layouts/headers/footers/
@@ -299,6 +316,22 @@ async def _scan_one_group(
     ocr_matched = _ocr_match(ocr_text, db)
     vision_flag = bool(parsed.get("contains_client_identity", False))
     confidence = float(parsed.get("confidence", 0.0))
+    contains_real_data_sample = bool(parsed.get("contains_real_data_sample", False))
+
+    # Infrastructure & Security / Technical Diagrams (Phase 2): the SAME
+    # deterministic regex signal document text gets, applied to text read
+    # off this image - a hostname or credential baked into a screenshot is
+    # exactly as real a leak as one in body text. Always recomputed fresh
+    # (never cached raw), same reasoning as _ocr_match above.
+    sensitive_text_matches: list[tuple[str, str]] = []
+    seen_sensitive: set[tuple[str, str]] = set()
+    for s in ocr_text:
+        for surface, etype in infra_credential.scan(s):
+            key = (surface.lower(), etype)
+            if key in seen_sensitive:
+                continue
+            seen_sensitive.add(key)
+            sensitive_text_matches.append((surface, etype))
 
     logo_confident = best_logo is not None and best_logo[1] <= MATCH_THRESHOLD
     logo_uncertain = best_logo is not None and MATCH_THRESHOLD < best_logo[1] <= UNCERTAIN_THRESHOLD
@@ -349,6 +382,8 @@ async def _scan_one_group(
         group_index=g_idx, sample_ref=sample, locations=locations, all_indices=all_indices,
         contains_client_identity=contains_client_identity,
         description=description, confidence=confidence,
+        contains_real_data_sample=contains_real_data_sample,
+        sensitive_text_matches=sensitive_text_matches,
         ocr_text=ocr_text, ocr_matched_surface=ocr_matched, phash=phash,
         logo_match_entity_id=best_logo[0] if best_logo else None,
         logo_match_distance=best_logo[1] if best_logo else None,
@@ -543,6 +578,8 @@ def _merge_visually_similar_groups(groups: list[ImageGroup]) -> list[ImageGroup]
             logo_match_distance=best_logo_distance,
             needs_human_judgment=any(g.needs_human_judgment for g in members),
             phash=primary.phash,
+            contains_real_data_sample=any(g.contains_real_data_sample for g in members),
+            sensitive_text_matches=list(dict.fromkeys(m for g in members for m in g.sensitive_text_matches)),
         ))
 
     # Renumber sequentially - agent.py's proposal payload and the reviewer's
@@ -589,7 +626,17 @@ async def find_residual_image_groups(
     image that WAS redacted has new bytes (the placeholder), a different
     content_key, and so is always scanned fresh regardless."""
     groups, in_tok, out_tok, cost, skipped = await scan_document_images(masked_path, content_type, filename, db, run_id=run_id)
-    residual = [g for g in groups if g.contains_client_identity and not _is_own_placeholder(g)]
+    # A residual CREDENTIAL is treated the same as a residual client
+    # identity leak - mandatory, non-overridable (Phase 2) means it must
+    # never survive to the rendered file, so its presence here is exactly
+    # as blocking. contains_real_data_sample is deliberately NOT included:
+    # that's a reviewer judgment call (Flag, not mandatory-mask), so a
+    # reviewer choosing to keep a real-data image is not a "residual leak".
+    residual = [
+        g for g in groups
+        if not _is_own_placeholder(g)
+        and (g.contains_client_identity or any(etype == "CREDENTIAL" for _, etype in g.sensitive_text_matches))
+    ]
     return residual, skipped, in_tok, out_tok, cost
 
 
@@ -597,8 +644,10 @@ def residual_image_messages(residual_groups: list[ImageGroup], skipped: int) -> 
     """Human-readable flag lines for the structured residuals."""
     messages = []
     for g in residual_groups:
+        credential_surfaces = [s for s, etype in g.sensitive_text_matches if etype == "CREDENTIAL"]
         detail = (
-            g.description
+            (f"CREDENTIAL still visible: {', '.join(credential_surfaces)}" if credential_surfaces else None)
+            or g.description
             or g.ocr_matched_surface
             or (f"OCR read: {', '.join(g.ocr_text)}" if g.ocr_text else None)
             or f"flagged at {g.confidence:.0%} confidence, no description or OCR text returned - inspect this image manually"
