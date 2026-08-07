@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NaviKnow — Case Study Sanitization Checklist: Full Audit, Gaps &amp; Implementation Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14203B; --ink-soft:#3C4A66; --muted:#697692;
+    --paper:#EBEEF4; --paper-2:#E2E7F0; --panel:#FFFFFF; --line:#D2D9E6;
+    --navy:#0D3C6E; --navy-deep:#0A2C52;
+    --signal:#2D6FE0; --signal-bg:#E6EFFB;
+    --brass:#A9791F; --brass-soft:#C79B45; --brass-bg:#FBF2E0; --brass-line:#E1BE82;
+    --skill:#1F7A66; --skill-bg:#E2F2ED; --skill-line:#9FCFC0;
+    --ready:#1E7A46; --ready-bg:#E4F2E9; --ready-line:#A9D6BC;
+    --danger:#A83232; --danger-bg:#F8E8E8; --danger-line:#E3AFAF;
+    --archive:#5B4B8A; --archive-bg:#ECE7F5; --archive-line:#C7B9E3;
+    --radius:14px; --maxw:1240px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto;} *{animation:none!important;transition:none!important;}}
+  body{margin:0;background:radial-gradient(120% 60% at 100% 0%, #F3F6FB 0%, var(--paper) 55%) fixed;color:var(--ink);font-family:"Inter",system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+  a{color:var(--signal);text-decoration:none;} a:hover{text-decoration:underline;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;}
+  code.inline{font-family:"IBM Plex Mono";background:var(--paper-2);padding:1px 6px;border-radius:5px;font-size:.86em;}
+
+  .mast{background:linear-gradient(155deg,var(--navy-deep) 0%, var(--navy) 62%, #124d8a 100%);color:#EAF1FB;border-bottom:3px solid var(--brass-line);position:relative;overflow:hidden;}
+  .mast::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:34px 34px;mask:linear-gradient(180deg,#000,transparent 85%);-webkit-mask:linear-gradient(180deg,#000,transparent 85%);pointer-events:none;}
+  .mast .wrap{position:relative;z-index:1;padding-top:50px;padding-bottom:50px;}
+  .kicker{font-family:"IBM Plex Mono",monospace;font-size:12.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--brass-line);margin:0 0 18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+  .kicker .dot{width:6px;height:6px;background:var(--brass-line);border-radius:50%;display:inline-block;}
+  h1.title{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:clamp(1.8rem,4.2vw,2.8rem);line-height:1.1;margin:0;letter-spacing:-.02em;}
+  h1.title span{color:var(--brass-line);}
+  .lede{max-width:78ch;margin:20px 0 0;font-size:1.05rem;color:#CFDCED;}
+  .mast-meta{margin-top:24px;display:flex;flex-wrap:wrap;gap:10px 26px;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:#A9C0DC;}
+  .mast-meta b{color:#EAF1FB;font-weight:500;}
+
+  nav.toc{position:sticky;top:0;z-index:20;background:rgba(235,238,244,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);}
+  nav.toc .wrap{display:flex;gap:4px;flex-wrap:wrap;padding-top:10px;padding-bottom:10px;align-items:center;}
+  nav.toc a{font-family:"IBM Plex Mono",monospace;font-size:10.3px;letter-spacing:.01em;color:var(--ink-soft);padding:6px 8px;border-radius:8px;text-decoration:none;white-space:nowrap;}
+  nav.toc a:hover{background:var(--paper-2);color:var(--navy);}
+  nav.toc .brandmark{font-family:"Space Grotesk";font-weight:700;color:var(--navy);margin-right:auto;letter-spacing:-.01em;font-size:14px;}
+
+  section{padding:56px 0 8px;}
+  .sec-head{display:flex;align-items:baseline;gap:18px;margin-bottom:8px;}
+  .num{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:14px;color:var(--brass);border:1px solid var(--brass);border-radius:7px;padding:3px 9px;flex:none;background:#fff;}
+  h2{font-family:"Space Grotesk",sans-serif;font-weight:600;letter-spacing:-.015em;font-size:clamp(1.3rem,2.5vw,1.85rem);margin:0;line-height:1.15;color:var(--ink);text-wrap:balance;}
+  h3{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:1.05rem;color:var(--navy);margin:26px 0 8px;}
+  .sec-sub{color:var(--muted);margin:14px 0 26px;max-width:88ch;font-size:.98rem;}
+  p{margin:0 0 14px;}
+  ul.plain{margin:0 0 14px;padding-left:20px;color:var(--ink-soft);font-size:.94rem;}
+  ul.plain li{margin-bottom:6px;}
+
+  .board-legend{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0 18px;font-family:"IBM Plex Mono",monospace;font-size:11.3px;}
+  .lg{display:flex;align-items:center;gap:7px;color:var(--ink-soft);}
+  .sw{width:12px;height:12px;border-radius:4px;border:1px solid;flex:none;}
+  .sw.covered{background:var(--ready-bg);border-color:var(--ready-line);}
+  .sw.partial{background:var(--brass-bg);border-color:var(--brass-line);}
+  .sw.gap{background:var(--danger-bg);border-color:var(--danger-line);}
+  .sw.process{background:var(--archive-bg);border-color:var(--archive-line);}
+  .sw.tool{background:var(--signal-bg);border-color:var(--signal);}
+  .sw.prot{background:var(--brass-bg);border-color:var(--brass-line);}
+  .sw.skill{background:var(--skill-bg);border-color:var(--skill-line);}
+
+  table.board{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:.85rem;margin-bottom:20px;}
+  table.board th,table.board td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;}
+  table.board thead th{background:var(--navy);color:#EAF1FB;font-family:"IBM Plex Mono",monospace;font-size:10.3px;letter-spacing:.05em;text-transform:uppercase;font-weight:500;}
+  table.board tbody tr:last-child td{border-bottom:none;}
+  table.board td.anm{font-family:"Space Grotesk";font-weight:600;color:var(--navy);}
+  table.board td.small{color:var(--ink-soft);}
+  table.board td.center{text-align:center;white-space:nowrap;}
+  table.board tr.cathead td{background:var(--paper-2);font-family:"Space Grotesk";font-weight:700;color:var(--navy);font-size:.86rem;}
+  .wrap-x{overflow-x:auto;}
+
+  .pill{font-family:"IBM Plex Mono",monospace;font-size:10.6px;padding:3px 9px;border-radius:6px;border:1px solid;white-space:nowrap;display:inline-block;}
+  .pill.covered{color:var(--ready);background:var(--ready-bg);border-color:var(--ready-line);}
+  .pill.partial{color:#8A5A10;background:var(--brass-bg);border-color:var(--brass-line);}
+  .pill.gap{color:var(--danger);background:var(--danger-bg);border-color:var(--danger-line);}
+  .pill.process{color:var(--archive);background:var(--archive-bg);border-color:var(--archive-line);}
+  .pill.p1{color:var(--danger);background:var(--danger-bg);border-color:var(--danger-line);}
+  .pill.p2{color:#8A5A10;background:var(--brass-bg);border-color:var(--brass-line);}
+  .pill.p3{color:#1a4fa3;background:var(--signal-bg);border-color:#B7CDF2;}
+  .pill.skill{color:var(--skill);background:var(--skill-bg);border-color:var(--skill-line);}
+  .pill.tool{color:#1a4fa3;background:var(--signal-bg);border-color:#B7CDF2;}
+  .pill.prot{color:#8A5A10;background:var(--brass-bg);border-color:var(--brass-line);}
+  .pill.new{color:var(--ready);background:var(--ready-bg);border-color:var(--ready-line);}
+  .pill.ext{color:var(--archive);background:var(--archive-bg);border-color:var(--archive-line);}
+
+  .callout{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--skill);border-radius:12px;padding:18px 20px;margin:20px 0;}
+  .callout.blue{border-left-color:var(--signal);}
+  .callout.danger{border-left-color:var(--danger);}
+  .callout.green{border-left-color:var(--ready);}
+  .callout.brass{border-left-color:var(--brass);}
+  .callout.arch{border-left-color:var(--archive);}
+  .callout .ctitle{font-family:"Space Grotesk";font-weight:600;color:var(--navy);margin:0 0 6px;font-size:1.01rem;}
+  .callout p{margin:0;color:var(--ink-soft);font-size:.93rem;}
+  .callout p+p{margin-top:8px;}
+
+  .scorecard{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:6px 0 24px;}
+  .score{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;text-align:center;}
+  .score .n{font-family:"Space Grotesk";font-weight:700;font-size:1.7rem;display:block;color:var(--navy);}
+  .score .l{font-family:"IBM Plex Mono";font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+  .score.covered{border-top:4px solid var(--ready-line);}
+  .score.partial{border-top:4px solid var(--brass-line);}
+  .score.gap{border-top:4px solid var(--danger-line);}
+  .score.process{border-top:4px solid var(--archive-line);}
+  @media(max-width:820px){ .scorecard{grid-template-columns:1fr 1fr;} }
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:6px 0 20px;}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;}
+  .box h4{font-family:"Space Grotesk";margin:0 0 8px;color:var(--navy);font-size:1rem;}
+  .box .tag{font-family:"IBM Plex Mono";font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--skill);display:block;margin-bottom:6px;}
+  .box.against{border-left:4px solid var(--danger);}
+  .box.for{border-left:4px solid var(--ready);}
+  .box.warn{border-left:4px solid var(--brass);}
+  .box.arch{border-left:4px solid var(--archive);}
+  .box p{font-size:.9rem;color:var(--ink-soft);margin:0;}
+  @media(max-width:820px){ .grid2{grid-template-columns:1fr;} }
+
+  .gapcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:22px;overflow:hidden;}
+  .gapcard .ghead{display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--navy);color:#EAF1FB;flex-wrap:wrap;}
+  .gapcard .ghead h3{margin:0;color:#fff;font-size:1.03rem;}
+  .gapcard .gbody{padding:18px 20px;}
+  .gapcard .glabel{font-family:"IBM Plex Mono";font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;display:block;}
+  .gapcard .gwhy{background:var(--paper-2);border-radius:10px;padding:12px 14px;margin:10px 0 16px;font-size:.89rem;color:var(--ink-soft);}
+  .gapcard .gdesign{font-size:.92rem;color:var(--ink-soft);}
+  .gapcard .gdesign li{margin-bottom:8px;}
+
+  .states{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 20px;font-family:"IBM Plex Mono",monospace;font-size:11.3px;}
+  .state{padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink-soft);}
+  .state.run{background:var(--signal-bg);border-color:#B7CDF2;color:#1a4fa3;}
+  .state.pause{background:var(--brass-bg);border-color:var(--brass-line);color:#8A5A10;}
+  .state.done{background:var(--ready-bg);border-color:var(--ready-line);color:var(--ready);}
+  .state.bad{background:var(--danger-bg);border-color:var(--danger-line);color:var(--danger);}
+  .arrow{color:var(--muted);}
+
+  .tiergate{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin:6px 0 20px;}
+  .tiergate .tier{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
+  .tiergate .tier h4{font-family:"Space Grotesk";margin:0 0 8px;color:var(--navy);font-size:.98rem;}
+  .tiergate .tier ul{margin:0;padding-left:18px;font-size:.85rem;color:var(--ink-soft);}
+  .tiergate .tier ul li{margin-bottom:5px;}
+  .tiergate .tier.t1{border-top:4px solid var(--ready-line);}
+  .tiergate .tier.t2{border-top:4px solid var(--brass-line);}
+  .tiergate .tier.t3{border-top:4px solid var(--danger-line);}
+  @media(max-width:900px){ .tiergate{grid-template-columns:1fr;} }
+
+  .phase{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:14px;}
+  .phase .phead{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
+  .phase .pnum{font-family:"IBM Plex Mono";font-weight:700;color:#fff;background:var(--navy);border-radius:7px;padding:2px 9px;font-size:12px;}
+  .phase h4{font-family:"Space Grotesk";margin:0;color:var(--navy);font-size:1.02rem;}
+  .phase p{font-size:.9rem;color:var(--ink-soft);margin:0;}
+  .phase ul{font-size:.88rem;color:var(--ink-soft);margin:8px 0 0;padding-left:18px;}
+  .phase ul li{margin-bottom:5px;}
+
+  .filetree{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--ink-soft);overflow-x:auto;line-height:1.7;}
+  .filetree .new{color:var(--ready);font-weight:600;}
+  .filetree .ext{color:var(--archive);font-weight:600;}
+  .filetree .comment{color:var(--muted);}
+
+  .diagram-fig{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px 18px 12px;margin:8px 0 26px;}
+  .diagram-fig svg{width:100%;height:auto;display:block;overflow:visible;}
+  .diagram-fig figcaption{font-size:.82rem;color:var(--muted);margin-top:10px;font-family:"IBM Plex Mono",monospace;}
+  svg.diagram text{font-family:"IBM Plex Mono",monospace;fill:var(--ink);}
+  svg.diagram .lbl-sub{fill:var(--ink-soft);font-size:9.5px;}
+  svg.diagram .box-rect{fill:var(--panel);stroke:var(--line);stroke-width:1.5;}
+  svg.diagram .box-new{stroke:var(--skill);stroke-dasharray:4 3;stroke-width:2;}
+  svg.diagram .box-ext{stroke:var(--archive);stroke-dasharray:4 3;stroke-width:2;}
+  svg.diagram .arrow{stroke:var(--ink-soft);stroke-width:1.6;fill:none;}
+  svg.diagram .arrow-head{fill:var(--ink-soft);}
+  svg.diagram .edge-label{font-size:9.5px;fill:var(--muted);}
+
+  .decisionlog{border-collapse:collapse;width:100%;font-size:.86rem;}
+  .decisionlog td{padding:9px 4px;border-bottom:1px dashed var(--line);vertical-align:top;}
+  .decisionlog td:first-child{width:230px;font-family:"Space Grotesk";font-weight:600;color:var(--navy);}
+
+  footer{margin-top:56px;background:var(--navy-deep);color:#A9C0DC;border-top:3px solid var(--brass-line);}
+  footer .wrap{padding:30px 28px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  footer b{color:#EAF1FB;font-weight:500;}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="wrap">
+    <p class="kicker"><span class="dot"></span> NaviKnow · Agent Platform <span class="dot"></span> A-01 Sanitization <span class="dot"></span> Full Checklist Audit &amp; Implementation Plan · v2</p>
+    <h1 class="title">Case Study Sanitization Checklist — every item, what's done, what's not, and how we close the rest</h1>
+    <p class="lede">A full item-by-item audit of the 29 checks in the Case Study Sanitization Checklist against the Sanitization Agent (A-01) as actually built and debugged — not the design intent, the validated behavior. Where the checklist isn't met, this document designs the technical closure: new entity types, new skills, new protected calls, the data model and file changes they need, and the review/governance process that ties it all to the checklist's own distribution-approval field.</p>
+    <div class="mast-meta">
+      <span>SOURCE &nbsp;<b>Case_Study_Sanitization_Checklist.html — 10 categories, 29 checks</b></span>
+      <span>BASELINE &nbsp;<b>A-01 design v3 + live debugging report (19 bugs fixed, 5/5 channels verified clean)</b></span>
+      <span>RESULT &nbsp;<b>2 done · 5 partial · 19 gap · 3 process gap</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <span class="brandmark">NaviKnow</span>
+    <a href="#scorecard">01 Scorecard</a>
+    <a href="#audit">02 Full checklist audit</a>
+    <a href="#gaps">03 Gap catalogue</a>
+    <a href="#taxonomy">04 New entity taxonomy</a>
+    <a href="#skillsroster">05 Skills roster</a>
+    <a href="#protcalls">06 Protected calls &amp; deterministic additions</a>
+    <a href="#architecture">07 Architecture — pipeline, data model, files</a>
+    <a href="#process">08 Process &amp; governance</a>
+    <a href="#plan">09 Build plan &amp; phasing</a>
+    <a href="#decisions">10 Decisions log</a>
+    <a href="#implementation">11 Detailed implementation plan</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <!-- 01 SCORECARD -->
+  <section id="scorecard">
+    <div class="sec-head"><span class="num">01</span><h2>Scorecard</h2></div>
+    <p class="sec-sub">Counted at the individual checklist-item level (29 items across the checklist's 10 categories), not the category level — a category can contain a mix of done, partial, and gap items.</p>
+    <div class="scorecard">
+      <div class="score covered"><span class="n">2</span><span class="l">Done &amp; validated</span></div>
+      <div class="score partial"><span class="n">5</span><span class="l">Partial</span></div>
+      <div class="score gap"><span class="n">19</span><span class="l">Gap — no detection yet</span></div>
+      <div class="score process"><span class="n">3</span><span class="l">Process gap (not code)</span></div>
+    </div>
+    <div class="board-legend">
+      <span class="lg"><span class="sw covered"></span> Done — built, independently re-verified on a real run</span>
+      <span class="lg"><span class="sw partial"></span> Partial — some of the item is handled, part is not</span>
+      <span class="lg"><span class="sw gap"></span> Gap — no detection logic exists</span>
+      <span class="lg"><span class="sw process"></span> Process gap — a governance sign-off, not an agent problem</span>
+    </div>
+    <div class="callout brass">
+      <p class="ctitle">Why the count looks low</p>
+      <p>Only 2 of 29 checks are fully done because A-01 was built and debugged for exactly one job: <b>strip client identity, exhaustively, across text/images/metadata/hyperlinks/comments</b> — and it does that job well (five independent verification channels, 19 real bugs found and fixed against a real 57-image deck). The checklist asks for a broader guarantee — commercial terms, competitive intel, sensitive outcomes, legal sign-off — that the agent was never scoped to cover. The gap is scope, not reliability.</p>
+    </div>
+  </section>
+
+  <!-- 02 FULL AUDIT -->
+  <section id="audit">
+    <div class="sec-head"><span class="num">02</span><h2>Full checklist audit — every item</h2></div>
+    <p class="sec-sub">One table per checklist category, in the checklist's own order, quoting the check and stating exactly why it's done, partial, or a gap against the current implementation.</p>
+
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:26px">#</th><th>Checklist item</th><th style="width:100px">Status</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr class="cathead"><td colspan="4">1 · Client Identity</td></tr>
+        <tr><td class="small">1.1</td><td class="small">Legal name, logo, and brand marks removed or replaced</td><td class="center"><span class="pill covered">Done</span></td><td class="small"><code class="inline">CLIENT_NAME</code> masked with a global token; logos/wordmarks found via two-layer image enumeration and redacted via vision+OCR+phash. Validated: raw-XML sweep of the rendered file found the client name in zero parts.</td></tr>
+        <tr><td class="small">1.2</td><td class="small">Identifiable subsidiaries, brand names, or product names generalized</td><td class="center"><span class="pill covered">Done</span></td><td class="small">Reconciler resolves all surface-form aliases to one canonical entity/token; <code class="inline">CLIENT_SYSTEM_NAME</code> covers proprietary product names.</td></tr>
+        <tr><td class="small">1.3</td><td class="small">Location/geography generalized where identifying</td><td class="center"><span class="pill partial">Partial</span></td><td class="small"><code class="inline">CLIENT_LOCATION</code> exists in the fixed taxonomy with the same deterministic masking as name — but no real run in the debugging report specifically exercised it. Implemented, not yet independently validated.</td></tr>
+
+        <tr class="cathead"><td colspan="4">2 · People</td></tr>
+        <tr><td class="small">2.1</td><td class="small">Names, titles, emails, phone numbers of client stakeholders removed</td><td class="center"><span class="pill partial">Partial</span></td><td class="small"><code class="inline">CLIENT_PERSON</code> (names) and <code class="inline">CLIENT_EMAIL_DOMAIN</code> are masked. Job titles and personal phone numbers have no dedicated entity type or regex — not guaranteed caught.</td></tr>
+        <tr><td class="small">2.2</td><td class="small">Internal team members' names/photos removed unless consent given</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">Current design does the opposite by default — internal consultant names are a hard "Keep," reinforced by the own-firm exclusion logic. No consent flag exists anywhere in the data model.</td></tr>
+        <tr><td class="small">2.3</td><td class="small">Org chart details that map to real individuals genericized</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">No detection targets org-chart-shaped content (reporting-line diagrams, structured name/title pairs) today.</td></tr>
+
+        <tr class="cathead"><td colspan="4">3 · Commercial / Financial Terms</td></tr>
+        <tr><td class="small">3.1</td><td class="small">Contract value, deal size, margins, discounts removed or approved</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">Explicit existing design decision keeps these ("deal dollar amounts — kept unless you say otherwise") — the opposite default from the checklist.</td></tr>
+        <tr><td class="small">3.2</td><td class="small">Pricing model, rate card, billing structure removed</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">No entity type or skill covers pricing/billing language.</td></tr>
+        <tr><td class="small">3.3</td><td class="small">Payment terms, penalty clauses, SLA breach details removed</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">Same — not in scope of the current Detector skill.</td></tr>
+
+        <tr class="cathead"><td colspan="4">4 · Technical / Architecture Specifics</td></tr>
+        <tr><td class="small">4.1</td><td class="small">Infrastructure details (IP ranges, hostnames, server names, internal domains) removed</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">The NER/regex pre-pass is tuned for identity (emails, org/person names) — no pattern library for infra identifiers.</td></tr>
+        <tr><td class="small">4.2</td><td class="small">Security configurations, firewall rules, vulnerability details redacted</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">Not in the entity taxonomy or any skill's scope.</td></tr>
+        <tr><td class="small">4.3</td><td class="small">API keys, tokens, or credentials checked for and removed from screenshots</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">The vision scan asks one question today (<code class="inline">contains_client_identity</code>) — never asked about credential-shaped text.</td></tr>
+        <tr><td class="small">4.4</td><td class="small">Architecture diagrams reviewed; internal system names genericized</td><td class="center"><span class="pill partial">Partial</span></td><td class="small"><code class="inline">CLIENT_SYSTEM_NAME</code> masks prose mentions. A diagram rendered as an image is scanned only for logo/identity content, not for text labels baked into its pixels.</td></tr>
+
+        <tr class="cathead"><td colspan="4">5 · Data Samples</td></tr>
+        <tr><td class="small">5.1</td><td class="small">Real client data in screenshots/dashboards/demos replaced with synthetic data</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">Vision scan checks for identity, not for whether an image's content is real (vs. synthetic) client data.</td></tr>
+        <tr><td class="small">5.2</td><td class="small">Sample datasets used for training/testing checked for client-sourced data</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">No provenance check against the source registry exists for arbitrary dataset files today.</td></tr>
+        <tr><td class="small">5.3</td><td class="small">Actual reports/outputs replaced with representative examples</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">No mechanism distinguishes a real generated output from a representative example.</td></tr>
+
+        <tr class="cathead"><td colspan="4">6 · Competitive &amp; Strategic Information</td></tr>
+        <tr><td class="small">6.1</td><td class="small">Names of competing vendors who lost the bid removed</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">Not an identity entity type — no skill scans for this.</td></tr>
+        <tr><td class="small">6.2</td><td class="small">References to client's competitors removed or generalized</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">Same — contextual judgment, out of current scope.</td></tr>
+        <tr><td class="small">6.3</td><td class="small">Business strategy, M&amp;A plans, unannounced initiatives, roadmaps removed</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">Prose-level judgment call; no skill targets strategic language today.</td></tr>
+
+        <tr class="cathead"><td colspan="4">7 · Sensitive Outcomes</td></tr>
+        <tr><td class="small">7.1</td><td class="small">Root causes of failures, outages, breaches, or compliance violations reviewed</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">No flag mechanism exists distinct from a mask decision.</td></tr>
+        <tr><td class="small">7.2</td><td class="small">Negative metrics checked for client approval before sharing exact figures</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">Same — needs a client-sign-off flag, not a mask/no-mask binary.</td></tr>
+        <tr><td class="small">7.3</td><td class="small">Regulatory findings or audit results removed or anonymized</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">Not covered by any existing entity type or skill.</td></tr>
+
+        <tr class="cathead"><td colspan="4">8 · Your Own IP &amp; Methodology</td></tr>
+        <tr><td class="small">8.1</td><td class="small">Proprietary frameworks/accelerators referenced generically, not with exact configs</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">The existing own-firm exclusion logic protects NaviKenz's <i>identity</i> from being masked — the opposite direction from genericizing exact internal config detail, which isn't covered.</td></tr>
+        <tr><td class="small">8.2</td><td class="small">Internal cost structure, team composition, and staffing ratios removed</td><td class="center"><span class="pill gap">Gap</span></td><td class="small">No entity type or skill scans for internal cost/staffing detail.</td></tr>
+
+        <tr class="cathead"><td colspan="4">9 · Legal &amp; Contractual Constraints</td></tr>
+        <tr><td class="small">9.1</td><td class="small">MSA/NDA reviewed for confidentiality clauses restricting name/logo/metric use</td><td class="center"><span class="pill process">Process gap</span></td><td class="small">Lives in a contract, not the document text — not answerable by reading the file.</td></tr>
+        <tr><td class="small">9.2</td><td class="small">Case study / reference clause checked for pre-approval status</td><td class="center"><span class="pill process">Process gap</span></td><td class="small">Same — a governance record, not a detection problem.</td></tr>
+        <tr><td class="small">9.3</td><td class="small">Data residency/compliance obligations (GDPR, HIPAA, etc.) confirmed satisfied</td><td class="center"><span class="pill process">Process gap</span></td><td class="small">Same — an attestation, not something the agent can verify from content.</td></tr>
+
+        <tr class="cathead"><td colspan="4">10 · Screenshots &amp; Visuals</td></tr>
+        <tr><td class="small">10.1</td><td class="small">UI screenshots blurred/redacted for names, emails, financial figures, or internal URLs</td><td class="center"><span class="pill partial">Partial</span></td><td class="small">Logo/wordmark identity in images is covered. Visible text baked into a screenshot's pixels (an email address, a dollar figure, a URL string) is not scanned for today.</td></tr>
+        <tr><td class="small">10.2</td><td class="small">Exported file metadata (PDF metadata, image EXIF data) checked and stripped</td><td class="center"><span class="pill partial">Partial</span></td><td class="small">Document-level metadata (<code class="inline">docProps/core.xml, app.xml, custom.xml</code>) is scrubbed and independently re-verified. Per-image EXIF (e.g. GPS/camera data on a non-logo photo) is not part of today's metadata-scrub step.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- 03 GAP CATALOGUE -->
+  <section id="gaps">
+    <div class="sec-head"><span class="num">03</span><h2>Gap catalogue — the seven things to design</h2></div>
+    <p class="sec-sub">The 24 partial/gap items above collapse into seven design problems (the People and Technical/Screenshots partial items close alongside their category's gap fix). Each states what's missing, why the current architecture doesn't catch it, and the technical closure design.</p>
+
+    <div class="gapcard">
+      <div class="ghead"><span class="pill p1">P1</span><h3>A · Commercial &amp; Financial Terms <span style="opacity:.7;font-size:.8em">(3.1–3.3)</span></h3></div>
+      <div class="gbody">
+        <div class="gwhy"><b>Root cause:</b> the taxonomy has an explicit row keeping deal dollar amounts by default — correct for an internal record, wrong for something meant to leave the building.</div>
+        <span class="glabel">Design</span>
+        <ul class="gdesign">
+          <li>New entity type <code class="inline">COMMERCIAL_TERM</code> — regex pre-pass for currency/percentage/payment-term patterns (free) feeding the Detector for contextual classification (a $ figure near "trial balance" isn't a commercial-term hit; one near "contract value" is).</li>
+          <li>Default action is <b>flag</b>, not mask — a case study often needs a figure to stay credible ("saved $2M annually"). Reviewer chooses keep / generalize ("$2M" → "multi-million dollar") / remove.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="gapcard">
+      <div class="ghead"><span class="pill p2">P2</span><h3>B · Infrastructure, Security &amp; Credentials <span style="opacity:.7;font-size:.8em">(4.1–4.3)</span></h3></div>
+      <div class="gbody">
+        <div class="gwhy"><b>Root cause:</b> the pre-pass pattern library only knows identity shapes (emails, org/person names) — nothing about hostnames, IP ranges, or secret formats.</div>
+        <span class="glabel">Design</span>
+        <ul class="gdesign">
+          <li>Fully deterministic, no LLM needed — cheapest gap on this list. IPv4/IPv6 ranges, internal-hostname patterns, and credential shapes (AWS-style keys, bearer tokens, connection strings) are all reliably regex-matched.</li>
+          <li>New entity types <code class="inline">INFRA_IDENTIFIER</code> (mask) and <code class="inline">CREDENTIAL</code> (mandatory redaction — reuses the exact server-side-enforced override already built for confirmed own-firm logo matches, since a live credential should never be reviewer-overridable).</li>
+          <li>Extends the vision-scan prompt (already firing on every image) to also flag visible credentials/hostnames in a screenshot — shared work with Gap D below, not a separate feature.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="gapcard">
+      <div class="ghead"><span class="pill p1">P1</span><h3>C · Data Samples in Screenshots, Datasets &amp; Reports <span style="opacity:.7;font-size:.8em">(5.1–5.3)</span></h3></div>
+      <div class="gbody">
+        <div class="gwhy"><b>Root cause:</b> the vision call asks exactly one question — does this image reveal client <i>identity</i> (logo/wordmark). It's never asked whether the image's <i>content</i> is real, unmasked client data.</div>
+        <span class="glabel">Design</span>
+        <ul class="gdesign">
+          <li>Add a second structured field, <code class="inline">contains_real_data_sample</code>, to the existing per-image vision call — same call already firing for logo detection, no added vision cost.</li>
+          <li>New candidate type <code class="inline">DATA_SAMPLE_IMAGE</code>, reviewer chooses redact / replace-with-placeholder / approve.</li>
+          <li>Sample-dataset provenance (5.2) is a narrower, code-only check: flag any dataset file whose path/filename matches a client account already linked in the source registry — reuses the existing protected lookup, no new detection.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="gapcard">
+      <div class="ghead"><span class="pill p2">P2</span><h3>D · Technical Diagrams &amp; Screenshot Visible Text <span style="opacity:.7;font-size:.8em">(4.4, 10.1)</span></h3></div>
+      <div class="gbody">
+        <div class="gwhy"><b>Root cause:</b> images are only interpreted for branding, never for the text rendered inside them — an architecture diagram's system-name labels and a UI screenshot's visible email/dollar-figure/URL text are equally invisible to the current pipeline.</div>
+        <span class="glabel">Design</span>
+        <ul class="gdesign">
+          <li>Extend the same vision call again with <code class="inline">visible_sensitive_text</code> — OCR/vision reads text baked into the image and classifies it against the same entity taxonomy already used for document prose (client names, system names, commercial terms, infra identifiers all apply here too).</li>
+          <li>One shared extension serves diagrams (4.4), screenshots (10.1), and feeds Gap B's credential/hostname check in images — three checklist items closed by one prompt change.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="gapcard">
+      <div class="ghead"><span class="pill p2">P2</span><h3>E · Competitive &amp; Strategic Information <span style="opacity:.7;font-size:.8em">(6.1–6.3)</span></h3></div>
+      <div class="gbody">
+        <div class="gwhy"><b>Root cause:</b> this is contextual, judgment-heavy prose ("the client is evaluating a divestiture of...") — structurally not name-shaped or number-shaped, so no regex pre-pass can catch it and the current Detector skill is scoped to identity, not strategy.</div>
+        <span class="glabel">Design</span>
+        <ul class="gdesign">
+          <li>New skill <code class="inline">competitive-strategic-detection</code>, loaded by the Detector alongside <code class="inline">sanitization-detection</code>, flags competitor references and forward-looking strategic language.</li>
+          <li>Flag-for-review, never auto-mask — this content is often the most narratively important part of the case study. Confirmed competitor names resolve through the existing dictionary/alias mechanism once approved.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="gapcard">
+      <div class="ghead"><span class="pill p2">P2</span><h3>F · Sensitive Outcomes <span style="opacity:.7;font-size:.8em">(7.1–7.3)</span></h3></div>
+      <div class="gbody">
+        <div class="gwhy"><b>Root cause:</b> this is the clearest case where "detect and mask" is the wrong shape — a root-cause narrative or a negative metric is often exactly what makes a case study credible, and whether it's safe to publish is a client-relationship judgment call, not a text pattern.</div>
+        <span class="glabel">Design</span>
+        <ul class="gdesign">
+          <li>Extend the Summarizer's existing metadata draft with a boolean <code class="inline">discusses_negative_outcome</code> plus the specific sentence(s), surfaced as a distinct, non-dismissible reviewer callout — same surfacing pattern as a low-confidence entity today, not a confirmed mask.</li>
+          <li>Reviewer decision (approve-as-is / requires client sign-off / remove) is recorded in the run's audit trail — this is where the checklist's own client-approval step plugs directly into the review UI.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="gapcard">
+      <div class="ghead"><span class="pill p2">P2</span><h3>G · Own IP, Methodology &amp; Cost Structure <span style="opacity:.7;font-size:.8em">(2.2, 2.3, 8.1, 8.2)</span></h3></div>
+      <div class="gbody">
+        <div class="gwhy"><b>Root cause:</b> the three-layer own-firm exclusion exists to keep NaviKenz's own <i>identity</i> visible (correct for branding) — it has no opposite-direction check for internal cost/staffing detail or org-chart-shaped content, client-side or own-side.</div>
+        <span class="glabel">Design</span>
+        <ul class="gdesign">
+          <li>New entity type <code class="inline">OWN_COST_DETAIL</code> (staffing ratios, day-rate/FTE figures, exact accelerator configs) — same regex+contextual-classification pattern as <code class="inline">COMMERCIAL_TERM</code>, scoped to sentences where the subject is the delivery firm.</li>
+          <li>New entity type <code class="inline">ORG_CHART_STRUCTURE</code> — detects reporting-line diagrams and structured name/title pairs (client or internal), flagged for genericization.</li>
+          <li>New per-person <code class="inline">consent_status</code> on internal team members in the masking dictionary — internal names default to "keep" only once explicit consent is on record; absent consent, they route to the same flag-for-review queue as everything else in this group.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 TAXONOMY -->
+  <section id="taxonomy">
+    <div class="sec-head"><span class="num">04</span><h2>New entity taxonomy — additions to A-01's fixed table</h2></div>
+    <p class="sec-sub">Appends to the existing taxonomy (A-01 design §06). Action follows the same three-value convention already in use, plus one new value this plan introduces: <span class="pill covered">Mask</span> exact deterministic replacement, <span class="pill gap">Mandatory redact</span> non-overridable removal, <span class="pill partial">Flag</span> a reviewer judgment call, <span class="pill covered">Keep</span> untouched.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:190px">Entity type</th><th>Examples</th><th style="width:120px">Detection</th><th style="width:130px">Default action</th><th style="width:100px">Closes</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">COMMERCIAL_TERM</td><td class="small">Contract value, margins, discounts, pricing/payment terms, SLA-breach detail</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">3.1–3.3</td></tr>
+        <tr><td class="anm">INFRA_IDENTIFIER</td><td class="small">IP ranges, hostnames, internal domains, firewall/security config detail</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill covered">Mask</span></td><td class="small">4.1–4.2</td></tr>
+        <tr><td class="anm">CREDENTIAL</td><td class="small">API keys, tokens, connection strings, passwords</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill gap">Mandatory redact</span></td><td class="small">4.3</td></tr>
+        <tr><td class="anm">DIAGRAM_LABEL_TEXT</td><td class="small">System names / infra labels rendered inside a diagram image</td><td class="center"><span class="pill skill">Vision-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">4.4</td></tr>
+        <tr><td class="anm">DATA_SAMPLE_IMAGE</td><td class="small">Screenshot/dashboard image containing real (non-synthetic) client data</td><td class="center"><span class="pill skill">Vision-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">5.1, 5.3</td></tr>
+        <tr><td class="anm">COMPETITOR_NAME</td><td class="small">Named competing vendors, referenced client competitors</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag → mask on confirm</span></td><td class="small">6.1–6.2</td></tr>
+        <tr><td class="anm">STRATEGY_MENTION</td><td class="small">M&amp;A plans, unannounced initiatives, roadmaps</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">6.3</td></tr>
+        <tr><td class="anm">NEGATIVE_OUTCOME</td><td class="small">Failure/outage/breach root cause, negative metric, regulatory finding</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag — client sign-off</span></td><td class="small">7.1–7.3</td></tr>
+        <tr><td class="anm">OWN_COST_DETAIL</td><td class="small">Internal staffing ratios, day-rate/FTE figures, exact internal configs</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">8.1–8.2</td></tr>
+        <tr><td class="anm">ORG_CHART_STRUCTURE</td><td class="small">Reporting-line diagrams, structured name/title pairs</td><td class="center"><span class="pill skill">LLM-assisted</span></td><td class="center"><span class="pill partial">Flag</span></td><td class="small">2.3</td></tr>
+        <tr><td class="anm">CLIENT_PERSON_TITLE / CLIENT_PHONE</td><td class="small">Job titles and phone numbers tied to a named client stakeholder</td><td class="center"><span class="pill prot">Regex+LLM</span></td><td class="center"><span class="pill covered">Mask</span></td><td class="small">2.1</td></tr>
+        <tr><td class="anm">INTERNAL_TEAM_MEMBER</td><td class="small">NaviKenz staff named/pictured alongside the client</td><td class="center"><span class="pill prot">Consent lookup</span></td><td class="center"><span class="pill partial">Keep if consented, else flag</span></td><td class="small">2.2</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout">
+      <p class="ctitle">Mask vs. Flag is the load-bearing distinction, not the entity list itself</p>
+      <p>Every existing identity entity is a hard <b>mask</b> — there's no legitimate reason a client's real name should survive into a distributed case study. Nearly everything added here defaults to <b>flag</b>, because a case study's whole purpose is to convey real outcomes, numbers, and methodology — the checklist itself says "approved for sharing," not "always remove." Auto-masking these would silently gut the document's credibility; a reviewer decision is the correct default, same discipline as A-03's Tier-1/Tier-2 split for destructive actions.</p>
+    </div>
+  </section>
+
+  <!-- 05 SKILLS ROSTER -->
+  <section id="skillsroster">
+    <div class="sec-head"><span class="num">05</span><h2>Skills roster remaining to implement</h2></div>
+    <p class="sec-sub">Skills in the platform's own sense (A-01 design §09) — reusable prompt/behaviour modules the Detector, Summarizer, and vision-scan steps load. This section is <i>only</i> the LLM-reasoning additions; deterministic, code-only additions are tracked separately in §06 so the tool/skill separation A-01 already relies on stays intact.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:250px">Skill</th><th style="width:130px">Used by</th><th>What it encodes</th><th style="width:90px">Status</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill skill">sanitization-detection</span></td><td class="small">Detector</td><td class="small">Existing — client-identifying spans, entity types, confidence, "flag don't guess."</td><td class="center"><span class="pill covered">Existing</span></td></tr>
+        <tr><td><span class="pill skill">alias-resolution</span></td><td class="small">Reconciler</td><td class="small">Existing — canonicalization across surface forms.</td><td class="center"><span class="pill covered">Existing</span></td></tr>
+        <tr><td><span class="pill skill">sanitization-masking-style</span></td><td class="small">Reconciler</td><td class="small">Existing — consistent, readable mask-token format.</td><td class="center"><span class="pill covered">Existing</span></td></tr>
+        <tr><td><span class="pill skill">document-metadata-extraction</span></td><td class="small">Summarizer</td><td class="small">Existing — sanitized summary + tag metadata, no identity. <b>Extend</b> with the new <code class="inline">discusses_negative_outcome</code> field (an added field, not a new skill).</td><td class="center"><span class="pill ext">Extend</span></td></tr>
+        <tr><td><span class="pill skill">commercial-term-detection</span></td><td class="small">Detector</td><td class="small">Distinguishing a commercially sensitive figure/clause from an incidental number; drafting a generalization suggestion.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td><span class="pill skill">competitive-strategic-detection</span></td><td class="small">Detector</td><td class="small">Recognizing competitor references and forward-looking strategic language as flag-worthy, distinct from identity entities.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td><span class="pill skill">sensitive-outcome-flagging</span></td><td class="small">Summarizer</td><td class="small">Identifying failure/breach/negative-metric narrative and routing it to a client-sign-off flag rather than a mask decision.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td><span class="pill skill">own-side-cost-detection</span></td><td class="small">Detector</td><td class="small">Recognizing internal staffing/cost detail on the delivery firm's own side — the mirror check to own-firm identity exclusion, not a restatement of it.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td><span class="pill skill">org-chart-detection</span></td><td class="small">Detector + vision scan</td><td class="small">Recognizing reporting-line/org-chart structure (text or image) that maps to real individuals.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td><span class="pill skill">screenshot-content-scan</span></td><td class="small">Vision scan</td><td class="small">Extending the existing logo/identity prompt to judge whether an image's content — not just its branding — is real client data (drives <code class="inline">DATA_SAMPLE_IMAGE</code>).</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td><span class="pill skill">diagram-and-screenshot-text-detection</span></td><td class="small">Vision scan</td><td class="small">Reading text rendered inside an image (diagram labels, visible UI text) and classifying it against the full entity taxonomy, not just identity.</td><td class="center"><span class="pill new">New</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- 06 PROTECTED CALLS -->
+  <section id="protcalls">
+    <div class="sec-head"><span class="num">06</span><h2>Protected calls &amp; deterministic additions</h2></div>
+    <p class="sec-sub">Following A-01's own tools-vs-protected-calls split (design §08): these run as agent code, never as a model tool call — the same discipline that keeps <code class="inline">document.apply_masks</code> exact and repeatable applies here.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:260px">Call</th><th style="width:100px">Type</th><th>Role</th><th style="width:90px">Status</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">infra_credential_prepass.scan</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Regex pass over extracted text for IP/hostname/domain shapes and common credential formats — zero LLM cost, runs alongside the existing NER pre-pass.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">person_title_phone.scan</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Regex pass for phone-number and job-title-adjacent-to-name patterns, feeding <code class="inline">CLIENT_PERSON_TITLE</code>/<code class="inline">CLIENT_PHONE</code>.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">image_exif.strip</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Deterministic EXIF/metadata strip run on <i>every</i> embedded image at render time, not only ones flagged for redaction — closes item 10.2's remaining half.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">flag_for_judgment.create</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Writes a new-style proposal item (commercial term / competitor / strategy / negative outcome / own-cost) distinct from a mask candidate — one shared mechanism for all five flag-based entity types.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">flag_for_judgment.resolve</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Records the reviewer's decision (keep / generalize / remove / requires client sign-off) against a flagged item, part of the audit trail.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">internal_team_consent.lookup / set</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Deterministic read/write of a named internal team member's consent status, checked before defaulting to "keep."</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">legal_attestation.record</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Governance-only write of the MSA/NDA, case-study clause, and compliance-confirmed booleans (§08).</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">distribution_gate.evaluate</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Checks a run's open flags + attestation record against the requested distribution tier before allowing it to be marked ready (§08).</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">document.apply_masks</td><td class="center"><span class="pill prot">Existing</span></td><td class="small">Unchanged — deterministic span replacement over reviewer-approved entities, now also covering the new mask-type entity additions.</td><td class="center"><span class="pill covered">Existing</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- 07 ARCHITECTURE -->
+  <section id="architecture">
+    <div class="sec-head"><span class="num">07</span><h2>Architecture — extended pipeline, data model, and file layout</h2></div>
+    <p class="sec-sub">No new sub-agents and no new run states. Every technical addition below slots into an existing step of the detect → review → apply → verify pipeline already proven on a real document.</p>
+
+    <figure class="diagram-fig">
+      <svg class="diagram" viewBox="0 0 1160 260" role="img" aria-label="Extended sanitization pipeline: detect phase runs extract text, NER pre-pass plus new infra/credential regex, dictionary lookup, LLM Detector with new skills, vision scan with new fields, then human review with new judgment flags; on approval the apply phase runs apply masks, render, redact images, a new EXIF strip step, scrub metadata, and verify across six channels.">
+        <defs>
+          <marker id="arrowA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="arrow-head"></path>
+          </marker>
+        </defs>
+
+        <text x="10" y="18" font-size="10.5" font-weight="600" fill="#3C4A66" letter-spacing="1">DETECT PHASE</text>
+        <g font-size="10.5">
+          <rect x="10" y="28" width="130" height="60" rx="8" class="box-rect"></rect>
+          <text x="75" y="55" text-anchor="middle">Extract text</text>
+          <text x="75" y="70" text-anchor="middle" class="lbl-sub">existing</text>
+
+          <rect x="160" y="28" width="180" height="60" rx="8" class="box-rect box-new"></rect>
+          <text x="250" y="50" text-anchor="middle">NER pre-pass</text>
+          <text x="250" y="64" text-anchor="middle" class="lbl-sub">+ new: infra/credential</text>
+          <text x="250" y="77" text-anchor="middle" class="lbl-sub">+ title/phone regex</text>
+
+          <rect x="360" y="28" width="130" height="60" rx="8" class="box-rect"></rect>
+          <text x="425" y="55" text-anchor="middle">Dictionary</text>
+          <text x="425" y="70" text-anchor="middle" class="lbl-sub">lookup, existing</text>
+
+          <rect x="510" y="28" width="180" height="60" rx="8" class="box-rect box-new"></rect>
+          <text x="600" y="50" text-anchor="middle">LLM Detector</text>
+          <text x="600" y="64" text-anchor="middle" class="lbl-sub">+ 4 new skills</text>
+          <text x="600" y="77" text-anchor="middle" class="lbl-sub">(§05)</text>
+
+          <rect x="710" y="28" width="180" height="60" rx="8" class="box-rect box-new"></rect>
+          <text x="800" y="50" text-anchor="middle">Vision scan</text>
+          <text x="800" y="64" text-anchor="middle" class="lbl-sub">+ data-sample field</text>
+          <text x="800" y="77" text-anchor="middle" class="lbl-sub">+ diagram/text field</text>
+
+          <rect x="910" y="28" width="230" height="60" rx="8" class="box-rect box-new"></rect>
+          <text x="1025" y="50" text-anchor="middle">Human review</text>
+          <text x="1025" y="64" text-anchor="middle" class="lbl-sub">+ judgment-flag queue</text>
+          <text x="1025" y="77" text-anchor="middle" class="lbl-sub">(§06 flag_for_judgment)</text>
+
+          <path d="M140,58 L160,58" class="arrow" marker-end="url(#arrowA)"></path>
+          <path d="M340,58 L360,58" class="arrow" marker-end="url(#arrowA)"></path>
+          <path d="M490,58 L510,58" class="arrow" marker-end="url(#arrowA)"></path>
+          <path d="M690,58 L710,58" class="arrow" marker-end="url(#arrowA)"></path>
+          <path d="M890,58 L910,58" class="arrow" marker-end="url(#arrowA)"></path>
+        </g>
+
+        <path d="M1025,88 L1025,120 L75,120 L75,150" class="arrow" marker-end="url(#arrowA)"></path>
+        <text x="550" y="112" text-anchor="middle" class="edge-label">on approval</text>
+
+        <text x="10" y="148" font-size="10.5" font-weight="600" fill="#3C4A66" letter-spacing="1">APPLY PHASE</text>
+        <g font-size="10.5">
+          <rect x="10" y="158" width="130" height="60" rx="8" class="box-rect"></rect>
+          <text x="75" y="185" text-anchor="middle">Apply masks</text>
+          <text x="75" y="200" text-anchor="middle" class="lbl-sub">existing, extended</text>
+
+          <rect x="160" y="158" width="120" height="60" rx="8" class="box-rect"></rect>
+          <text x="220" y="192" text-anchor="middle">Render</text>
+
+          <rect x="300" y="158" width="150" height="60" rx="8" class="box-rect"></rect>
+          <text x="375" y="185" text-anchor="middle">Redact images</text>
+          <text x="375" y="200" text-anchor="middle" class="lbl-sub">existing</text>
+
+          <rect x="470" y="158" width="150" height="60" rx="8" class="box-rect box-new"></rect>
+          <text x="545" y="185" text-anchor="middle">EXIF strip</text>
+          <text x="545" y="200" text-anchor="middle" class="lbl-sub">new, every image</text>
+
+          <rect x="640" y="158" width="150" height="60" rx="8" class="box-rect"></rect>
+          <text x="715" y="185" text-anchor="middle">Scrub metadata</text>
+          <text x="715" y="200" text-anchor="middle" class="lbl-sub">existing</text>
+
+          <rect x="810" y="158" width="220" height="60" rx="8" class="box-rect box-ext"></rect>
+          <text x="920" y="185" text-anchor="middle">Verify</text>
+          <text x="920" y="200" text-anchor="middle" class="lbl-sub">5 → 6 channels (+ EXIF)</text>
+
+          <path d="M140,188 L160,188" class="arrow" marker-end="url(#arrowA)"></path>
+          <path d="M280,188 L300,188" class="arrow" marker-end="url(#arrowA)"></path>
+          <path d="M450,188 L470,188" class="arrow" marker-end="url(#arrowA)"></path>
+          <path d="M620,188 L640,188" class="arrow" marker-end="url(#arrowA)"></path>
+          <path d="M790,188 L810,188" class="arrow" marker-end="url(#arrowA)"></path>
+        </g>
+
+        <rect x="10" y="232" width="14" height="14" class="box-rect box-new"></rect>
+        <text x="30" y="243" font-size="10">new or extended step (this plan)</text>
+        <rect x="260" y="232" width="14" height="14" class="box-rect"></rect>
+        <text x="280" y="243" font-size="10">unchanged existing step</text>
+      </svg>
+      <figcaption>Every technical addition lands inside an existing step — no new sub-agent, no new run state.</figcaption>
+    </figure>
+
+    <h3>Data model additions</h3>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:210px">Table / column</th><th>Purpose</th><th style="width:100px">Status</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">masking_dictionary.entity_type</td><td class="small">Enum extended with the ten new entity types from §04.</td><td class="center"><span class="pill ext">Extend</span></td></tr>
+        <tr><td class="anm">masking_dictionary.consent_status</td><td class="small">New column — <code class="inline">not_required</code> / <code class="inline">pending</code> / <code class="inline">granted</code>, for internal-team entities only.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">flagged_items</td><td class="small">New table — <code class="inline">run_id, flag_type, chunk_id/image_id, surface_text, suggested_action, status (pending/resolved), reviewer_id, resolution, decided_at</code>. Backs <code class="inline">flag_for_judgment.*</code> for all five flag-based entity types.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">legal_attestation</td><td class="small">New table — <code class="inline">run_id or client_account_id, msa_nda_reviewed, case_study_clause_status, compliance_confirmed, attested_by, attested_at, notes</code>.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">agent_runs.distribution_tier</td><td class="small">New column — <code class="inline">internal / sales_marketing / public_external</code>, set at review time.</td><td class="center"><span class="pill new">New</span></td></tr>
+        <tr><td class="anm">document_metadata (image scan output)</td><td class="small">Schema extended with <code class="inline">contains_real_data_sample</code>, <code class="inline">visible_sensitive_text</code> fields alongside the existing <code class="inline">contains_client_identity</code>.</td><td class="center"><span class="pill ext">Extend</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>File layout additions</h3>
+    <div class="filetree">backend/app/<br>
+&nbsp;&nbsp;agents/sanitization/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;ner_prepass.py <span class="comment"># EXTENDED — + infra/credential + title/phone regex</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;detector.py <span class="comment"># EXTENDED — loads 4 new skills (§05)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;image_scan.py <span class="comment"># EXTENDED — + data-sample field, + diagram/screenshot text field</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;summarizer.py <span class="comment"># EXTENDED — + discusses_negative_outcome field</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">flags.py</span> <span class="comment"># NEW — flag_for_judgment.create / .resolve</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">regex_patterns/infra_credential.py</span> <span class="comment"># NEW — IP/hostname/domain/credential patterns</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">regex_patterns/person_title_phone.py</span> <span class="comment"># NEW — title/phone patterns</span><br>
+&nbsp;&nbsp;documents/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">exif_strip.py</span> <span class="comment"># NEW — strips EXIF from every embedded image, not only redacted ones</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;verify.py <span class="comment"># EXTENDED — sixth channel, verified_image_metadata</span><br>
+&nbsp;&nbsp;masking/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;dictionary.py <span class="comment"># EXTENDED — consent_status read/write for internal entities</span><br>
+&nbsp;&nbsp;<span class="ext">governance/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">legal_attestation.py</span> <span class="comment"># NEW — attestation CRUD, km_governance-only</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">distribution_gate.py</span> <span class="comment"># NEW — evaluates open flags + attestation vs. requested tier</span><br>
+frontend/src/pages/<br>
+&nbsp;&nbsp;ReviewDetailPage.jsx <span class="comment"># EXTENDED — flagged-items panel alongside existing mask-candidate list</span><br>
+&nbsp;&nbsp;<span class="new">DistributionGatePanel.jsx</span> <span class="comment"># NEW — tier selector + attestation checklist + gate status</span></div>
+  </section>
+
+  <!-- 08 PROCESS -->
+  <section id="process">
+    <div class="sec-head"><span class="num">08</span><h2>Process &amp; governance — the distribution-tier gate</h2></div>
+    <p class="sec-sub">The checklist already has a natural gate built in — "Approved for Distribution To: Internal only / Sales-Marketing / Public-External." Not every category needs to be clean for an internal share; all of them do before something goes external. This reuses the tiered-strictness philosophy already proven in the SharePoint Cleanup Agent's Tier-1/Tier-2 model (sharepoint_cleaning_agent_master_design.html §07): what requires review is decided by the destination, not by model confidence.</p>
+    <div class="tiergate">
+      <div class="tier t1">
+        <h4>Internal only</h4>
+        <ul>
+          <li>Client identity masked (1–2)</li>
+          <li>Credentials never allowed through, any tier</li>
+          <li>No commercial/strategic/outcome gate required</li>
+        </ul>
+      </div>
+      <div class="tier t2">
+        <h4>Sales / Marketing</h4>
+        <ul>
+          <li>Everything in Internal, plus:</li>
+          <li>Commercial-term flags resolved (3)</li>
+          <li>Competitive/strategic flags resolved (6)</li>
+          <li>Data-sample image flags resolved (5)</li>
+        </ul>
+      </div>
+      <div class="tier t3">
+        <h4>Public / External</h4>
+        <ul>
+          <li>Everything in Sales/Marketing, plus:</li>
+          <li>Sensitive-outcome client sign-off recorded (7)</li>
+          <li>Legal attestation complete (9)</li>
+          <li>Own-IP/cost detail flags resolved (8)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout danger">
+      <p class="ctitle">Legal &amp; Contractual Constraints — the one gate that isn't agent detection</p>
+      <p>MSA/NDA confidentiality clauses, case-study pre-approval status, and data-residency/compliance obligations cannot be answered by reading the document — they live in a contract NaviKenz holds, not in the file's text. <code class="inline">legal_attestation.record</code> is a governance-only write: three booleans plus a note, set by km_governance, the same role that already owns mask approval and client-account linkage.</p>
+      <p><code class="inline">distribution_gate.evaluate</code> blocks the "mark ready for public distribution" action in the review UI until the attestation record exists and every flag in the run is resolved — exactly the way A-03 blocks Tier-2 actions on a missing eligibility rule.</p>
+    </div>
+    <div class="states">
+      <span class="state">draft</span><span class="arrow">→</span>
+      <span class="state run">flags open</span><span class="arrow">→</span>
+      <span class="state pause">tier requested</span><span class="arrow">→</span>
+      <span class="state bad">gate blocked</span><span style="color:var(--muted);margin:0 6px">or</span>
+      <span class="state done">gate cleared → ready to distribute</span>
+    </div>
+  </section>
+
+  <!-- 09 BUILD PLAN -->
+  <section id="plan">
+    <div class="sec-head"><span class="num">09</span><h2>Build plan &amp; phasing</h2></div>
+    <p class="sec-sub">Ordered by a mix of checklist risk (what's most likely to actually leak in a real case study) and build cost (deterministic extensions ship fastest).</p>
+
+    <div class="phase">
+      <div class="phead"><span class="pnum">P1</span><h4>Commercial terms + Data-sample images</h4><span class="pill p1">Highest exposure</span></div>
+      <p>Most likely to appear in every real case study (dollar figures and screenshots are ubiquitous), and furthest from the checklist's intent today.</p>
+      <ul>
+        <li>Add <code class="inline">COMMERCIAL_TERM</code> regex pattern set + wire <code class="inline">commercial-term-detection</code> skill into the Detector.</li>
+        <li>Add <code class="inline">contains_real_data_sample</code> field to the existing vision call; one-line prompt change, no new model calls.</li>
+        <li>Build <code class="inline">flags.py</code> (<code class="inline">flag_for_judgment.create/resolve</code>) and the <code class="inline">flagged_items</code> table — shared infrastructure the rest of the plan reuses.</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">P2</span><h4>Infra/credentials + Diagram/screenshot text + Competitive/strategic + Sensitive outcomes + Own-IP/cost + Org chart + Consent</h4><span class="pill p2">Structural additions</span></div>
+      <p>Infra/credentials is pure deterministic regex — cheapest of the group, can run alongside P1 if capacity allows. The rest share the <code class="inline">flagged_items</code> mechanism built in P1, so each is a skill + a small prompt/field addition, not new infrastructure.</p>
+      <ul>
+        <li><code class="inline">infra_credential.py</code> + <code class="inline">CREDENTIAL</code> mandatory-redaction wiring.</li>
+        <li>Vision-scan <code class="inline">visible_sensitive_text</code> field (closes 4.4 + 10.1 together).</li>
+        <li><code class="inline">competitive-strategic-detection</code>, <code class="inline">sensitive-outcome-flagging</code>, <code class="inline">own-side-cost-detection</code>, <code class="inline">org-chart-detection</code> skills.</li>
+        <li><code class="inline">consent_status</code> column + reviewer UI toggle for internal-team entities.</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">P3</span><h4>Distribution-tier gate + Legal attestation + EXIF strip</h4><span class="pill p3">Governance layer</span></div>
+      <p>Sequenced last deliberately — the gate <i>consumes</i> the flags produced by P1/P2, so it can't meaningfully ship before there's a sensitive-outcome flag or commercial-term flag to gate on. EXIF stripping is independent and can move earlier if a quick win is wanted.</p>
+      <ul>
+        <li><code class="inline">legal_attestation</code> table + governance-only CRUD.</li>
+        <li><code class="inline">distribution_gate.evaluate</code> + <code class="inline">DistributionGatePanel.jsx</code>.</li>
+        <li><code class="inline">exif_strip.py</code> + sixth verification channel (<code class="inline">verified_image_metadata</code>).</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 10 DECISIONS -->
+  <section id="decisions">
+    <div class="sec-head"><span class="num">10</span><h2>Decisions log</h2></div>
+    <table class="decisionlog">
+      <tbody>
+        <tr><td>Audit granularity</td><td class="small">Scored at the individual checklist-item level (29), not the 10-category level, so a category with mixed status isn't miscounted as fully done or fully missing.</td></tr>
+        <tr><td>Mask vs. flag</td><td class="small">Every new category defaults to <b>flag-for-review</b>, not auto-mask — a case study's value is in real outcomes and figures; only identity-class entities and credentials get a hard mask/mandatory-redaction.</td></tr>
+        <tr><td>No new sub-agents</td><td class="small">All seven gaps extend the existing Detector/Reconciler/Summarizer + pre-pass + image-scan steps. No new catalogued agent, no new run state.</td></tr>
+        <tr><td>Deterministic-first</td><td class="small">Infra identifiers, credentials, titles/phones, and EXIF stripping are pure regex/code, zero LLM cost — same cost-lever logic already applied in A-01 §10.</td></tr>
+        <tr><td>Shared flag mechanism</td><td class="small">Commercial terms, competitive/strategic mentions, sensitive outcomes, own-IP/cost detail, and org-chart structure all route through one new <code class="inline">flagged_items</code> table / <code class="inline">flag_for_judgment</code> call rather than five bespoke UI additions.</td></tr>
+        <tr><td>One vision call, three new fields</td><td class="small">Data-sample content, diagram/screenshot visible text, and (with Gap B) credential/hostname detection all extend the single existing per-image vision call rather than adding new vision passes — no added model cost per image.</td></tr>
+        <tr><td>Legal &amp; Contractual is not agent detection</td><td class="small">Modeled as a governance attestation record + a distribution-tier gate, owned by km_governance — mirrors A-03's eligibility-rule gate pattern rather than inventing a new one.</td></tr>
+        <tr><td>Distribution tiers reuse the checklist's own field</td><td class="small">"Approved for Distribution To" becomes the gate deciding which flags must be resolved before a run can be marked ready — Internal / Sales-Marketing / Public-External, increasing in strictness.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 11 DETAILED IMPLEMENTATION PLAN -->
+  <section id="implementation">
+    <div class="sec-head"><span class="num">11</span><h2>Detailed implementation plan — resolving every gap against the current agent</h2></div>
+    <p class="sec-sub">This is the "how," underneath §03's "what" and §09's "when." Each gap below is broken into concrete implementation steps against the actual current codebase (file names as listed in the live debugging report's appendix), in build order, ending with the regression-suite coverage that proves it before it ever touches a real document — the same discipline that caught real bugs (issues 16 and 17 in the debugging report) before they reached production. P1/P2/P3 labels match §03/§09 — this section doesn't re-sequence anything, it just fills in the steps under each label.</p>
+
+    <h3>A · Commercial &amp; Financial Terms <span class="pill p1">P1</span></h3>
+    <div class="phase"><div class="phead"><span class="pnum">1</span><h4>Detection — new regex layer</h4></div><p>New <code class="inline">app/agents/sanitization/regex_patterns/commercial_terms.py</code>: currency amounts, percentage figures, and payment-term keyword phrases ("net 30", "penalty clause", "SLA credit", "rate card"). Wired into <code class="inline">ner_prepass.py</code>'s existing candidate-generation pass, free and on-CPU, same as today's regex/NER candidates.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">2</span><h4>Detector + skill</h4></div><p>New skill <code class="inline">commercial-term-detection</code>, loaded in <code class="inline">detector.py</code> alongside <code class="inline">sanitization-detection</code>. Classifies each regex hit in context (a $ figure near "trial balance" is not a hit; one near "contract value" is) and drafts a generalization suggestion.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Data model</h4></div><p>Migration adds <code class="inline">COMMERCIAL_TERM</code> to <code class="inline">masking_dictionary.entity_type</code>, and creates the new <code class="inline">flagged_items</code> table (<code class="inline">run_id, flag_type, chunk_id, surface_text, suggested_action, status, reviewer_id, resolution, decided_at</code>) — built once here, reused by every other flag-based gap below. <code class="inline">reconciler.py</code> routes <code class="inline">COMMERCIAL_TERM</code> hits to <code class="inline">flagged_items</code> instead of <code class="inline">masking_dictionary.pending_approval</code>.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">4</span><h4>Review UI + resolve path</h4></div><p>New <code class="inline">app/agents/sanitization/flags.py</code> exposes <code class="inline">flag_for_judgment.create</code>/<code class="inline">.resolve</code>. <code class="inline">ReviewDetailPage.jsx</code> gets a new "Flagged for judgment" panel (keep / generalize / remove) next to the existing mask-candidate list.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">5</span><h4>Apply</h4></div><p>On <code class="inline">resolve="generalize"</code>, <code class="inline">render.py</code> substitutes the reviewer-provided generalized text at the recorded span — same span-replacement mechanism <code class="inline">apply_masks</code> already uses, just with free text instead of a dictionary token.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">6</span><h4>Regression</h4></div><p>New fixture in <code class="inline">scripts/regression_check.py</code>: a planted dollar figure + a payment-term sentence, asserting both are detected and flaggable offline with zero Bedrock calls for the regex layer.</p></div>
+
+    <h3>B · Infrastructure, Security &amp; Credentials <span class="pill p2">P2 (cheapest — can ship alongside P1)</span></h3>
+    <div class="phase"><div class="phead"><span class="pnum">1</span><h4>Pattern library</h4></div><p>New <code class="inline">app/agents/sanitization/regex_patterns/infra_credential.py</code>: IPv4/IPv6/CIDR patterns, internal-hostname shapes (<code class="inline">*.corp.internal</code>, <code class="inline">*.local</code>), and credential shapes (AWS-style keys, bearer tokens, connection strings, a generic high-entropy-string heuristic).</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">2</span><h4>Wire into pre-pass</h4></div><p>Runs inside <code class="inline">ner_prepass.py</code> as a third free, on-CPU pass alongside the existing regex/NER candidates — zero LLM cost, so this whole gap can ship independently of any Detector/skill change.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Data model + mandatory redaction</h4></div><p><code class="inline">masking_dictionary.entity_type</code> gains <code class="inline">INFRA_IDENTIFIER</code> (mask) and <code class="inline">CREDENTIAL</code> (written with <code class="inline">mandatory_redaction=true</code> directly — the exact field already enforced server-side for confirmed own-firm logo matches).</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">4</span><h4>Orchestration enforcement</h4></div><p><code class="inline">agent.py</code> is extended so <code class="inline">apply()</code> ignores any reviewer attempt to exclude a <code class="inline">CREDENTIAL</code> entry — mirrors the existing <code class="inline">mandatory_redaction</code> override built for logo matches, applied to a new entity type rather than a new mechanism.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">5</span><h4>Image coverage</h4></div><p><code class="inline">image_scan.py</code>'s existing per-image vision call gets a <code class="inline">visible_credential_or_hostname</code> boolean field — shared build work with Gap D below, sequence together.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">6</span><h4>Regression</h4></div><p>Extend <code class="inline">regression_check.py</code> with a planted IP address, internal hostname, and fake AWS-style key in body text and inside one fixture image; assert mandatory redaction fires and cannot be unchecked via the review payload.</p></div>
+
+    <h3>C · Data Samples in Screenshots, Datasets &amp; Reports <span class="pill p1">P1</span></h3>
+    <div class="phase"><div class="phead"><span class="pnum">1</span><h4>Vision-call extension</h4></div><p><code class="inline">image_scan.py</code>: add <code class="inline">contains_real_data_sample</code> to the existing per-image structured call (same call, same cost) — prompt asks whether the image shows a dashboard/table/report with real operational or financial data, as opposed to a logo or generic illustration.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">2</span><h4>Flagged-item routing</h4></div><p>A positive hit writes a <code class="inline">DATA_SAMPLE_IMAGE</code> row to <code class="inline">flagged_items</code> (reusing Gap A's table) with redact / replace-with-placeholder / approve as the resolution options.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Placeholder redaction mode</h4></div><p><code class="inline">image_redact.py</code> gets a second mode alongside today's black-out: swap in a generic placeholder image into the same media part, for items resolved as "replace with placeholder" rather than "redact."</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">4</span><h4>Dataset provenance (5.2)</h4></div><p>New protected call <code class="inline">dataset_provenance.check(file)</code> in the upload/document-intake path: looks up the file's originating <code class="inline">client_account_id</code> via the existing <code class="inline">source_registry</code> linkage; a dataset destined for training/testing that traces back to a real client account raises a <code class="inline">flagged_items</code> entry.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">5</span><h4>Regression</h4></div><p>Add a fixture image containing a synthetic dashboard-style table of numbers (confirms the new vision field fires) and a dataset-provenance fixture linking a fake file to a client account.</p></div>
+
+    <h3>D · Technical Diagrams &amp; Screenshot Visible Text <span class="pill p2">P2 (build together with B/C's vision-call changes)</span></h3>
+    <div class="phase"><div class="phead"><span class="pnum">1</span><h4>Vision-call extension</h4></div><p><code class="inline">image_scan.py</code> adds <code class="inline">visible_sensitive_text</code>: the vision model reads text baked into the image and tags each span with a best-guess entity type from the full taxonomy (client name, system name, commercial term, infra identifier, email, URL, phone).</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">2</span><h4>Alias resolution reuse</h4></div><p>Each returned span is routed through <code class="inline">reconciler.py</code>'s existing alias-resolution logic, so a system name caught inside a diagram image resolves to the same mask token as its prose mentions elsewhere in the same document.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Region-level redaction</h4></div><p><code class="inline">image_redact.py</code> extended to redact just the labeled region (using the vision model's returned bounding box) instead of only whole-image black-out — needed because a diagram is often fine except for one system-name label. Falls back to whole-image redaction when no reliable bounding box is returned, consistent with the pipeline's existing conservative default.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">4</span><h4>Regression</h4></div><p>A diagram-style fixture image with a rendered label naming a fake internal system (verify region-redaction), and a screenshot fixture with a visible email address and dollar figure baked into the pixels.</p></div>
+
+    <h3>E · Competitive &amp; Strategic Information <span class="pill p2">P2</span></h3>
+    <div class="phase"><div class="phead"><span class="pnum">1</span><h4>New skill</h4></div><p><code class="inline">competitive-strategic-detection</code>, loaded by <code class="inline">detector.py</code> alongside <code class="inline">sanitization-detection</code> — scans chunk text for named-competitor mentions and forward-looking strategic language (M&amp;A, unannounced initiative, roadmap).</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">2</span><h4>Flagged-item routing</h4></div><p>Detector emits <code class="inline">COMPETITOR_NAME</code> and <code class="inline">STRATEGY_MENTION</code> candidates into <code class="inline">flagged_items</code>, not directly into <code class="inline">masking_dictionary</code>, with the offending sentence(s) attached for reviewer context.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Resolve paths differ by type</h4></div><p>For <code class="inline">COMPETITOR_NAME</code>, resolving "mask" promotes it into <code class="inline">masking_dictionary</code> via the existing <code class="inline">pending_approval → approved</code> path, so it gets a consistent token if it recurs. For <code class="inline">STRATEGY_MENTION</code>, resolution is keep/generalize/remove text only — no token, since it's prose-level judgment rather than a named entity.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">4</span><h4>Regression</h4></div><p>Fixture chunk with a fictional competitor name and a "planned acquisition of X" sentence; assert both are flagged, never silently masked or silently ignored.</p></div>
+
+    <h3>F · Sensitive Outcomes <span class="pill p2">P2</span></h3>
+    <div class="phase"><div class="phead"><span class="pnum">1</span><h4>Summarizer extension</h4></div><p><code class="inline">summarizer.py</code>'s existing document-level pass gets a <code class="inline">discusses_negative_outcome</code> boolean plus the specific sentence(s)/chunk locations where a failure, breach, negative metric, or regulatory finding is discussed.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">2</span><h4>Document-level flag</h4></div><p>Unlike span-level entities, this is one <code class="inline">flagged_items</code> row per run (or per distinct outcome), <code class="inline">flag_type="negative_outcome"</code>, with resolution options <code class="inline">requires_client_signoff</code> / <code class="inline">approve_as_is</code> / <code class="inline">remove_section</code>.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Non-dismissible reviewer callout</h4></div><p><code class="inline">RunStatusPage.jsx</code>/<code class="inline">ReviewDetailPage.jsx</code> surfaces this as a distinct, non-dismissible callout at the top of the review screen — same surfacing pattern already used for the "N images appear to reveal the client" awareness flag, so a reviewer cannot approve a run without seeing it.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">4</span><h4>Audit trail</h4></div><p>The reviewer's resolution is written via the existing protected <code class="inline">audit_log.write</code> call, so "this negative outcome was explicitly approved by [reviewer] on [date]" survives as a record — directly satisfying checklist item 7.2's "checked for client approval."</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">5</span><h4>Regression</h4></div><p>Fixture chunk describing a fictional outage root cause; assert the flag fires and blocks the run from reaching <code class="inline">completed</code> without a recorded resolution — the same "every channel must be clean" gating logic already used for the five verification channels, applied to this new flag.</p></div>
+
+    <h3>G · Own IP, Methodology &amp; Cost Structure <span class="pill p2">P2</span></h3>
+    <div class="phase"><div class="phead"><span class="pnum">1</span><h4>Consent column + lookup</h4></div><p><code class="inline">masking_dictionary</code> gains <code class="inline">consent_status</code> (<code class="inline">not_required / pending / granted</code>). <code class="inline">dictionary.py</code> gets a companion <code class="inline">is_internal_team_member()</code> check alongside the existing <code class="inline">is_own_firm()</code>; when true, consent status is checked before defaulting to "keep" — absent consent, the entity routes to <code class="inline">flagged_items</code> instead of silently staying visible.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">2</span><h4>Own-side cost detection</h4></div><p>New <code class="inline">own_cost_prepass.py</code> regex layer catches day-rate/FTE-shaped numbers; new skill <code class="inline">own-side-cost-detection</code> in <code class="inline">detector.py</code> judges context, scoped to sentences whose subject is the delivery firm, to avoid false positives against generic staffing language.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Org-chart detection</h4></div><p>New skill <code class="inline">org-chart-detection</code>, used by both <code class="inline">detector.py</code> (structured name/title text patterns) and <code class="inline">image_scan.py</code> (visual hierarchy-diagram shapes) — flags <code class="inline">ORG_CHART_STRUCTURE</code> for genericization on either the client or internal side.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">4</span><h4>Governance view</h4></div><p><code class="inline">AdminPage.jsx</code>'s existing masking-dictionary view (already showing <code class="inline">pending_approval</code> aging) gets a "consent needed" filter, so unresolved internal-team entities don't silently pile up — the same fix already applied to aging <code class="inline">pending_approval</code> entries.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">5</span><h4>Regression</h4></div><p>Fixture with an internal team member's name and no consent record (must flag, not auto-keep), a staffing-ratio sentence, and a simple block of name/title pairs shaped like an org chart.</p></div>
+
+    <h3>Governance gate · Legal &amp; Contractual + Distribution Tiers <span class="pill p3">P3</span></h3>
+    <div class="phase"><div class="phead"><span class="pnum">1</span><h4>Attestation record</h4></div><p>New table <code class="inline">legal_attestation</code> + new <code class="inline">app/governance/legal_attestation.py</code>, create/read restricted to the <code class="inline">km_governance</code> role — reuses the RBAC checks already gating mask approval and client-account linkage.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">2</span><h4>Distribution tier field</h4></div><p><code class="inline">agent_runs.distribution_tier</code> (<code class="inline">internal / sales_marketing / public_external</code>), set explicitly by the reviewer — mirrors the checklist's own "Approved for Distribution To" field verbatim.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">3</span><h4>Gate evaluation</h4></div><p>New <code class="inline">app/governance/distribution_gate.py</code>: <code class="inline">evaluate(run_id, requested_tier)</code> reads every open <code class="inline">flagged_items</code> row for the run plus the <code class="inline">legal_attestation</code> record, returning pass/fail and the specific unresolved blockers — the same "what's still open" aggregation the five-channel verifier already performs, one layer up.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">4</span><h4>Reviewer UI</h4></div><p>New <code class="inline">DistributionGatePanel.jsx</code>: reviewer picks a target tier and sees a live checklist of what's blocking it — same check-grid interaction already used for the five verification channels on the run status page.</p></div>
+    <div class="phase"><div class="phead"><span class="pnum">5</span><h4>Process validation</h4></div><p>A scripted run-through (governance workflow, not an automated fixture) confirming a run with an open <code class="inline">NEGATIVE_OUTCOME</code> flag cannot be marked <code class="inline">public_external</code>, and one with every flag resolved plus a complete attestation can.</p></div>
+
+    <h3>Sequencing &amp; shared infrastructure</h3>
+    <ul class="plain">
+      <li><b>Build <code class="inline">flagged_items</code> once, in Gap A.</b> Gaps C, E, F, and G all write to the same table — sequencing A first means every later gap is a skill/field addition against infrastructure that already exists, not a repeated schema change.</li>
+      <li><b>Sequence B, C, and D together.</b> All three extend the same <code class="inline">image_scan.py</code> vision call with a new structured field — batching them into one prompt/schema change avoids three separate PRs touching the same file and the same per-image cost budget.</li>
+      <li><b>The governance gate (P3) depends on P1/P2.</b> <code class="inline">distribution_gate.evaluate</code> has nothing meaningful to check until <code class="inline">flagged_items</code> exists and at least one gap is producing rows into it — it is deliberately the last piece built, consuming what the earlier gaps produce.</li>
+      <li><b>Every gap ships behind the existing regression suite.</b> Each gap's fixture is added to <code class="inline">scripts/regression_check.py</code> before its corresponding code lands, the same offline-first discipline that caught real bugs (issues 16 and 17) before they reached a production run.</li>
+    </ul>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>NaviKnow · Case Study Sanitization Checklist — Full Audit, Gaps &amp; Implementation Plan · v2</span>
+    <span>29 checklist items audited · 2 done · 5 partial · 19 gap · 3 process gap</span>
+  </div>
+</footer>
+
+</body>
+</html>

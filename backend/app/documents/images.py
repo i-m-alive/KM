@@ -39,7 +39,12 @@ class ImageRef:
 VECTOR_FORMATS = {"emf", "wmf", "emz", "wmz", "svg"}
 
 
-def _guess_format(data: bytes, fallback: str = "png") -> str:
+def guess_image_format(data: bytes, fallback: str | None = "png") -> str | None:
+    """Sniff the real format from magic bytes - the only reliable source of
+    truth. A container's declared extension (OOXML partname, etc.) can lie
+    (e.g. a JPEG saved into a part named *.png after a re-export), so any
+    caller that hands these bytes to something format-sensitive (Bedrock
+    vision, Pillow) must trust this over a declared/assumed format."""
     if data[:8] == b"\x89PNG\r\n\x1a\n":
         return "png"
     if data[:3] == b"\xff\xd8\xff":
@@ -54,6 +59,10 @@ def _guess_format(data: bytes, fallback: str = "png") -> str:
         return "wmf"
     if data[:2] == b"\x1f\x8b":
         return "emz"  # gzip-wrapped EMF/WMF - can't tell which without inflating; soffice handles both by extension
+    if data[:2] == b"BM":
+        return "bmp"
+    if data[:4] in (b"II*\x00", b"MM\x00*"):
+        return "tiff"
     stripped = data.lstrip()[:256]
     if stripped[:5] == b"<?xml" or stripped[:4] == b"<svg" or b"<svg" in stripped[:256]:
         return "svg"
@@ -67,7 +76,7 @@ def _format_for_partname(partname: str, data: bytes) -> str:
     ext = os.path.splitext(partname)[1].lstrip(".").lower()
     if ext in {"png", "jpeg", "jpg", "gif", "webp", "emf", "wmf", "emz", "wmz", "svg", "bmp", "tiff"}:
         return "jpeg" if ext == "jpg" else ext
-    return _guess_format(data)
+    return guess_image_format(data)
 
 
 _LABEL_RULES = [
@@ -182,28 +191,50 @@ def _extract_docx_images(path: str) -> list[ImageRef]:
     return refs
 
 
-def _extract_pptx_images(path: str) -> list[ImageRef]:
+def _pptx_picture_parts(shapes) -> list:
+    """Every (partname, data, blob_getter) for PICTURE shapes in a shape tree,
+    walking into groups. Shared by the per-slide walk and the layout/master
+    walk below - same extraction logic, different source shape trees."""
     from pptx.enum.shapes import MSO_SHAPE_TYPE
-    from pptx import Presentation
 
     from app.documents.pptx_walk import iter_shapes_recursive
+
+    found = []
+    for shape in iter_shapes_recursive(shapes):
+        if shape.shape_type != MSO_SHAPE_TYPE.PICTURE:
+            continue
+        try:
+            data = shape.image.blob
+            rid = shape._element.blip_rId
+            image_part = shape.part.related_part(rid)
+            partname = str(image_part.partname).lstrip("/")
+        except Exception:
+            continue
+        found.append((partname, data))
+    return found
+
+
+def _show_master_sp(element) -> bool:
+    """PowerPoint's per-slide/per-layout "Hide Background Graphics" toggle.
+    Both <p:sld> and <p:sldLayout> carry an optional showMasterSp attribute
+    (true when absent) - when a slide (or the layout it's built on) has this
+    explicitly set to "0", shapes inherited from the layout/master do NOT
+    actually render on that slide, even though python-pptx's shape tree can
+    still see them via slide.slide_layout/slide_layout.slide_master. Ignoring
+    this flag is exactly what turned a two-slide logo placement into a
+    reported occurrence on every slide that merely uses the same layout."""
+    return element is not None and element.get("showMasterSp") != "0"
+
+
+def _extract_pptx_images(path: str) -> list[ImageRef]:
+    from pptx import Presentation
 
     prs = Presentation(path)
     refs: list[ImageRef] = []
     seen_partnames: set[str] = set()
     idx = 0
     for slide_number, slide in enumerate(prs.slides):
-        for shape in iter_shapes_recursive(slide.shapes):  # groups can nest pictures too
-            if shape.shape_type != MSO_SHAPE_TYPE.PICTURE:
-                continue
-            try:
-                image = shape.image
-                data = image.blob
-                rid = shape._element.blip_rId
-                image_part = shape.part.related_part(rid)
-                partname = str(image_part.partname).lstrip("/")
-            except Exception:
-                continue
+        for partname, data in _pptx_picture_parts(slide.shapes):
             seen_partnames.add(partname)
             refs.append(
                 ImageRef(
@@ -216,8 +247,54 @@ def _extract_pptx_images(path: str) -> list[ImageRef]:
             )
             idx += 1
 
-    # Layer 2: raw media glob - slide masters/layouts, SmartArt drawing parts,
-    # and anything else the shape tree above can't reach.
+        # Branding placed on the slide LAYOUT or its MASTER (a logo set once
+        # in the template rather than pasted onto every slide individually)
+        # renders on every slide that uses that layout, but was previously
+        # invisible to this per-slide walk entirely - the shape simply isn't
+        # in slide.shapes, it belongs to a different part. The raw media glob
+        # below still finds the underlying file, but only as ONE physical
+        # part with a generic label ("slide layout graphic"), not as N
+        # per-slide locations - wildly undercounting a logo that visually
+        # appears on every slide (observed: a top-right corner client logo
+        # on all 21 slides counted as only 2 occurrences total). Emitting one
+        # ImageRef per slide here - same bytes each time - lets the existing
+        # SHA-256 dedup in image_scan.py naturally collapse these into one
+        # group whose occurrence count and location list are now accurate.
+        #
+        # BUT this must not fire for a slide that has "hide background
+        # graphics" turned on (showMasterSp="0") - that slide genuinely does
+        # not render the layout/master picture, so counting it as an
+        # occurrence over-reports both occurrence_count and locations. A
+        # slide's own showMasterSp gates BOTH the layout's and the master's
+        # graphics (if the slide hides background graphics, neither shows);
+        # the layout's own showMasterSp additionally gates whether the
+        # MASTER's graphics reach slides using that layout at all.
+        layout = slide.slide_layout
+        master = layout.slide_master if layout is not None else None
+        slide_shows_background = _show_master_sp(slide._element)
+        layout_shows_master = _show_master_sp(layout._element) if layout is not None else True
+        sources = []
+        if slide_shows_background:
+            if layout is not None:
+                sources.append(layout)
+            if master is not None and layout_shows_master:
+                sources.append(master)
+        for source in sources:
+            for partname, data in _pptx_picture_parts(source.shapes):
+                seen_partnames.add(partname)
+                refs.append(
+                    ImageRef(
+                        index=idx,
+                        location_label=f"slide {slide_number + 1}",
+                        image_bytes=data,
+                        image_format=_format_for_partname(partname, data),
+                        locator={"kind": "pptx", "partname": partname, "slide_number": slide_number},
+                    )
+                )
+                idx += 1
+
+    # Layer 2: raw media glob - SmartArt drawing parts, orphaned media with no
+    # live relationship chain, and anything else neither walk above can reach.
     for partname, data in _glob_media_parts(path, ("ppt/media/",)):
         if partname in seen_partnames:
             continue

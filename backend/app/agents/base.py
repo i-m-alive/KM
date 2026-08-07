@@ -17,7 +17,11 @@ class AgentStep:
 @dataclass
 class AgentFlag:
     message: str
-    severity: Literal["info", "warning", "blocking"] = "warning"
+    # "advisory": a non-blocking QA signal a reviewer may act on (e.g. a
+    # possible over-redaction or re-identification risk) - distinct from
+    # "info" because it names something the model thinks might be WRONG,
+    # not just a fact worth noting. Never counted toward has_blocking.
+    severity: Literal["info", "warning", "blocking", "advisory"] = "warning"
 
 
 @dataclass

@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sanitization Agent — Dataflow &amp; Accuracy Review</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+
+/* ---------- Tokens ---------- */
+:root{
+  --paper: #E9EBE6;
+  --paper-raised: #F3F4F0;
+  --ink: #1A1D1B;
+  --ink-soft: #4B5450;
+  --ink-faint: #7B837E;
+  --rule: #C9CDC4;
+  --accent: #2E6F63;
+  --accent-soft: #DCE7E2;
+  --redact: #17181A;
+  --flag-critical: #B43A2E;
+  --flag-critical-soft: #F2DEDB;
+  --flag-warn: #A9791F;
+  --flag-warn-soft: #F1E7D0;
+  --flag-good: #3E7D52;
+  --flag-good-soft: #DEEAE1;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --serif: "Iowan Old Style", Charter, "Georgia", "Times New Roman", serif;
+}
+
+:root[data-theme="dark"]{
+  --paper: #171A18;
+  --paper-raised: #1F2321;
+  --ink: #E7E9E4;
+  --ink-soft: #A9B0AB;
+  --ink-faint: #74807A;
+  --rule: #333833;
+  --accent: #6FBFAE;
+  --accent-soft: #223330;
+  --redact: #0A0B0A;
+  --flag-critical: #E08579;
+  --flag-critical-soft: #3A2320;
+  --flag-warn: #D9AE5C;
+  --flag-warn-soft: #3A2F18;
+  --flag-good: #7FC495;
+  --flag-good-soft: #1F2E24;
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper: #171A18;
+    --paper-raised: #1F2321;
+    --ink: #E7E9E4;
+    --ink-soft: #A9B0AB;
+    --ink-faint: #74807A;
+    --rule: #333833;
+    --accent: #6FBFAE;
+    --accent-soft: #223330;
+    --redact: #0A0B0A;
+    --flag-critical: #E08579;
+    --flag-critical-soft: #3A2320;
+    --flag-warn: #D9AE5C;
+    --flag-warn-soft: #3A2F18;
+    --flag-good: #7FC495;
+    --flag-good-soft: #1F2E24;
+  }
+}
+
+*{ box-sizing: border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection{ background: var(--accent); color: var(--paper); }
+
+a{ color: var(--accent); }
+a:focus-visible, button:focus-visible, summary:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.page{
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 0 24px 120px;
+}
+
+/* ---------- Masthead ---------- */
+.masthead{
+  padding: 56px 0 32px;
+  border-bottom: 3px solid var(--redact);
+}
+.masthead .kicker{
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.masthead .kicker .bar{
+  width: 22px; height: 10px;
+  background: var(--redact);
+  flex: none;
+}
+h1{
+  font-family: var(--serif);
+  font-size: clamp(30px, 4.4vw, 44px);
+  line-height: 1.12;
+  margin: 0 0 12px;
+  text-wrap: balance;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.masthead .dek{
+  font-size: 17px;
+  color: var(--ink-soft);
+  max-width: 62ch;
+  margin: 0 0 22px;
+}
+.meta-strip{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 32px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+.meta-strip strong{
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+/* ---------- Sections ---------- */
+section{ padding: 44px 0; border-bottom: 1px solid var(--rule); }
+section:last-of-type{ border-bottom: none; }
+
+.eyebrow{
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.eyebrow .n{
+  font-weight: 700;
+  color: var(--ink-faint);
+}
+
+h2{
+  font-family: var(--serif);
+  font-size: 26px;
+  margin: 0 0 16px;
+  font-weight: 600;
+  text-wrap: balance;
+}
+h3{
+  font-family: var(--sans);
+  font-size: 15.5px;
+  font-weight: 700;
+  margin: 28px 0 8px;
+  color: var(--ink);
+}
+p{ max-width: 68ch; margin: 0 0 14px; }
+p.wide{ max-width: none; }
+ul, ol{ max-width: 68ch; padding-left: 22px; margin: 0 0 14px; }
+li{ margin-bottom: 6px; }
+code{
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  padding: 0.05em 0.35em;
+  border-radius: 3px;
+}
+
+/* ---------- TL;DR box ---------- */
+.tldr{
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--redact);
+  padding: 22px 24px;
+  margin: 0 0 8px;
+}
+.tldr .eyebrow{ color: var(--ink-faint); }
+.tldr p{ max-width: none; }
+.tldr p:last-child{ margin-bottom: 0; }
+
+/* ---------- Diagram exhibit ---------- */
+.exhibit{
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  padding: 20px;
+  margin: 18px 0 8px;
+}
+.exhibit-label{
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 12px;
+}
+.diagram-scroll{
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.diagram-scroll .mermaid{
+  min-width: 640px;
+}
+
+/* ---------- Stage cards ---------- */
+.stage-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+.stage-card{
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  padding: 18px 18px 16px;
+}
+.stage-card .stage-head{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.stage-card h4{
+  font-family: var(--sans);
+  font-size: 14.5px;
+  font-weight: 700;
+  margin: 0;
+}
+.stage-card p{ font-size: 14px; color: var(--ink-soft); margin: 0; max-width: none; }
+.stage-card .file-ref{
+  display: block;
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.chip{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.chip.det{ background: var(--accent-soft); color: var(--accent); }
+.chip.llm{ background: var(--flag-warn-soft); color: var(--flag-warn); }
+.chip.hybrid{ background: var(--paper); color: var(--ink-soft); border: 1px solid var(--rule); }
+
+/* ---------- Table ---------- */
+.table-wrap{ overflow-x: auto; margin: 16px 0; }
+table{
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 560px;
+  font-size: 14px;
+}
+th, td{
+  text-align: left;
+  padding: 9px 14px 9px 0;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th{
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+td.num, th.num{ font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td code{ white-space: nowrap; }
+
+/* ---------- Severity pills ---------- */
+.pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 3px 9px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+.pill::before{ content:""; width:7px; height:7px; border-radius:50%; }
+.pill.good{ background: var(--flag-good-soft); color: var(--flag-good); }
+.pill.good::before{ background: var(--flag-good); }
+.pill.warn{ background: var(--flag-warn-soft); color: var(--flag-warn); }
+.pill.warn::before{ background: var(--flag-warn); }
+.pill.critical{ background: var(--flag-critical-soft); color: var(--flag-critical); }
+.pill.critical::before{ background: var(--flag-critical); }
+.pill.unmeasured{ background: var(--paper-raised); color: var(--ink-faint); border: 1px solid var(--rule); }
+.pill.unmeasured::before{ background: var(--ink-faint); }
+
+/* ---------- Limitations list ---------- */
+.limits{ list-style: none; padding: 0; max-width: none; }
+.limits li{
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+  align-items: baseline;
+}
+.limits li:last-child{ border-bottom: none; }
+.limits .status{ padding-top: 2px; }
+.limits .desc{ font-size: 14.5px; color: var(--ink-soft); margin: 0; }
+.limits .desc strong{ color: var(--ink); font-weight: 600; }
+
+/* ---------- Recommendation list ---------- */
+.recs{ display: flex; flex-direction: column; gap: 10px; margin: 18px 0; }
+.rec{
+  display: grid;
+  grid-template-columns: 128px 1fr;
+  gap: 18px;
+  padding: 16px 18px;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--accent);
+}
+.rec.tier-quick{ border-left-color: var(--flag-good); }
+.rec.tier-mid{ border-left-color: var(--flag-warn); }
+.rec.tier-big{ border-left-color: var(--accent); }
+.rec .tier{
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  padding-top: 2px;
+}
+.rec h4{ margin: 0 0 4px; font-size: 15px; font-family: var(--sans); font-weight: 700; }
+.rec p{ margin: 0; font-size: 14px; color: var(--ink-soft); max-width: none; }
+.rec .rec-file{ font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); display: block; margin-top: 6px; }
+
+/* ---------- Mismatch callout ---------- */
+.callout{
+  background: var(--flag-warn-soft);
+  border: 1px solid var(--rule);
+  padding: 16px 18px;
+  margin: 16px 0;
+  font-size: 14.5px;
+}
+.callout p{ max-width: none; margin: 0 0 8px; color: var(--ink); }
+.callout p:last-child{ margin-bottom: 0; }
+.callout strong{ font-weight: 700; }
+
+footer{
+  padding: 40px 0 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+/* Mermaid theme wiring */
+.mermaid{ font-family: var(--sans) !important; }
+
+@media (prefers-reduced-motion: reduce){
+  *{ animation: none !important; transition: none !important; }
+}
+
+@media (max-width: 560px){
+  .rec, .limits li{ grid-template-columns: 1fr; gap: 6px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <div class="kicker"><span class="bar"></span>NAVIKNOW · INTERNAL ARCHITECTURE REVIEW</div>
+    <h1>How the sanitization agent actually redacts a document</h1>
+    <p class="dek">A traced walkthrough of the detect → review → apply → verify pipeline that removes client-identifying content from PPTX, DOCX, XLSX and PDF files — what each stage really does, where confidence numbers come from, and what would move accuracy the furthest.</p>
+    <div class="meta-strip">
+      <span><strong>Repo</strong> Naviknow</span>
+      <span><strong>Traced against</strong> commit 176bab9</span>
+      <span><strong>Entry point</strong> <code>app/agents/sanitization/agent.py</code></span>
+      <span><strong>Model</strong> read directly from source, not from prior docs</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="tldr">
+      <div class="eyebrow">In short</div>
+      <p><strong>It is not one AI agent deciding everything.</strong> It's a deterministic pipeline — extract, detect, mask, render, verify — where an LLM (Bedrock Claude) is called at exactly four bounded points: to classify candidate entities, to judge images, to summarize masked text, and to classify tags. Every mask is applied by plain code, never by the model. Every render is re-scanned by five independent, code-based verification checks before a run is allowed to be marked "complete." There is currently <strong>no measured precision/recall</strong> anywhere in the system — the 0.6 confidence gate is an acknowledged, untuned default — but the five-channel re-verification plus a 43-case regression suite is what actually stands in for accuracy today.</p>
+    </div>
+  </section>
+
+  <section id="dataflow">
+    <div class="eyebrow"><span class="n">01</span> Dataflow</div>
+    <h2>Two phases, one human gate in between</h2>
+    <p>A document only ever moves through <code>detect()</code> and, after a reviewer approves the proposal (or the run is configured to auto-apply), <code>apply()</code>. Nothing is written to the actual file until a human — or an explicit no-review policy — has signed off on the entity list.</p>
+
+    <div class="exhibit">
+      <p class="exhibit-label">Exhibit A — full run, detect through verify</p>
+      <div class="diagram-scroll">
+<pre class="mermaid">
+flowchart TB
+    DOC["Uploaded document<br/><span style='font-family:monospace;font-size:11px'>pptx · docx · xlsx · pdf</span>"] --> EXTRACT["extract_chunks()<br/>structural text extraction"]
+
+    subgraph DETECT["DETECT() — proposes only, never mutates the file"]
+        direction TB
+        EXTRACT --> PREPASS["Regex + Presidio NER pre-pass<br/>emails, phones, account IDs, PERSON/ORG"]
+        PREPASS --> DICT["Dictionary pass<br/>known-entity lookup + full-text sweep"]
+        DICT --> LLMDET["LLM Detector (Bedrock, tool-use loop)<br/>reads chunks via fs_read_document tool"]
+        LLMDET --> MERGE["Merge + dedupe by normalized surface"]
+        DOCIMG["Document images"] --> IMGSCAN["Image scan: vision judgment + OCR + logo phash"]
+        IMGSCAN --> MERGE
+        MERGE --> THRESH{"confidence ≥ 0.6 ?"}
+        THRESH -- yes --> ENTITIES["entities (proposed for masking)"]
+        THRESH -- no --> EXCLUDED["excluded_entities<br/>(reviewer can opt in)"]
+    end
+
+    ENTITIES --> REVIEW{{"Human review"}}
+    EXCLUDED -.optional opt-in.-> REVIEW
+
+    subgraph APPLY["APPLY() — deterministic, code-driven"]
+        direction TB
+        REVIEW --> RESOLVE["Resolve reviewer edits<br/>approve dictionary entries"]
+        RESOLVE --> MASKTXT["apply_masks() — mask chunk text"]
+        MASKTXT --> SUMM["LLM summarizer over MASKED text<br/>-> tagging metadata"]
+        SUMM --> RENDER["render_masked_document()<br/>per-format: docx / pptx / xlsx / pdf"]
+        RENDER --> IMGRED["redact_images()"]
+        IMGRED --> SCRUB["scrub metadata + hyperlinks + comments"]
+    end
+
+    SCRUB --> VERIFY["5-channel verification<br/>(re-extracted from the rendered file)"]
+    VERIFY --> V1["text"]
+    VERIFY --> V2["images"]
+    VERIFY --> V3["metadata"]
+    VERIFY --> V4["comments"]
+    VERIFY --> V5["hyperlinks"]
+
+    V1 & V2 & V3 & V4 & V5 --> GATE{"all 5 clean?"}
+    GATE -- yes --> DONE(["status: completed"])
+    GATE -- no --> ISSUES(["status: completed_with_issues<br/>blocking flag raised"])
+    ISSUES -.-> REMEDIATE["remediate() — targeted repair<br/>re-scrub + re-redact flagged images<br/>re-verify all 5 channels"]
+    REMEDIATE -.clean.-> DONE
+
+    DONE --> TAG["auto-chain: Tagging agent<br/>classifies MASKED summary against vocabulary"]
+</pre>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--ink-faint);margin-top:10px">Traced from <code>agent.py</code> (detect: lines 69–360, apply: 362–666), <code>image_scan.py</code>, <code>remediate.py</code>, and <code>runs/background.py</code>'s auto-chain hook.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="n">02</span> Detection signals</div>
+    <h2>Four independent ways an entity gets flagged</h2>
+    <p>No single detector is trusted alone. Regex and the dictionary sweep exist specifically because the LLM detector is not reliable enough to be the only signal — the dictionary's full-text sweep was added after a real run in which a weaker model proposed 3 entities against a prior run's 11, silently missing 6 already-approved client names.</p>
+
+    <div class="stage-grid">
+      <div class="stage-card">
+        <div class="stage-head"><h4>Regex / pattern</h4><span class="chip det">deterministic</span></div>
+        <p>Emails, phone numbers, URLs, account/contract-ID shaped strings. Public domains (gmail.com etc.) excluded. Hit or no-hit — no confidence score, because none is needed.</p>
+        <span class="file-ref">ner_prepass.py</span>
+      </div>
+      <div class="stage-card">
+        <div class="stage-head"><h4>Presidio NER</h4><span class="chip det">deterministic, optional</span></div>
+        <p>PERSON / LOCATION / ORG entity spans, mapped onto the client-entity taxonomy. Degrades gracefully to regex + LLM only if Presidio isn't installed.</p>
+        <span class="file-ref">ner_prepass.py</span>
+      </div>
+      <div class="stage-card">
+        <div class="stage-head"><h4>Approved dictionary</h4><span class="chip det">deterministic, confidence 1.0</span></div>
+        <p>Exact/alias lookup <em>plus</em> an independent full-text sweep for every previously-approved entity — a deliberate safety net against the LLM under-proposing.</p>
+        <span class="file-ref">masking/dictionary.py</span>
+      </div>
+      <div class="stage-card">
+        <div class="stage-head"><h4>LLM Detector</h4><span class="chip llm">Bedrock, self-reported confidence</span></div>
+        <p>A bounded tool-use loop that pages through document chunks via one in-process tool call and classifies new candidates against 6 entity types.</p>
+        <span class="file-ref">detector.py</span>
+      </div>
+    </div>
+
+    <h3>Image detection is its own three-signal vote</h3>
+    <p>Each image is judged by a vision model call, transcribed by OCR (run through the same deterministic detectors as body text), and hashed against a perceptual-hash table of previously-confirmed logos. A confident OCR or logo match <strong>overrides</strong> the vision model's own stated judgment and floors confidence at 0.95 — because the model's free-text description has repeatedly been observed disagreeing with its own structured answer. An own-firm logo/name match forces exclusion regardless of what the model claims.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="n">03</span> Where the LLM actually gets called</div>
+    <h2>Four calls, one client module, JSON-schema constrained every time</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Stage</th><th>Call</th><th>Input</th><th>Output contract</th></tr></thead>
+        <tbody>
+          <tr><td>Entity detection</td><td><code>detector.detect_entities()</code></td><td>Candidate list + tool access to raw chunks</td><td>Entity type + surface + confidence (JSON)</td></tr>
+          <tr><td>Image judgment</td><td><code>image_scan._scan_one_group()</code></td><td>Single image</td><td>contains_client_identity, OCR text, confidence</td></tr>
+          <tr><td>Summarization</td><td><code>summarizer.summarize()</code></td><td><strong>Already-masked</strong> text</td><td>Sanitized summary + tag hints</td></tr>
+          <tr><td>Tag classification</td><td><code>classifier.classify()</code></td><td>Masked summary/metadata</td><td>Tag(s) against controlled vocabulary</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>All four route through one module, <code>llm/bedrock_client.py</code>, against a configurable <code>BEDROCK_MODEL_ID</code> (Claude 3.5 Sonnet by default; production runs have also validated Haiku end-to-end at roughly $0.058 for a 57-image deck across both agents — deterministic guardrails are what make the cheaper model viable despite weaker structured-output reliability). The client has a specific repair path for a Haiku failure mode where the model echoes the JSON schema back as one object and appends the real answer as a second.</p>
+    <p><strong>The model never masks anything itself.</strong> Masking, dictionary writes, and filing a document for review all live in plain agent code, never exposed to the model as a callable tool.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="n">04</span> Masking mechanics</div>
+    <h2>Redaction is code, not a model decision</h2>
+    <p>Every detected span is resolved through one shared primitive (<code>masking/spans.py</code>) — longest-match-first, word-boundary matched, whitespace-tolerant across line-wrapped text — used identically by chunk-text masking, native-format rendering, and PPTX chart/SmartArt masking. This replaced three previously-independent implementations that only agreed by convention.</p>
+    <ul>
+      <li><strong>Run-boundary aware:</strong> a match spanning multiple text runs only clears the runs it touches, preserving formatting on everything around it — replacing an earlier approach that collapsed a whole match into a single run and broke styling.</li>
+      <li><strong>PPTX-specific:</strong> shapes (including nested/grouped), tables, chart XML cache <em>and</em> its embedded worksheet, SmartArt diagram text, OLE-embedded documents (re-rendered recursively through the same per-format pipeline), speaker notes, and layout/master text.</li>
+      <li><strong>XLSX-specific:</strong> text and image redaction happen in a single load-mutate-save pass, because openpyxl renumbers every image's internal name on save — doing it in two passes would silently break the second one.</li>
+      <li><strong>PDF-specific:</strong> word-level matching (not substring/context-padding), so line-wrapped names and adjacent table-cell text don't produce false matches or misses.</li>
+      <li><strong>Three replacement styles:</strong> <code>token</code> (<code>[CLIENT_1]</code>-style, traceable), <code>black</code> (solid block), <code>remove</code> — reviewer-selectable.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="n">05</span> Verification</div>
+    <h2>The system never trusts its own render</h2>
+    <p>After rendering, the output file is re-extracted from scratch and checked across five independent channels — none of them assume the render step succeeded just because it didn't throw:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Channel</th><th>What it re-checks</th><th>On failure</th></tr></thead>
+        <tbody>
+          <tr><td>Text</td><td>Any masked surface string still present, word-boundary matched</td><td rowspan="5"><span class="pill critical">blocking flag</span> → run status <code>completed_with_issues</code>, never silently <code>completed</code></td></tr>
+          <tr><td>Images</td><td>Full re-scan of the rendered file's images</td></tr>
+          <tr><td>Metadata</td><td>docProps / PDF Info / XMP residue</td></tr>
+          <tr><td>Comments</td><td>Legacy + modern/threaded comments, tracked deletions</td></tr>
+          <tr><td>Hyperlinks</td><td>Link targets, not just display text</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>A run that fails re-verification gets one targeted repair pass (<code>remediate.py</code>) — re-scrub, re-redact exactly the flagged images, re-verify — and only then is allowed to flip to <code>completed</code> and auto-chain into the Tagging agent. There is one known asymmetry here worth flagging: remediation clears resolved flags retroactively; the normal <code>apply()</code> path does not appear to, so a run that later verifies clean through a second full pass can still show its original blocking flag in the record.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="n">06</span> Accuracy — what's real and what's assumed</div>
+    <h2>There is no measured precision or recall in this system today</h2>
+    <p>A full search of the codebase turns up no F1, precision, recall, or accuracy figures computed against a labeled dataset. What exists instead:</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Number</th><th>Value</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Sanitization confidence gate</td><td class="num"><code>0.6</code></td><td><span class="pill unmeasured">unmeasured default</span></td></tr>
+          <tr><td>Tag confidence gate</td><td class="num"><code>0.7</code></td><td><span class="pill unmeasured">unmeasured default</span></td></tr>
+          <tr><td>Logo phash — confident match</td><td class="num">Hamming ≤ 4</td><td><span class="pill unmeasured">engineering heuristic</span></td></tr>
+          <tr><td>Logo phash — needs human judgment</td><td class="num">Hamming 4–10</td><td><span class="pill unmeasured">engineering heuristic</span></td></tr>
+          <tr><td>Min OCR entity length</td><td class="num">4 chars</td><td><span class="pill unmeasured">collision-avoidance cutoff</span></td></tr>
+          <tr><td>Regression suite</td><td class="num">43 checks</td><td><span class="pill good">passing, deterministic, no Bedrock calls</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>In plain terms: nobody has yet run this against a labeled corpus of "here are all the client names that should be caught" and measured what fraction it actually catches. The 0.6 threshold is explicitly documented as a guess that needs real reviewed-run data to tune. What substitutes for that today is structural, not statistical — the five-channel re-verification, the deterministic dictionary safety net, and the 43-case regression suite that plants known leaks (including deliberately adversarial ones like the word-boundary trap "RIA" inside "MATERIAL") and asserts they're caught pre-render and gone post-render.</p>
+
+    <p>That's a meaningfully different kind of guarantee than a precision/recall number: it tells you the pipeline <em>catches every leak type it has been told to plant</em> and <em>never silently ships a residual on a rendered file</em>, but it doesn't tell you the true miss rate on unseen documents — a novel client-name format or an image logo with no OCR text and no phash match in the reference table could still slip through undetected on the first occurrence.</p>
+
+    <h3>If you want an actual accuracy number</h3>
+    <p>You'd need three things this system doesn't have yet: a held-out set of real (or realistic synthetic) decks with every sensitive span hand-labeled, a scoring script that diffs the agent's proposed entity list against that ground truth, and enough reviewed production runs to see how often reviewers add entities the model missed versus remove ones it over-flagged — that reviewer-edit delta is actually already captured in <code>apply()</code> and is the cheapest source of real precision/recall data sitting unused today.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="n">07</span> Known gaps</div>
+    <h2>What's explicitly acknowledged in the code</h2>
+    <ul class="limits">
+      <li>
+        <span class="status"><span class="pill critical">open</span></span>
+        <p class="desc"><strong>Excel threaded comments</strong> are not scanned or scrubbed — a deliberate, documented gap, not an oversight.</p>
+      </li>
+      <li>
+        <span class="status"><span class="pill warn">open</span></span>
+        <p class="desc"><strong>Stale blocking flags</strong> from the detect phase can linger on a run that later verifies fully clean, reading as "still unsafe" to anyone scanning the flag list.</p>
+      </li>
+      <li>
+        <span class="status"><span class="pill warn">open</span></span>
+        <p class="desc"><strong>Text-channel residuals can't be patched</strong> by remediation — text masking only happens during a full render from the original file, so a text-verification failure forces a complete re-run, not a targeted fix.</p>
+      </li>
+      <li>
+        <span class="status"><span class="pill warn">open</span></span>
+        <p class="desc"><strong>Vision-model non-determinism</strong>: the same image can get a different judgment at detect time vs. verify time. Perceptual-hash dedup mitigates this but doesn't eliminate it.</p>
+      </li>
+      <li>
+        <span class="status"><span class="pill good">resolved</span></span>
+        <p class="desc">Chart / SmartArt / OLE text was a blind spot as of the optimization plan; the last commit closed it end-to-end (extraction, masking, and verification all cover it now).</p>
+      </li>
+      <li>
+        <span class="status"><span class="pill good">resolved</span></span>
+        <p class="desc">Run-boundary-aware masking replaced an earlier approach that collapsed matches into a single text run and visibly broke formatting.</p>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="n">08</span> Where to spend effort next</div>
+    <h2>Optimization recommendations, roughly ordered by effort</h2>
+    <div class="recs">
+      <div class="rec tier-quick">
+        <div class="tier">Quick win</div>
+        <div>
+          <h4>Turn on prompt caching for the detector</h4>
+          <p>The Bedrock client already supports a <code>cachePoint</code> after the system prompt, but the detector's call site never passes <code>cache_system_prompt=True</code>. This is unused plumbing — flipping it on is close to free and should cut detector cost/latency on any multi-chunk document.</p>
+          <span class="rec-file">detector.py · bedrock_client.py</span>
+        </div>
+      </div>
+      <div class="rec tier-quick">
+        <div class="tier">Quick win</div>
+        <div>
+          <h4>Clear stale blocking flags after a clean remediation-free re-verify</h4>
+          <p><code>remediate.py</code> already has flag-clearing logic — the normal <code>apply()</code> path doesn't reuse it. Sharing that logic removes a real source of reviewer confusion (a flag list that reads "unsafe" on a file that's actually clean).</p>
+          <span class="rec-file">agent.py · remediate.py</span>
+        </div>
+      </div>
+      <div class="rec tier-mid">
+        <div class="tier">Medium effort</div>
+        <div>
+          <h4>Capture reviewer-edit deltas as a running accuracy signal</h4>
+          <p>Every time a reviewer adds a missed entity or removes an over-flagged one in <code>apply()</code>, that's a labeled data point already sitting in the system. Logging it into a running precision/recall estimate turns the 0.6 threshold from a guess into something you can actually tune against real usage.</p>
+        </div>
+      </div>
+      <div class="rec tier-mid">
+        <div class="tier">Medium effort</div>
+        <div>
+          <h4>Close the Excel threaded-comments gap</h4>
+          <p>Same relationship-graph technique already used for modern PowerPoint comments should transfer directly — it's a known, bounded gap rather than an open-ended one.</p>
+          <span class="rec-file">comment_scan.py · comment_scrub.py</span>
+        </div>
+      </div>
+      <div class="rec tier-big">
+        <div class="tier">Structural</div>
+        <div>
+          <h4>Build a small labeled eval set</h4>
+          <p>10–20 real or realistic decks with every client name, logo, and identifier hand-annotated, scored automatically against the detector's output. This is the only way to get an actual precision/recall number instead of a regression suite that only proves "known leak types are still caught" — it won't tell you about a leak shape nobody has thought to plant yet.</p>
+        </div>
+      </div>
+      <div class="rec tier-big">
+        <div class="tier">Structural</div>
+        <div>
+          <h4>Index the logo reference table before it grows past low hundreds</h4>
+          <p>Perceptual-hash matching is currently a full linear scan per image group. Fine at current scale; worth an LSH-style index before the reference table (which grows automatically on every approved redaction) becomes the bottleneck.</p>
+          <span class="rec-file">logo_reference.py</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow"><span class="n">09</span> A note on the older design docs</div>
+    <h2><code>sanitization_agent_design.html</code> describes a different system than the one running today</h2>
+    <div class="callout">
+      <p><strong>Stale:</strong> the design doc describes a real MCP server subprocess exposing tools over JSON-RPC, and a third LLM sub-agent ("Reconciler") for alias resolution. Neither exists in current code — the detector's one tool is a plain in-process Python function, and dedupe/alias resolution is handled entirely in deterministic merge code with no LLM tie-breaker.</p>
+      <p><strong>Also stale:</strong> XLSX is listed there as "deferred, designed separately." It's fully supported today, including sheet-name masking, cell values, and xlsx-specific comment/hyperlink/metadata handling.</p>
+      <p><strong>Still accurate:</strong> the core principle that masking is code, never a model decision, and the entity-type taxonomy — both held up unchanged from design to current implementation.</p>
+    </div>
+    <p><code>PPTX_Sanitization_Optimization_Plan.md</code> and <code>SANITIZATION_AGENT_REPORT.html</code> are the two documents that actually match current code — the optimization plan's entire P0/P1 list (charts, SmartArt, OLE, modern comments, run-boundary masking, unified span logic) is now shipped per the latest commit.</p>
+  </section>
+
+  <footer>
+    Compiled by tracing <code>backend/app/agents/sanitization/</code>, <code>backend/app/masking/</code>, and <code>backend/app/documents/</code> against commit 176bab9. Every claim above is grounded in source, not in the prior design docs.
+  </footer>
+
+</div>
+
+<script>
+  const isDark = () => {
+    const t = document.documentElement.getAttribute('data-theme');
+    if (t === 'dark') return true;
+    if (t === 'light') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  };
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    securityLevel: 'loose',
+    themeVariables: isDark() ? {
+      background: '#1F2321',
+      primaryColor: '#223330',
+      primaryTextColor: '#E7E9E4',
+      primaryBorderColor: '#6FBFAE',
+      lineColor: '#74807A',
+      secondaryColor: '#1F2321',
+      tertiaryColor: '#171A18',
+      fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif',
+      fontSize: '13px'
+    } : {
+      background: '#F3F4F0',
+      primaryColor: '#DCE7E2',
+      primaryTextColor: '#1A1D1B',
+      primaryBorderColor: '#2E6F63',
+      lineColor: '#7B837E',
+      secondaryColor: '#F3F4F0',
+      tertiaryColor: '#E9EBE6',
+      fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif',
+      fontSize: '13px'
+    }
+  });
+</script>
+</body>
+</html>

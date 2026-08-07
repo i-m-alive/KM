@@ -12,13 +12,20 @@ verification flags said is still dirty:
   swap (docx/pptx/xlsx) or per-page redaction rects (PDF) - the document
   "reassembles" itself because everything else in the file is untouched.
 - Metadata / comment / hyperlink residuals are re-scrubbed (idempotent).
+- Text residuals get ONE additional attempt: the same renderer used for a
+  full run, pointed at the MASKED file itself instead of the original, with
+  the run's full surface_to_token map. This is safe because it's idempotent -
+  content already masked is now a token, not the original surface, so no
+  pattern matches it - and it only actually changes anything if a literal
+  occurrence really did survive (e.g. a shape/part type an earlier renderer
+  version didn't reach). If a residual still survives even that, a full
+  re-run against the original document is still required - some causes (the
+  original render itself throwing, or a fundamentally different document)
+  can't be fixed by reprocessing the already-broken output.
 - Every channel is then re-verified: the deterministic channels from scratch,
   and images by confirming that none of the targeted images' original bytes
   survive anywhere in the re-extracted file (works uniformly: the OOXML swap
   replaces the bytes, PDF redaction removes the image entirely).
-
-Text residuals can NOT be fixed here - text masking happens during rendering
-from the original, so a text-channel failure still requires a full re-run.
 """
 
 import hashlib
@@ -36,6 +43,7 @@ from app.documents.image_redact import is_placeholder_bytes, redact_images
 from app.documents.images import extract_images
 from app.documents.metadata_scan import find_residual_metadata
 from app.documents.metadata_scrub import scrub_metadata
+from app.documents.render import render_masked_document
 from app.documents.verify import find_residual_surfaces
 from app.models import AgentRun, MaskingEntity, MaskingOccurrence, RunFlag, RunStep, UploadedDocument
 
@@ -106,6 +114,32 @@ async def remediate_run(db: Session, run: AgentRun) -> dict:
             f"{meta_fixed} metadata propert(ies), {links_fixed} hyperlink target(s), {comments_fixed} comment fragment(s) rewritten",
         ))
 
+    # --- 1.5. text: ONE additional attempt before giving up. Point the SAME
+    # renderer used everywhere else at the MASKED file itself (not the
+    # original) with the run's full surface_to_token map. This is safe and
+    # idempotent: content the original render already masked is now a token
+    # like [CLIENT_3], not the original surface string, so no pattern matches
+    # it and it's left untouched; a surviving LITERAL occurrence - the actual
+    # residual, e.g. a shape/part type an earlier renderer version didn't
+    # reach - gets masked this time, using the exact same masking primitive
+    # (spans.py) as a full run. Written to a fresh path first and swapped in
+    # atomically, since masked_path is also this call's own source.
+    text_residual_before = find_residual_surfaces(masked_path, content_type, filename, surfaces)
+    text_remediated = False
+    if text_residual_before:
+        try:
+            tmp_dst, _ = render_masked_document(
+                f"{run.id}-remediate-text", masked_path, content_type, filename, surface_to_token, style=masking_style,
+            )
+            os.replace(tmp_dst, masked_path)
+            text_remediated = True
+            steps.append((
+                "remediate: re-mask text from rendered file",
+                f"{len(text_residual_before)} residual surface occurrence(s) targeted: {', '.join(text_residual_before[:5])}",
+            ))
+        except Exception as exc:
+            steps.append(("remediate: text re-mask attempt failed", f"could not re-render from the masked file: {exc}"))
+
     # --- 2. images: resolve exactly what the last verification flagged
     all_refs = extract_images(masked_path, content_type, filename)
     by_index = {r.index: r for r in all_refs}
@@ -130,7 +164,7 @@ async def remediate_run(db: Session, run: AgentRun) -> dict:
         # masked output (deduped + placeholder-aware), then redact whatever
         # it still flags.
         residual_groups, _, scan_in, scan_out, scan_cost = await find_residual_image_groups(
-            masked_path, content_type, filename, db
+            masked_path, content_type, filename, db, run_id=run.id
         )
         target_refs = [by_index[i] for g in residual_groups for i in g.all_indices if i in by_index]
         scope_detail = f"no stored residual data on this run - re-scanned the masked file and found {len(residual_groups)} flagged group(s)"
@@ -189,10 +223,18 @@ async def remediate_run(db: Session, run: AgentRun) -> dict:
         ("comments", residual_comments), ("hyperlinks", residual_hyperlinks),
     ):
         if residual:
+            if ch == "text":
+                text_note = (
+                    "Attempted an in-place re-mask from the rendered file, but the residual persisted - "
+                    "re-run Sanitization on the original document."
+                    if text_remediated else
+                    "Could not attempt an in-place re-mask - re-run Sanitization on the original document."
+                )
+            else:
+                text_note = "Do not distribute this file as-is."
             new_flags.append((
                 "blocking",
-                f"Verification failed ({ch}) after remediation: {len(residual)} item(s) - {', '.join(residual[:5])}. "
-                + ("A text residual cannot be fixed in place - re-run Sanitization on the original document." if ch == "text" else "Do not distribute this file as-is."),
+                f"Verification failed ({ch}) after remediation: {len(residual)} item(s) - {', '.join(residual[:5])}. {text_note}",
             ))
     if not verified["images"]:
         detail = f"{len(surviving)} targeted image(s) still present ({', '.join(surviving[:5])})" if surviving else f"{images_unlocated} image(s) could not be located on the page"

@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NaviKnow — SharePoint Cleanup Agent (A-03) — Master Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14203B; --ink-soft:#3C4A66; --muted:#697692;
+    --paper:#EBEEF4; --paper-2:#E2E7F0; --panel:#FFFFFF; --line:#D2D9E6;
+    --navy:#0D3C6E; --navy-deep:#0A2C52;
+    --signal:#2D6FE0; --signal-bg:#E6EFFB;
+    --brass:#A9791F; --brass-soft:#C79B45; --brass-bg:#FBF2E0; --brass-line:#E1BE82;
+    --skill:#1F7A66; --skill-bg:#E2F2ED; --skill-line:#9FCFC0;
+    --ready:#1E7A46; --ready-bg:#E4F2E9; --ready-line:#A9D6BC;
+    --mock:#B06A12; --mock-bg:#F7ECDC; --mock-line:#E1BE82;
+    --danger:#A83232; --danger-bg:#F8E8E8; --danger-line:#E3AFAF;
+    --archive:#5B4B8A; --archive-bg:#ECE7F5; --archive-line:#C7B9E3;
+    --radius:14px; --maxw:1220px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto;} *{animation:none!important;transition:none!important;}}
+  body{margin:0;background:radial-gradient(120% 60% at 100% 0%, #F3F6FB 0%, var(--paper) 55%) fixed;color:var(--ink);font-family:"Inter",system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+  a{color:var(--signal);text-decoration:none;} a:hover{text-decoration:underline;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;}
+  code.inline{font-family:"IBM Plex Mono";background:var(--paper-2);padding:1px 6px;border-radius:5px;font-size:.86em;}
+
+  .mast{background:linear-gradient(155deg,var(--navy-deep) 0%, var(--navy) 62%, #124d8a 100%);color:#EAF1FB;border-bottom:3px solid var(--brass-line);position:relative;overflow:hidden;}
+  .mast::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:34px 34px;mask:linear-gradient(180deg,#000,transparent 85%);-webkit-mask:linear-gradient(180deg,#000,transparent 85%);pointer-events:none;}
+  .mast .wrap{position:relative;z-index:1;padding-top:50px;padding-bottom:50px;}
+  .kicker{font-family:"IBM Plex Mono",monospace;font-size:12.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--brass-line);margin:0 0 18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+  .kicker .dot{width:6px;height:6px;background:var(--brass-line);border-radius:50%;display:inline-block;}
+  h1.title{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:clamp(1.9rem,4.4vw,3rem);line-height:1.08;margin:0;letter-spacing:-.02em;}
+  h1.title span{color:var(--brass-line);}
+  .lede{max-width:76ch;margin:20px 0 0;font-size:1.05rem;color:#CFDCED;}
+  .mast-meta{margin-top:24px;display:flex;flex-wrap:wrap;gap:10px 26px;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:#A9C0DC;}
+  .mast-meta b{color:#EAF1FB;font-weight:500;}
+
+  nav.toc{position:sticky;top:0;z-index:20;background:rgba(235,238,244,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);}
+  nav.toc .wrap{display:flex;gap:4px;flex-wrap:wrap;padding-top:10px;padding-bottom:10px;align-items:center;}
+  nav.toc a{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.01em;color:var(--ink-soft);padding:6px 8px;border-radius:8px;text-decoration:none;white-space:nowrap;}
+  nav.toc a:hover{background:var(--paper-2);color:var(--navy);}
+  nav.toc .brandmark{font-family:"Space Grotesk";font-weight:700;color:var(--navy);margin-right:auto;letter-spacing:-.01em;font-size:14px;}
+
+  section{padding:56px 0 8px;}
+  .sec-head{display:flex;align-items:baseline;gap:18px;margin-bottom:8px;}
+  .num{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:14px;color:var(--brass);border:1px solid var(--brass);border-radius:7px;padding:3px 9px;flex:none;background:#fff;}
+  h2{font-family:"Space Grotesk",sans-serif;font-weight:600;letter-spacing:-.015em;font-size:clamp(1.35rem,2.6vw,1.9rem);margin:0;line-height:1.1;color:var(--ink);text-wrap:balance;}
+  h3{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:1.08rem;color:var(--navy);margin:22px 0 8px;}
+  .sec-sub{color:var(--muted);margin:14px 0 26px;max-width:84ch;font-size:.99rem;}
+  p{margin:0 0 14px;}
+  ul.plain{margin:0 0 14px;padding-left:20px;color:var(--ink-soft);font-size:.94rem;}
+  ul.plain li{margin-bottom:6px;}
+
+  .board-legend{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0 18px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;}
+  .lg{display:flex;align-items:center;gap:7px;color:var(--ink-soft);}
+  .sw{width:12px;height:12px;border-radius:4px;border:1px solid;flex:none;}
+  .sw.tool{background:var(--signal-bg);border-color:var(--signal);}
+  .sw.prot{background:var(--brass-bg);border-color:var(--brass-line);}
+  .sw.skill{background:var(--skill-bg);border-color:var(--skill-line);}
+  .sw.arch{background:var(--archive-bg);border-color:var(--archive-line);}
+
+  table.board{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:.86rem;margin-bottom:20px;}
+  table.board th,table.board td{padding:11px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;}
+  table.board thead th{background:var(--navy);color:#EAF1FB;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:500;}
+  table.board tbody tr:last-child td{border-bottom:none;}
+  table.board td.anm{font-family:"Space Grotesk";font-weight:600;color:var(--navy);white-space:nowrap;}
+  table.board td.small{color:var(--ink-soft);}
+  table.board td.center{text-align:center;}
+  .wrap-x{overflow-x:auto;}
+
+  .pillrow{display:flex;flex-wrap:wrap;gap:5px;}
+  .pill{font-family:"IBM Plex Mono",monospace;font-size:10.8px;padding:3px 8px;border-radius:6px;border:1px solid;white-space:nowrap;}
+  .pill.tool{color:#1a4fa3;background:var(--signal-bg);border-color:#B7CDF2;}
+  .pill.prot{color:#8A5A10;background:var(--brass-bg);border-color:var(--brass-line);}
+  .pill.skill{color:var(--skill);background:var(--skill-bg);border-color:var(--skill-line);}
+  .pill.cat{color:var(--navy);background:#E6EFFB;border-color:#B7CDF2;}
+  .pill.no{color:var(--danger);background:var(--danger-bg);border-color:var(--danger-line);}
+  .pill.keep{color:var(--ready);background:var(--ready-bg);border-color:var(--ready-line);}
+  .pill.arch{color:var(--archive);background:var(--archive-bg);border-color:var(--archive-line);}
+
+  .callout{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--skill);border-radius:12px;padding:18px 20px;margin:20px 0;}
+  .callout.blue{border-left-color:var(--signal);}
+  .callout.danger{border-left-color:var(--danger);}
+  .callout.green{border-left-color:var(--ready);}
+  .callout.brass{border-left-color:var(--brass);}
+  .callout.arch{border-left-color:var(--archive);}
+  .callout .ctitle{font-family:"Space Grotesk";font-weight:600;color:var(--navy);margin:0 0 6px;font-size:1.01rem;}
+  .callout p{margin:0;color:var(--ink-soft);font-size:.93rem;}
+  .callout p+p{margin-top:8px;}
+
+  .timeline{display:flex;flex-direction:column;gap:0;margin-top:6px;}
+  .tstep{display:grid;grid-template-columns:44px 1fr;gap:14px;position:relative;padding-bottom:4px;}
+  .tstep:not(:last-child)::before{content:"";position:absolute;left:21px;top:44px;bottom:-4px;width:2px;background:var(--line);}
+  .tnode .circle{width:32px;height:32px;border-radius:50%;background:var(--navy);color:#fff;font-family:"Space Grotesk";font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none;z-index:1;}
+  .tstep.milestone .tnode .circle{background:var(--skill);}
+  .tstep.human .tnode .circle{background:var(--brass);}
+  .tstep.danger .tnode .circle{background:var(--danger);}
+  .tstep.archive .tnode .circle{background:var(--archive);}
+  .tcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:.88rem;}
+  .tcard b{font-family:"Space Grotesk";color:var(--navy);}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:6px 0 20px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin:6px 0 20px;}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;}
+  .box h4{font-family:"Space Grotesk";margin:0 0 8px;color:var(--navy);font-size:1rem;}
+  .box .tag{font-family:"IBM Plex Mono";font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--skill);display:block;margin-bottom:6px;}
+  .box.against{border-left:4px solid var(--danger);}
+  .box.for{border-left:4px solid var(--ready);}
+  .box.warn{border-left:4px solid var(--brass);}
+  .box.arch{border-left:4px solid var(--archive);}
+  .box p{font-size:.9rem;color:var(--ink-soft);margin:0;}
+  @media(max-width:820px){ .grid2{grid-template-columns:1fr;} .grid3{grid-template-columns:1fr;} }
+
+  .states{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 20px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;}
+  .state{padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink-soft);}
+  .state.run{background:var(--signal-bg);border-color:#B7CDF2;color:#1a4fa3;}
+  .state.pause{background:var(--brass-bg);border-color:var(--brass-line);color:#8A5A10;}
+  .state.done{background:var(--ready-bg);border-color:var(--ready-line);color:var(--ready);}
+  .state.bad{background:var(--danger-bg);border-color:var(--danger-line);color:var(--danger);}
+  .arrow{color:var(--muted);}
+
+  .filetree{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-family:"IBM Plex Mono",monospace;font-size:.82rem;color:var(--ink-soft);overflow-x:auto;line-height:1.7;}
+  .filetree .new{color:var(--ready);font-weight:600;}
+  .filetree .shared{color:var(--signal);font-weight:600;}
+  .filetree .comment{color:var(--muted);}
+
+  .phase{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:14px;}
+  .phase .phead{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .phase .pnum{font-family:"IBM Plex Mono";font-weight:700;color:#fff;background:var(--navy);border-radius:7px;padding:2px 9px;font-size:12px;}
+  .phase h4{font-family:"Space Grotesk";margin:0;color:var(--navy);font-size:1.02rem;}
+  .phase p{font-size:.9rem;color:var(--ink-soft);margin:0;}
+  .phase .gate{display:inline-block;margin-top:8px;font-family:"IBM Plex Mono";font-size:10.5px;padding:3px 8px;border-radius:6px;background:var(--brass-bg);border:1px solid var(--brass-line);color:#8A5A10;}
+
+  .checklist{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:16px;overflow:hidden;}
+  .checklist .chead{font-family:"Space Grotesk";font-weight:600;color:#fff;background:var(--navy);padding:10px 18px;font-size:.95rem;display:flex;align-items:center;gap:10px;}
+  .checklist ul{list-style:none;margin:0;padding:6px 0;}
+  .checklist li{position:relative;padding:10px 18px 10px 36px;border-bottom:1px dashed var(--line);font-size:.9rem;color:var(--ink-soft);}
+  .checklist li:last-child{border-bottom:none;}
+  .checklist li::before{content:"—";position:absolute;left:18px;color:var(--brass);font-weight:600;}
+  .checklist li b{color:var(--ink);font-family:"Space Grotesk";font-weight:600;}
+
+  .diagram-fig{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px 18px 12px;margin:8px 0 26px;}
+  .diagram-fig svg{width:100%;height:auto;display:block;overflow:visible;}
+  .diagram-fig figcaption{font-size:.82rem;color:var(--muted);margin-top:10px;font-family:"IBM Plex Mono",monospace;}
+  svg.diagram text{font-family:"IBM Plex Mono",monospace;fill:var(--ink);}
+  svg.diagram .lbl-sub{fill:var(--ink-soft);}
+  svg.diagram .box-rect{fill:var(--panel);stroke:var(--line);stroke-width:1.5;}
+  svg.diagram .box-scan{stroke:var(--signal);}
+  svg.diagram .box-tier1{stroke:var(--ready);}
+  svg.diagram .box-tier2{stroke:var(--danger);}
+  svg.diagram .box-llm{stroke:var(--skill);stroke-dasharray:4 3;}
+  svg.diagram .box-arch{stroke:var(--archive);}
+  svg.diagram .box-apply{stroke:var(--brass);}
+  svg.diagram .arrow{stroke:var(--ink-soft);stroke-width:1.6;fill:none;}
+  svg.diagram .arrow-loop{stroke:var(--archive);stroke-width:1.6;fill:none;stroke-dasharray:5 3;}
+  svg.diagram .arrow-head{fill:var(--ink-soft);}
+  svg.diagram .arrow-head-loop{fill:var(--archive);}
+  svg.diagram .edge-label{font-size:10px;fill:var(--muted);}
+
+  .decisionlog{border-collapse:collapse;width:100%;font-size:.86rem;}
+  .decisionlog td{padding:9px 4px;border-bottom:1px dashed var(--line);vertical-align:top;}
+  .decisionlog td:first-child{width:230px;font-family:"Space Grotesk";font-weight:600;color:var(--navy);}
+
+  footer{margin-top:56px;background:var(--navy-deep);color:#A9C0DC;border-top:3px solid var(--brass-line);}
+  footer .wrap{padding:30px 28px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  footer b{color:#EAF1FB;font-weight:500;}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="wrap">
+    <p class="kicker"><span class="dot"></span> NaviKnow · Agent Platform <span class="dot"></span> A-03 Master Design <span class="dot"></span> v2 (consolidated)</p>
+    <h1 class="title">SharePoint Cleanup Agent — hygiene for content NaviKnow <span>doesn't own</span></h1>
+    <p class="lede">The catalogue's third agent, and the first to reach outside NaviKnow's own storage into a live, shared, human-populated SharePoint tenant. It reads a file's own metadata before ever touching its bytes, funnels duplicate detection through cheap deterministic checks before any model call, gives a stale file a reversible archive landing instead of a binary keep-or-delete choice, and never deletes, merges, or touches a permission without an explicit, separately-accountable human approval. Every piece of that — extraction, chunking, dedup, archive, review — can be built and fully tested today, before any Microsoft Graph access exists, against a mocked Graph client and then a disposable sandbox tenant.</p>
+    <div class="mast-meta">
+      <span>AGENT &nbsp;<b>A-03 · SharePoint Cleanup</b></span>
+      <span>MODE &nbsp;<b>Background + mandatory review for destructive actions</b></span>
+      <span>ACCESS &nbsp;<b>Microsoft Graph, app-only, Sites.Selected (per-site)</b></span>
+      <span>STATUS &nbsp;<b>Design — blocked on tenant app registration; buildable and testable now against a mock + sandbox tenant</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <span class="brandmark">NaviKnow</span>
+    <a href="#position">01 Where it sits</a>
+    <a href="#scope">02 Scope &amp; non-goals</a>
+    <a href="#access">03 Access model</a>
+    <a href="#permissions">04 Permission matrix</a>
+    <a href="#onboarding">05 Connecting a site</a>
+    <a href="#catalogue">06 What gets detected</a>
+    <a href="#risk">07 Risk tiers &amp; human-in-the-loop</a>
+    <a href="#extraction">08 Extraction by format</a>
+    <a href="#chunking">09 Chunking &amp; the dedup funnel</a>
+    <a href="#duplicates">10 Duplicate handling</a>
+    <a href="#archivetier">11 The archive tier</a>
+    <a href="#process">12 Process</a>
+    <a href="#guardrails">13 Guardrails</a>
+    <a href="#testing">14 Testing &amp; sandbox</a>
+    <a href="#tools">15 Tools vs protected calls</a>
+    <a href="#skills">16 Skills roster</a>
+    <a href="#eligibility">17 Eligibility governance</a>
+    <a href="#rbac">18 Auth &amp; RBAC</a>
+    <a href="#cost">19 Cost</a>
+    <a href="#lifecycle">20 Run lifecycle</a>
+    <a href="#flow">21 End-to-end flow</a>
+    <a href="#stack">22 Architecture &amp; stack</a>
+    <a href="#data">23 Data model</a>
+    <a href="#files">24 File layout</a>
+    <a href="#plan">25 Build plan</a>
+    <a href="#organize">26 Organize by entity</a>
+    <a href="#decisions">27 Decisions log</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <!-- 01 POSITION -->
+  <section id="position">
+    <div class="sec-head"><span class="num">01</span><h2>Where it sits — the first agent outside NaviKnow's own boundary</h2></div>
+    <p class="sec-sub">Sanitization (A-01) and Tagging (A-02) only ever touch documents already inside NaviKnow — uploaded to <code class="inline">uploads/</code>, rendered to <code class="inline">outputs/</code>. The Coordinator (A-04) only orchestrates those two. A-03 is the first agent that reaches into a live, shared, human-populated system it doesn't own: a tenant's SharePoint sites. That's a categorically different risk profile, and this design treats it that way throughout — slower to trust, harder to auto-apply, easier to reverse.</p>
+    <div class="timeline">
+      <div class="tstep"><div class="tnode"><div class="circle">1</div></div><div class="tcard"><b>Sanitization (A-01)</b> &amp; <b>Tagging (A-02)</b> — built, operate entirely on documents already inside NaviKnow.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">2</div></div><div class="tcard"><b>Coordinator (A-04)</b> — built, minimal; chains A-01 → A-02 with one marker + one hook. No rule engine yet.</div></div>
+      <div class="tstep milestone"><div class="tnode"><div class="circle">3</div></div><div class="tcard"><b>SharePoint Cleanup (A-03)</b> — this document. Per the platform roadmap it is "blocked only on a Microsoft Graph app registration" and "should be built against a mocked <code class="inline">graph.list_sites</code> first" — i.e. design and build the whole pipeline now, wire in real Graph access later without changing the agent's logic.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">4</div></div><div class="tcard"><b>Search (A-05)</b> &amp; <b>Deck Drafting (A-06)</b> — later, depend on sanitized/tagged volume, not on A-03.</div></div>
+    </div>
+    <div class="callout brass">
+      <p class="ctitle">Two jobs, kept strictly separate</p>
+      <p><b>Find hygiene problems</b> in a connected SharePoint library — duplicates, stale content, empty folders, version sprawl, metadata gaps, oversharing — and, only under approval, <b>fix the reversible ones</b>.</p>
+      <p>It is <b>not</b> a sanitization tool. If a scan turns up a document that looks like it contains unmasked client-identifying content sitting somewhere it shouldn't, A-03 never redacts it — it flags the finding and hands the document to Sanitization (A-01) via the same <code class="inline">auto_chain_to</code> marker the Coordinator uses. One agent, one job, same discipline as A-01/A-02 never overlapping A-02's tag taxonomy or A-01's masking dictionary.</p>
+    </div>
+  </section>
+
+  <!-- 02 SCOPE -->
+  <section id="scope">
+    <div class="sec-head"><span class="num">02</span><h2>Scope &amp; non-goals</h2></div>
+    <p class="sec-sub">"Cleaning agent" is a wide brief. This narrows it to content hygiene (ROT cleanup) and explicitly excludes adjacent problems that look similar but need different tooling, different owners, or don't exist yet elsewhere in the platform.</p>
+    <div class="grid2">
+      <div class="box for">
+        <span class="tag">In scope</span>
+        <h4>Content &amp; library hygiene</h4>
+        <p>Exact/near-duplicate files, stale/orphaned content, empty folders, excessive version history, missing or inconsistent metadata, broken/dead sharing links, and flagging (not fixing) oversharing and unsanitized content found in the wrong place.</p>
+      </div>
+      <div class="box against">
+        <span class="tag">Out of scope (v1)</span>
+        <h4>Anything needing a different authority</h4>
+        <p>Tenant-wide permissions administration, e-discovery/legal hold decisions, retention policy authoring, DLP rule authoring, site provisioning/migration, and permanently purging anything from a second-stage recycle bin. These stay with SharePoint/Purview admins and IT — A-03 only ever <i>reads</i> that state to decide whether it's allowed to act.</p>
+      </div>
+    </div>
+    <ul class="plain">
+      <li><b>One connected site/drive per scan run.</b> No tenant-wide crawl in v1 — every scan is scoped to an explicitly connected, governance-approved site.</li>
+      <li><b>Files, not lists/pages.</b> v1 targets document libraries (drives/driveItems). SharePoint lists, pages, and Teams-wiki content are out of scope until there's a concrete need.</li>
+      <li><b>Never the source of truth for "is this safe to delete."</b> Retention labels, legal hold, and sensitivity labels live in Purview/SharePoint; A-03 only ever queries them live and defers to them — it never overrides or caches a stale answer for a destructive decision.</li>
+    </ul>
+  </section>
+
+  <!-- 03 ACCESS MODEL -->
+  <section id="access">
+    <div class="sec-head"><span class="num">03</span><h2>Access model — how the agent reaches SharePoint at all</h2></div>
+    <p class="sec-sub">The background worker (backend/app/worker.py) has no interactive user sitting behind it — it's a headless polling loop. That rules out delegated (user-signed-in) Graph permissions entirely; A-03 must authenticate as an <b>application</b>, via the OAuth2 client-credentials flow against Microsoft Entra ID.</p>
+    <ul class="plain">
+      <li><b>App registration.</b> A dedicated Entra ID app registration (e.g. "NaviKnow SharePoint Cleanup"), owned by the tenant's IT/security team — this is the one hard external dependency the roadmap already calls out. NaviKnow cannot self-serve this; it needs a tenant admin to create the app and grant admin consent.</li>
+      <li><b>Client credentials.</b> A client secret (simplest, fine for v1/dev) or an X.509 certificate (recommended for any production tenant — no secret to rotate/leak). Stored the same way AWS credentials already are in this codebase: environment variables loaded via <code class="inline">python-dotenv</code>, read by the standard MSAL credential flow, never checked into source or the masking dictionary.</li>
+      <li><b>Sites.Selected, not Sites.ReadWrite.All.</b> The tenant-wide application permissions (<code class="inline">Sites.Read.All</code> / <code class="inline">Sites.ReadWrite.All</code>) would let the app see and edit <i>every</i> SharePoint site in the tenant the moment admin consent is granted — unacceptable blast radius for a background process. <code class="inline">Sites.Selected</code> instead grants nothing by default; access to each individual site is then granted separately via <code class="inline">POST /sites/{site-id}/permissions</code>, with an explicit <code class="inline">read</code> or <code class="inline">write</code> role. The app registration only ever sees the sites NaviKnow has explicitly connected — see §05.</li>
+      <li><b>MSAL for Python</b> (<code class="inline">msal</code>) acquires and caches the app-only token; the Microsoft Graph SDK or plain <code class="inline">requests</code> calls the REST API. Neither exists in <code class="inline">requirements.txt</code> today — <code class="inline">msal</code> is the one new dependency this agent adds.</li>
+    </ul>
+    <div class="callout danger">
+      <p class="ctitle">This is an IT dependency, not an engineering one</p>
+      <p>Nothing about A-03's design is blocked on writing code — the entire pipeline (extraction, detection, risk-tiering, review, apply, audit) can be built and exercised end-to-end against a mock. What's blocked is the tenant app registration + admin consent + per-site grants, which sit with the client's IT/security team. §25 lays out how to build fully before that dependency clears; §14 lays out how to prove it works before that, too.</p>
+    </div>
+  </section>
+
+  <!-- 04 PERMISSIONS -->
+  <section id="permissions">
+    <div class="sec-head"><span class="num">04</span><h2>Permission matrix — read, write, create, delete</h2></div>
+    <p class="sec-sub">Every capability the agent could exercise, mapped to the exact Graph permission it needs, how that permission is granted, and who has to approve granting it. Nothing here is ambient — each row is a deliberate, auditable elevation.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:230px">Capability</th><th style="width:170px">Graph permission</th><th style="width:110px">Type</th><th>Granted via</th><th style="width:150px">Approved by</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">List tenant sites (one-time, onboarding only)</td><td class="small"><code class="inline">Sites.Read.All</code></td><td class="center"><span class="pill no">Tenant-wide</span></td><td class="small">Tenant admin consent, granted once. Used only by a human (km_governance) picking a site to connect — <b>never called by the worker at runtime.</b></td><td class="small">Tenant admin</td></tr>
+        <tr><td class="anm">Read a connected site's files, metadata, versions, retention labels</td><td class="small"><code class="inline">Sites.Selected</code> (read)</td><td class="center"><span class="pill keep">Per-site</span></td><td class="small"><code class="inline">POST /sites/{id}/permissions</code> with role <code class="inline">read</code>. Default grant for every newly connected site.</td><td class="small">km_governance</td></tr>
+        <tr><td class="anm">Move / rename / update metadata (reversible cleanup, incl. archive moves)</td><td class="small"><code class="inline">Sites.Selected</code> (write)</td><td class="center"><span class="pill keep">Per-site</span></td><td class="small">Separate elevation on top of read, requested only once Tier-1 cleanup is wanted for that site (§07).</td><td class="small">km_governance</td></tr>
+        <tr><td class="anm">Delete an item (lands in SharePoint's own recycle bin)</td><td class="small"><code class="inline">Sites.Selected</code> (write)</td><td class="center"><span class="pill keep">Per-site</span></td><td class="small">Same write grant as above — deletion is gated at the <i>application</i> layer (mandatory review, §07/§13), not by a separate Graph scope.</td><td class="small">km_governance</td></tr>
+        <tr><td class="anm">Permanently purge from the second-stage recycle bin</td><td class="small"><i>— none granted, ever —</i></td><td class="center"><span class="pill no">Never</span></td><td class="small">Not requested in any phase. SharePoint's two-stage recycle bin (~93 days total) is the deliberate safety net — see §13.</td><td class="small">n/a</td></tr>
+        <tr><td class="anm">Change sharing/permissions on an item</td><td class="small"><i>— none granted in v1 —</i></td><td class="center"><span class="pill no">Out of scope</span></td><td class="small">Oversharing is <b>flagged</b> for a human to fix directly in SharePoint (§02) — A-03 does not act on permissions itself.</td><td class="small">n/a</td></tr>
+        <tr><td class="anm">Create content (quarantine / archive folders)</td><td class="small"><code class="inline">Sites.Selected</code> (write)</td><td class="center"><span class="pill keep">Per-site</span></td><td class="small">Covered by the same write grant — used only to create the site-local <code class="inline">NaviKnow Cleanup Quarantine</code> and <code class="inline">_Archive</code> folders (§13), never arbitrary new content.</td><td class="small">km_governance</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout">
+      <p class="ctitle">Read and write are separate, sequential elevations</p>
+      <p>Every site starts read-only. Write access is a distinct, later, explicitly-requested grant — a site can run detection-and-reporting indefinitely without ever being exposed to a mutating call. This mirrors the masking dictionary's own <code class="inline">pending_approval → approved</code> shape: nothing gets broader access than it currently needs.</p>
+    </div>
+  </section>
+
+  <!-- 05 ONBOARDING -->
+  <section id="onboarding">
+    <div class="sec-head"><span class="num">05</span><h2>Connecting a site — governed onboarding, not self-service</h2></div>
+    <div class="timeline">
+      <div class="tstep"><div class="tnode"><div class="circle">1</div></div><div class="tcard"><b>km_governance requests a connection</b> from NaviKnow's admin UI, picking a site from a list fetched via the one-time <code class="inline">Sites.Read.All</code> call (or pasting a known site URL directly — no listing call needed).</div></div>
+      <div class="tstep human"><div class="tnode"><div class="circle">2</div></div><div class="tcard"><b>Tenant IT grants the per-site scope</b> — <code class="inline">POST /sites/{id}/permissions</code> with role <code class="inline">read</code>, using the app registration's own admin credentials (a step NaviKnow triggers via API but a human at the tenant ultimately owns, same as any other cross-org access grant).</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">3</div></div><div class="tcard">A <code class="inline">sharepoint_connections</code> row is created (§23): <code class="inline">status="active"</code>, <code class="inline">permission_scope="read"</code>. Scans can now run in report-only mode.</div></div>
+      <div class="tstep milestone"><div class="tnode"><div class="circle">4</div></div><div class="tcard"><b>Write elevation is a separate request.</b> Only once a site's Tier-1 candidates have been reviewed for a while does km_governance request the write grant, upgrading the same connection row to <code class="inline">permission_scope="read_write"</code>. Tier-2 (destructive) actions additionally require <code class="inline">manage_eligibility_rules</code> configuration for that site before they can even be proposed (§17).</div></div>
+    </div>
+    <div class="callout green">
+      <p class="ctitle">Same shape as the masking dictionary and tag vocabulary</p>
+      <p>A connection starts narrow and grows only by explicit governance action, never by the agent inferring it needs more access. Nothing about this onboarding flow is agent logic — it's an admin/governance workflow the agent's scans simply become eligible to run under once it's done.</p>
+    </div>
+  </section>
+
+  <!-- 06 CATALOGUE -->
+  <section id="catalogue">
+    <div class="sec-head"><span class="num">06</span><h2>What gets detected — the cleaning candidate catalogue</h2></div>
+    <p class="sec-sub">Detection is deliberately weighted toward deterministic, explainable code — hashing, timestamps, folder traversal — the same way <code class="inline">tags.validate</code> and <code class="inline">apply_masks</code> keep the LLM out of anything that must be exactly right. The LLM is used only where judgment genuinely helps: near-duplicate confidence and plain-language proposal summaries.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:190px">Candidate type</th><th>How it's detected</th><th style="width:120px">Detection</th><th style="width:130px">Default tier</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">Exact duplicates</td><td class="small">Graph's own content hash (<code class="inline">quickXorHash</code>/<code class="inline">sha256Hash</code>) matched across items in scope — zero downloads (§08–§09); keep-newest / keep-canonical-path proposed.</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill no">Tier 2</span></td></tr>
+        <tr><td class="anm">Near-duplicates</td><td class="small">Same/similar filename + size/date proximity + structural-fingerprint similarity (§09); LLM judges "same document, different draft" vs. coincidence and assigns confidence.</td><td class="center"><span class="pill tool">LLM-assisted</span></td><td class="center"><span class="pill no">Tier 2</span></td></tr>
+        <tr><td class="anm">Stale / orphaned content</td><td class="small">Not modified/opened past a configurable age threshold, or owned by a departed user with no remaining owner.</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill arch">Tier 1 → archive (§11)</span></td></tr>
+        <tr><td class="anm">Empty folders</td><td class="small">Recursive listing confirms zero descendant items (files or subfolders).</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill keep">Tier 1</span></td></tr>
+        <tr><td class="anm">Version bloat</td><td class="small">Version count on an item exceeds policy; propose trimming to the newest N, keeping the current version untouched.</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill keep">Tier 1</span></td></tr>
+        <tr><td class="anm">Naming / metadata gaps</td><td class="small">Missing required library columns, inconsistent naming vs. the site's convention; LLM suggests standardized values against the existing controlled tag vocabulary (A-02's, read-only reuse — never a new taxonomy).</td><td class="center"><span class="pill tool">LLM-assisted</span></td><td class="center"><span class="pill keep">Tier 1</span></td></tr>
+        <tr><td class="anm">Broken / dead links</td><td class="small">Sharing links whose target no longer resolves (410/404) or point outside the connected drive.</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill keep">Tier 1</span></td></tr>
+        <tr><td class="anm">Oversharing / permission sprawl</td><td class="small">"Anyone" links, broken permission inheritance, external sharing beyond policy. <b>Flag only — never remediated by this agent</b> (§02).</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="center"><span class="pill no">Flag-only</span></td></tr>
+        <tr><td class="anm">Unsanitized content in the wrong place</td><td class="small">Lightweight PII/entity pre-pass (reuses A-01's NER pre-pass) finds probable client-identifying content outside an approved library. <b>Never redacted here</b> — auto-chains to Sanitization (A-01).</td><td class="center"><span class="pill tool">LLM-assisted</span></td><td class="center"><span class="pill no">Flag-only → hand-off</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted)">Stale content's tier reflects its first hop only — a reversible archive move (§11). The later hop from Archived to permanently Deleted is always Tier 2, individually reviewed, regardless of how the item arrived in archive. Full extraction and dedup mechanics are in §08–§10.</p>
+  </section>
+
+  <!-- 07 RISK TIERS -->
+  <section id="risk">
+    <div class="sec-head"><span class="num">07</span><h2>Risk tiers &amp; the human-in-the-loop rule — the load-bearing guardrail</h2></div>
+    <p class="sec-sub">This is the one rule the whole design protects: <b>whether a proposal requires human approval is decided by what the action <i>is</i>, never by how confident the model is in it.</b> That's a deliberate departure from A-01/A-02, where review is confidence-gated — destructive actions on a tenant NaviKnow doesn't own don't get that discretion.</p>
+    <div class="grid2">
+      <div class="box for">
+        <span class="tag">Tier 1 — reversible, low blast radius</span>
+        <h4>May auto-apply if high-confidence</h4>
+        <p>Empty-folder removal, version trimming (old versions only, current version untouched), metadata/naming standardization, broken-link reporting, and moving a stale file to archive with a courtesy notice first (§11). All fully reversible or non-destructive; SharePoint's own version history covers metadata edits. Follows Tagging's "conditional review" shape: auto-apply when unambiguous, pause for review otherwise.</p>
+      </div>
+      <div class="box against">
+        <span class="tag">Tier 2 — destructive</span>
+        <h4>Always reviewed. No exceptions, no confidence threshold.</h4>
+        <p><b>Delete, permanently remove, deduplicate/merge, overwrite/replace, moving an archived item on to deletion, and any permission change</b> are Tier 2 by definition — hardcoded, not configurable per-agent-run. Every single Tier-2 candidate is filed as its own reviewable item; there is no "approve all 500 duplicates" bulk action. A reviewer sees each proposed deletion/merge individually before it can be applied.</p>
+      </div>
+    </div>
+    <ul class="plain">
+      <li><b>Separation of duty, reused as-is.</b> The review system already enforces that the identity that produced a run never approves it (backend/app/review/routes.py) — that guarantee carries over unchanged; A-03 adds nothing new here, it just relies on it more heavily.</li>
+      <li><b>Tier assignment is a protected, deterministic lookup</b> (§15) — not something a prompt could talk the model out of, and not something a governance rule can downgrade (only <i>which items are eligible to be proposed at all</i> is configurable, via §17's eligibility rules — never whether a Tier-2 action needs review).</li>
+      <li><b>Confidence still matters within a tier</b> — a low-confidence near-duplicate is simply a lower-priority Tier-2 item for the reviewer, never an auto-apply candidate regardless of how high confidence climbs.</li>
+    </ul>
+    <div class="callout danger">
+      <p class="ctitle">Why this is stricter than A-01/A-02</p>
+      <p>Sanitization and Tagging operate on a document already safely inside NaviKnow; a mistake is recoverable from the original upload. A-03 acts on a live, shared tenant other people are using right now — the cost of an unreviewed bad delete or merge is borne by someone outside this system entirely. The design responds by removing discretion, not by trusting confidence scores harder.</p>
+    </div>
+  </section>
+
+  <!-- 08 EXTRACTION -->
+  <section id="extraction">
+    <div class="sec-head"><span class="num">08</span><h2>Extracting metadata &amp; content, by format</h2></div>
+    <p class="sec-sub">Two separate tracks, and every item gets the first one whether or not it gets the second. <b>Track A — Graph metadata</b> is universal: name, path, size, native hash, timestamps, owner, version count, sharing links, retention/sensitivity label. It costs one API call for the whole listing and needs no format-specific code at all. <b>Track B — content extraction</b> is selective: it downloads the file and parses its actual text, and only runs when a scanner needs to compare or read what's inside — near-duplicate scoring, metadata/naming suggestions, or the PII pre-pass that hands off to Sanitization.</p>
+
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:140px">Format</th><th style="width:150px">Library</th><th>What Track B extracts (structural chunks)</th><th style="width:110px">Reuse</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">PDF</td><td class="small"><code class="inline">pdfplumber</code></td><td class="small">One chunk per page — the natural unit for a PDF; no separate metadata layer inside the file worth parsing beyond Track A.</td><td class="center"><span class="pill keep">Existing</span></td></tr>
+        <tr><td class="anm">DOCX</td><td class="small"><code class="inline">python-docx</code> + raw XML walk</td><td class="small">Paragraph groups (configurable batch size), plus headers/footers, in-body text boxes, footnotes/endnotes, and tables — each its own chunk so a near-dup comparison never misses content python-docx's own API can't see.</td><td class="center"><span class="pill keep">Existing</span></td></tr>
+        <tr><td class="anm">PPTX</td><td class="small"><code class="inline">python-pptx</code> + custom shape walker</td><td class="small">One chunk per slide, plus separate channels for charts, SmartArt, embedded OLE objects, speaker notes, and inherited layout/master text — the richest extractor in the codebase, reused as-is.</td><td class="center"><span class="pill keep">Existing</span></td></tr>
+        <tr><td class="anm">XLSX</td><td class="small"><code class="inline">openpyxl</code></td><td class="small">One chunk per sheet, including the sheet tab name itself and print header/footer text (a common place for a client name to hide, invisible to a cell-only reader).</td><td class="center"><span class="pill keep">Existing</span></td></tr>
+        <tr><td class="anm">Images</td><td class="small"><code class="inline">Pillow</code> (+ optional <code class="inline">pytesseract</code>)</td><td class="small">EXIF (camera, GPS, capture date — an oversharing/PII signal in itself) always; OCR text only behind a feature flag, and only run on images already paired by filename/size with a real document — never run OCR speculatively across every image on a site.</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">CSV / plain text</td><td class="small">stdlib</td><td class="small">Line-based chunking; cheapest possible path, no parsing library needed.</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">Email export (.msg/.eml)</td><td class="small"><code class="inline">extract-msg</code> / stdlib <code class="inline">email</code></td><td class="small">Subject, sender, recipients, and attachment list as metadata; body as one chunk. A common, high-volume ROT source — the same message and its attachment saved by five recipients into five different folders.</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">Visio (.vsdx)</td><td class="small">zip + XML walk (same shape as OOXML)</td><td class="small">Shape text per page, mirroring the PPTX approach at lower priority — added only if a connected site's volume justifies it.</td><td class="center"><span class="pill skill">New, low priority</span></td></tr>
+        <tr><td class="anm">Anything else (OneNote, CAD, proprietary)</td><td class="small">— none —</td><td class="small">No content extraction attempted. The item is still fully covered by Track A metadata and every deterministic scanner that only needs metadata (staleness, empty folders, version bloat, broken links).</td><td class="center"><span class="pill no">Metadata-only</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="callout blue">
+      <p class="ctitle">Content extraction is a value-add, not a dependency</p>
+      <p>A format with no parser is never a hard failure — it just gets less analysis, the same way <code class="inline">extract_chunks</code> already raises <code class="inline">UnsupportedDocumentError</code> for Sanitization rather than crashing a run. Track A metadata alone is enough to detect staleness, empty folders, version bloat, and broken links; Track B only sharpens duplicate detection and metadata suggestions for the formats it covers.</p>
+    </div>
+  </section>
+
+  <!-- 09 CHUNKING -->
+  <section id="chunking">
+    <div class="sec-head"><span class="num">09</span><h2>Chunking strategy — the dedup funnel</h2></div>
+    <p class="sec-sub">Chunking here serves one purpose: deciding whether two files are "the same document" cheaply enough to run across an entire site, and only spending real compute — download, parse, model call — on the pairs that actually need it. Four tiers, each a filter over the survivors of the one before it.</p>
+
+    <div class="phase">
+      <div class="phead"><span class="pnum">A</span><h4>Exact-hash match — free, from the listing itself</h4></div>
+      <p>Graph's <code class="inline">driveItem</code> file facet already carries a content hash (<code class="inline">quickXorHash</code> or <code class="inline">sha256Hash</code>, depending on drive type) as part of the same delta listing used for everything else. Two items with an identical hash are byte-identical — no download, no chunking, no LLM call needed to know that. This is the entire Tier-1/Tier-2 "exact duplicate" detector.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">B</span><h4>Candidate pairing — cheap pre-filter before any download</h4></div>
+      <p>Among non-identical-hash items, comparing every file to every other file is quadratic and pointless. Group by extension, then by size within a small tolerance (±5%) and modified-date proximity or shared folder — only pairs surviving this filter are ever considered "possible near-duplicates" worth the cost of Tier C.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">C</span><h4>Structural fingerprint — download once, compare cheaply</h4></div>
+      <p>For surviving pairs, download and run the format-specific structural chunker (§08, Track B), concatenate the chunk text, and compute a fingerprint over shingles of it — MinHash or SimHash, hand-rolled in pure Python (no new dependency; Hamming/Jaccard distance is a few lines). Structure-preserving chunks matter here for a second reason beyond fingerprinting: when a pair is escalated to Tier D, the reviewer sees "slide 4" or "sheet 'FY24 Budget'", not an arbitrary character offset.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">D</span><h4>LLM judgment — the ambiguous middle band only</h4></div>
+      <p>Fingerprint distance sorts pairs into three bands: clearly identical content (treat as Tier A), clearly unrelated (drop), and an ambiguous middle (different enough to not be a plain copy, similar enough to not obviously be coincidence). Only that middle band goes to the model, with the structural chunks as context, for a same-document-different-draft judgment, a confidence score, and a one-line reviewer summary.</p>
+    </div>
+
+    <div class="grid2">
+      <div class="box for">
+        <span class="tag">v1 — ship this</span>
+        <h4>SimHash/MinHash over structural chunks</h4>
+        <p>Catches near-verbatim copies (renamed, re-saved, one slide added) — the overwhelming majority of real SharePoint duplication — with no new infrastructure and no per-comparison model call.</p>
+      </div>
+      <div class="box warn">
+        <span class="tag">v2 — only if paraphrase-level dupes matter</span>
+        <h4>Embeddings via <code class="inline">pgvector</code></h4>
+        <p>Catches substantially rewritten or translated duplicates that a shingle fingerprint misses. Add the <code class="inline">pgvector</code> extension to the existing Postgres instance rather than standing up a separate vector store — but only once fingerprinting alone shows a real gap; it's a heavier per-document cost for a case that's rarer in practice.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <p class="ctitle">Chunks are a cache, not a record of truth</p>
+      <p>Extracted chunk text is derived data used to make a proposal, not the source of truth about the document — the file in SharePoint always is. Store chunk text with a short retention window (e.g. 30 days) rather than indefinitely; a completed or expired run doesn't need its extracted text kept around, only its hashes/fingerprints and the audit decision.</p>
+    </div>
+  </section>
+
+  <!-- 10 DUPLICATES -->
+  <section id="duplicates">
+    <div class="sec-head"><span class="num">10</span><h2>Duplicate &amp; file handling — what actually happens to the loser copy</h2></div>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:160px">Situation</th><th>Proposed action</th><th style="width:110px">Tier</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">Exact duplicate, same folder</td><td class="small">Keep the item at the canonical/expected path; propose the other for quarantine (not direct delete).</td><td class="center"><span class="pill no">Tier 2</span></td></tr>
+        <tr><td class="anm">Exact duplicate, different folders</td><td class="small">Keep the most-recently-modified or most-shared copy; quarantine the rest, each proposal reviewed individually — never a bulk "remove all duplicates" action.</td><td class="center"><span class="pill no">Tier 2</span></td></tr>
+        <tr><td class="anm">Near-duplicate (LLM-confirmed)</td><td class="small">Reviewer sees both paths, dates, and the model's plain-language summary and confidence; decides which to keep. Low confidence just means a lower review priority, never an auto-apply candidate.</td><td class="center"><span class="pill no">Tier 2</span></td></tr>
+        <tr><td class="anm">Version bloat (same item, many versions)</td><td class="small">Trim to the newest N versions; the current version is never touched or counted against the limit.</td><td class="center"><span class="pill keep">Tier 1</span></td></tr>
+        <tr><td class="anm">Empty folder</td><td class="small">Remove; recursive check confirms zero descendant items first.</td><td class="center"><span class="pill keep">Tier 1</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>"Quarantine" here is the site-local <code class="inline">NaviKnow Cleanup Quarantine</code> folder defined in §13 — a move, not a delete, restorable with one click from the run's audit record. Duplicate handling never calls <code class="inline">graph.delete_item</code> directly; it always lands the loser copy somewhere recoverable first.</p>
+  </section>
+
+  <!-- 11 ARCHIVE -->
+  <section id="archivetier">
+    <div class="sec-head"><span class="num">11</span><h2>The archive tier — a soft landing for files nobody's touched in a while</h2></div>
+    <p class="sec-sub">Without this tier, a stale file only has two outcomes: leave it, or (Tier 2, reviewed) delete it. That's a wide gap — a file untouched for a year is rarely something anyone wants gone forever, but it's also not something that should keep cluttering an active library. The archive tier sits between the two: reversible, low-blast-radius, and — critically — it never quietly escalates itself into a deletion. Every path out of archive back toward deletion still passes through the same Tier-2 human review as everything else.</p>
+
+    <figure class="diagram-fig">
+      <svg class="diagram" viewBox="0 0 1200 210" role="img" aria-label="Archive lifecycle: Active becomes Stale-flagged after an idle threshold, then Notice-sent during a grace period, either looping back to Active if the owner reclaims the file or advancing to Archived; Archived becomes Delete-eligible after further idle time, gated by Tier 2 human review, before reaching Deleted, which still lands in SharePoint's own recycle bin.">
+        <defs>
+          <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="arrow-head"></path>
+          </marker>
+          <marker id="arrow2-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="arrow-head-loop"></path>
+          </marker>
+        </defs>
+
+        <rect x="10" y="80" width="150" height="64" rx="10" class="box-rect box-tier1"></rect>
+        <text x="85" y="108" text-anchor="middle" font-size="12" font-weight="600">Active</text>
+        <text x="85" y="126" text-anchor="middle" font-size="10" class="lbl-sub">normal state</text>
+
+        <rect x="212" y="80" width="180" height="64" rx="10" class="box-rect box-scan"></rect>
+        <text x="302" y="104" text-anchor="middle" font-size="12" font-weight="600">Stale-flagged</text>
+        <text x="302" y="122" text-anchor="middle" font-size="10" class="lbl-sub">idle past threshold</text>
+        <text x="302" y="135" text-anchor="middle" font-size="10" class="lbl-sub">(default 270 days)</text>
+
+        <rect x="444" y="80" width="180" height="64" rx="10" class="box-rect box-tier1"></rect>
+        <text x="534" y="104" text-anchor="middle" font-size="12" font-weight="600">Notice sent</text>
+        <text x="534" y="122" text-anchor="middle" font-size="10" class="lbl-sub">owner/km_governance,</text>
+        <text x="534" y="135" text-anchor="middle" font-size="10" class="lbl-sub">30-day grace period</text>
+
+        <rect x="676" y="80" width="180" height="64" rx="10" class="box-rect box-arch"></rect>
+        <text x="766" y="104" text-anchor="middle" font-size="12" font-weight="600">Archived</text>
+        <text x="766" y="122" text-anchor="middle" font-size="10" class="lbl-sub">moved to _Archive</text>
+        <text x="766" y="135" text-anchor="middle" font-size="10" class="lbl-sub">library, path recorded</text>
+
+        <rect x="908" y="80" width="150" height="64" rx="10" class="box-rect box-tier2"></rect>
+        <text x="983" y="104" text-anchor="middle" font-size="12" font-weight="600">Delete-eligible</text>
+        <text x="983" y="122" text-anchor="middle" font-size="10" class="lbl-sub">idle further 180d,</text>
+        <text x="983" y="135" text-anchor="middle" font-size="10" class="lbl-sub">Tier 2 review</text>
+
+        <rect x="1090" y="80" width="100" height="64" rx="10" class="box-rect box-tier2"></rect>
+        <text x="1140" y="108" text-anchor="middle" font-size="12" font-weight="600">Deleted</text>
+        <text x="1140" y="126" text-anchor="middle" font-size="10" class="lbl-sub">recycle bin</text>
+        <text x="1140" y="139" text-anchor="middle" font-size="10" class="lbl-sub">safety net</text>
+
+        <line x1="160" y1="112" x2="208" y2="112" class="arrow" marker-end="url(#arrow2)"></line>
+        <line x1="392" y1="112" x2="440" y2="112" class="arrow" marker-end="url(#arrow2)"></line>
+        <line x1="624" y1="112" x2="672" y2="112" class="arrow" marker-end="url(#arrow2)"></line>
+        <line x1="856" y1="112" x2="904" y2="112" class="arrow" marker-end="url(#arrow2)"></line>
+        <line x1="1058" y1="112" x2="1086" y2="112" class="arrow" marker-end="url(#arrow2)"></line>
+
+        <path d="M 534 78 C 534 20, 85 20, 85 76" class="arrow-loop" marker-end="url(#arrow2-loop)"></path>
+        <text x="310" y="34" text-anchor="middle" class="edge-label" fill="var(--archive)">owner reclaims the file — clock resets, stays Active</text>
+      </svg>
+      <figcaption>Fig. 1 — Archive is a reversible middle tier, not a delay before deletion: the only path forward from Archived to Deleted still passes through the same individually-reviewed Tier 2 gate as every other destructive action.</figcaption>
+    </figure>
+
+    <h3>What "stale" means, precisely</h3>
+    <ul class="plain">
+      <li><b>Primary signal: <code class="inline">lastModifiedDateTime</code>.</b> Always available from Graph, for every item, at zero extra cost — it rides along in the same delta listing as everything else (§08). A configurable per-site threshold (default 270 days) is the baseline staleness test, and every candidate this scanner produces has this signal.</li>
+      <li><b>Secondary signal, confirmed, not assumed: real last-accessed activity.</b> "Not modified in a year" is not the same claim as "nobody has opened it" — a file can sit unedited while people still read it constantly. The plan for closing that gap is below.</li>
+      <li><b>Orphaned ownership.</b> If the item's owner (<code class="inline">createdBy</code>, or an explicit library "Owner" column) has left the organization per a directory lookup, route the notice to <code class="inline">km_governance</code> instead of a specific person, and treat it as a higher archive priority — nobody remains who can say "keep this."</li>
+    </ul>
+
+    <h3>The plan for last-accessed tracking</h3>
+    <p>Modified-date alone answers "has anyone edited this?" — not "has anyone opened this?" Graph has a real, per-item answer to the second question; it's just a second, separate call, not part of the free delta listing, so the plan spends it only where it's actually needed.</p>
+    <div class="phase">
+      <div class="phead"><span class="pnum">1</span><h4>Cheap pre-filter first — modified-date threshold, as today</h4></div>
+      <p>The deterministic staleness scanner flags candidates purely by <code class="inline">lastModifiedDateTime</code>, exactly as above. This costs nothing extra and narrows a whole site down to the small set of items actually worth confirming.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">2</span><h4>Confirm, per candidate only, via Graph's item analytics</h4></div>
+      <p>For each stale <i>candidate</i> (never the whole site), call <code class="inline">GET /drives/{drive-id}/items/{item-id}/analytics/allTime</code> — the <code class="inline">itemAnalytics</code> resource returns real view/edit action counts, and its <code class="inline">itemActivityStats</code> sibling returns a timestamped activity history (who touched it, and when, most recently). This is the actual "last visited" answer, not a proxy.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">3</span><h4>Reconcile — a recently-viewed file is pulled back out of the candidate set</h4></div>
+      <p>If analytics shows real activity inside a shorter secondary window (default 90 days), the item is <i>not</i> stale regardless of its modified date, and drops out of the archive-pending candidate list entirely. If analytics agrees nothing has happened, confidence on the candidate goes up, not down.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">4</span><h4>Graceful fallback where analytics isn't available</h4></div>
+      <p>App-only (client-credentials) access to <code class="inline">itemAnalytics</code> has historically had permission-scope nuances that vary by drive/tenant configuration — this needs to be validated for real during the sandbox phase (§14, Layer 1) before any threshold decision depends on it. Where it's unavailable or denied for a given drive, the candidate falls back to modified-date alone, exactly as before, with a lower-confidence flag recorded in its evidence — never hidden, never treated as equivalent to a confirmed signal.</p>
+    </div>
+    <div class="callout">
+      <p class="ctitle">Cached, not re-fetched every scan</p>
+      <p>Analytics calls are per-item and not part of the bulk delta listing, so they're the one place this scanner doesn't reuse the "free" listing data — the same discipline as chunking (§09): cheap filter first, expensive confirmation only for survivors. Results are cached in the metadata store with a refresh interval (default weekly) rather than re-queried on every scan of the same site.</p>
+    </div>
+
+    <h3>Where archived content actually lives</h3>
+    <div class="grid2">
+      <div class="box for">
+        <span class="tag">Phase 1 — recommended default</span>
+        <h4>An in-SharePoint "_Archive" library</h4>
+        <p>Same site, same <code class="inline">Sites.Selected</code> write grant already required for cleanup, same mechanism as the existing Quarantine folder. Permissions, version history, and sharing links inside the item survive a <code class="inline">graph.move_item</code> untouched. Restore is one Graph call; nothing new to secure or audit.</p>
+      </div>
+      <div class="box warn">
+        <span class="tag">Phase 2 — opt-in, only at real scale</span>
+        <h4>Export to Azure Blob cool/archive tier</h4>
+        <p>Materially cheaper per-GB once a site's cold-data volume is large enough for storage cost to matter — but it steps outside SharePoint's native permission model entirely, needs its own access broker and lifecycle policy, and turns a one-click restore into a second system to build and audit. Gate this behind a double-cold rule: only for items that have already sat idle inside the Phase 1 archive library for a long time, never straight from Active.</p>
+      </div>
+    </div>
+
+    <h3>The notice, not a bulk sweep</h3>
+    <p>Moving a file to archive is reversible and low blast radius, so it's Tier 1 by the same rule that governs version trimming or empty-folder removal — it may auto-apply. But "may auto-apply" isn't "silent": a plain-language notice (an LLM skill, §16) goes to the owner or <code class="inline">km_governance</code> with a grace period (default 30 days) before the move executes, and a reply or a click resets the stale clock and keeps the file active. This is a courtesy, not a review gate — the archive move itself doesn't wait on a human decision the way a delete does, but a human always gets a chance to say no first.</p>
+
+    <h3>Archive registry — visibility and control inside NaviKnow</h3>
+    <p>Every archived item already has a row in <code class="inline">archive_records</code> (§23) — original path, archived path, reason, grace period, restore state. That table is what makes a NaviKnow-side registry possible without any new data model: an <b>Archive Registry</b> admin page lists every archived item across every connected site, independent of navigating SharePoint's own <code class="inline">_Archive</code> library directly.</p>
+    <div class="grid2">
+      <div class="box for">
+        <span class="tag">What the registry shows</span>
+        <h4>Read-only browse, search, and filter</h4>
+        <p>Original path, archived-at date, size/type, archive reason (stale / orphaned-owner), notice/grace status, and days remaining until delete-eligible — per site, per connection, sortable and filterable. Reuses the same <code class="inline">view_all_runs_org_wide</code>-style visibility already granted to <code class="inline">km_governance</code> (§18).</p>
+      </div>
+      <div class="box warn">
+        <span class="tag">What an admin can do from it</span>
+        <h4>Restore directly; request deletion — never bypass Tier 2</h4>
+        <p><b>Restore</b> is low-risk and reversible, so it can be actioned straight from the registry (a <code class="inline">graph.move_item</code> back to <code class="inline">original_path</code>, same as any restore). <b>Requesting permanent deletion</b> from the registry does <i>not</i> delete anything itself — it files a normal Tier-2 <code class="inline">cleaning_candidate</code>, which still requires a separate reviewer's approval and a live retention/hold recheck at apply time (§07/§13), exactly like any other delete. An admin browsing the registry gets a shortcut to <i>propose</i> deletion, never a shortcut to <i>perform</i> it.</p>
+      </div>
+    </div>
+    <div class="callout danger">
+      <p class="ctitle">No admin exception to separation of duty</p>
+      <p>If the admin who requests a deletion from the registry also happens to hold <code class="inline">approve_cleanup_actions</code>, they still cannot approve their own request — the existing submitter-cannot-approve-own-run rule (§07/§13) applies to registry-initiated deletions exactly as it applies to scan-discovered ones. The registry changes where a delete request originates, never who's allowed to approve it.</p>
+    </div>
+  </section>
+
+  <!-- 12 PROCESS -->
+  <section id="process">
+    <div class="sec-head"><span class="num">12</span><h2>Process — detect → eligibility filter → propose → review → apply → verify</h2></div>
+    <p class="sec-sub">Four things happen in every run, in order: read the tenant's own metadata about a file before ever touching its bytes (§08), run cheap deterministic checks over that metadata, only download and parse content for the small subset of items where content actually decides the outcome (§09), and only call the model for the smaller subset still where judgment — not arithmetic — is what's missing. Cost and risk both fall out of that ordering, not out of a separate "budget" bolted on afterward.</p>
+
+    <figure class="diagram-fig">
+      <svg class="diagram" viewBox="0 0 1200 330" role="img" aria-label="Pipeline: delta scan feeds a metadata cache, deterministic scanners, and an eligibility gate; the gate splits into a Tier 1 auto-apply path and a Tier 2 plus archive-pending review path, the latter fed by a targeted LLM judgment step for borderline candidates only; both paths converge on an apply layer that writes to Graph and logs to the audit trail.">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="arrow-head"></path>
+          </marker>
+        </defs>
+
+        <rect x="16" y="24" width="232" height="60" rx="10" class="box-rect box-scan"></rect>
+        <text x="132" y="48" text-anchor="middle" font-size="12" font-weight="600">Delta scan</text>
+        <text x="132" y="66" text-anchor="middle" font-size="10" class="lbl-sub">Graph metadata only —</text>
+        <text x="132" y="78" text-anchor="middle" font-size="10" class="lbl-sub">zero bytes downloaded</text>
+
+        <rect x="296" y="24" width="212" height="60" rx="10" class="box-rect box-scan"></rect>
+        <text x="402" y="48" text-anchor="middle" font-size="12" font-weight="600">Metadata cache</text>
+        <text x="402" y="66" text-anchor="middle" font-size="10" class="lbl-sub">Postgres — hashes,</text>
+        <text x="402" y="78" text-anchor="middle" font-size="10" class="lbl-sub">dates, owners, labels</text>
+
+        <rect x="556" y="24" width="272" height="60" rx="10" class="box-rect box-scan"></rect>
+        <text x="692" y="48" text-anchor="middle" font-size="12" font-weight="600">Deterministic scanners</text>
+        <text x="692" y="66" text-anchor="middle" font-size="10" class="lbl-sub">hash-dup, staleness, empty</text>
+        <text x="692" y="78" text-anchor="middle" font-size="10" class="lbl-sub">folders, versions, links</text>
+
+        <rect x="876" y="24" width="308" height="60" rx="10" class="box-rect box-scan"></rect>
+        <text x="1030" y="48" text-anchor="middle" font-size="12" font-weight="600">Eligibility gate</text>
+        <text x="1030" y="66" text-anchor="middle" font-size="10" class="lbl-sub">excluded paths · live</text>
+        <text x="1030" y="78" text-anchor="middle" font-size="10" class="lbl-sub">retention/legal-hold check</text>
+
+        <line x1="248" y1="54" x2="292" y2="54" class="arrow" marker-end="url(#arrow)"></line>
+        <line x1="508" y1="54" x2="552" y2="54" class="arrow" marker-end="url(#arrow)"></line>
+        <line x1="828" y1="54" x2="872" y2="54" class="arrow" marker-end="url(#arrow)"></line>
+
+        <path d="M 1000 84 L 1000 110 L 460 110 L 460 138" class="arrow" marker-end="url(#arrow)"></path>
+        <path d="M 1060 84 L 1060 138" class="arrow" marker-end="url(#arrow)"></path>
+        <text x="700" y="104" text-anchor="middle" class="edge-label">eligible candidates only</text>
+
+        <rect x="150" y="140" width="340" height="64" rx="10" class="box-rect box-tier1"></rect>
+        <text x="320" y="164" text-anchor="middle" font-size="12" font-weight="600">Tier 1 — reversible</text>
+        <text x="320" y="182" text-anchor="middle" font-size="10" class="lbl-sub">auto-apply when high-confidence:</text>
+        <text x="320" y="195" text-anchor="middle" font-size="10" class="lbl-sub">empty folders, version trim, metadata fixes, archive move</text>
+
+        <rect x="822" y="140" width="362" height="64" rx="10" class="box-rect box-tier2"></rect>
+        <text x="1003" y="164" text-anchor="middle" font-size="12" font-weight="600">Tier 2 + archive-pending</text>
+        <text x="1003" y="182" text-anchor="middle" font-size="10" class="lbl-sub">always individually reviewed:</text>
+        <text x="1003" y="195" text-anchor="middle" font-size="10" class="lbl-sub">delete, merge, permission change, orphaned-owner archive</text>
+
+        <rect x="540" y="140" width="234" height="64" rx="10" class="box-rect box-llm"></rect>
+        <text x="657" y="164" text-anchor="middle" font-size="12" font-weight="600">LLM judgment</text>
+        <text x="657" y="182" text-anchor="middle" font-size="10" class="lbl-sub">dedup confidence + summaries</text>
+        <text x="657" y="195" text-anchor="middle" font-size="10" class="lbl-sub">— borderline pairs only</text>
+
+        <path d="M 700 84 L 700 122 L 657 122 L 657 136" class="arrow" marker-end="url(#arrow)"></path>
+        <text x="700" y="118" text-anchor="middle" class="edge-label">ambiguous fingerprint match</text>
+        <line x1="774" y1="172" x2="818" y2="172" class="arrow" marker-end="url(#arrow)"></line>
+
+        <path d="M 320 204 L 320 250 L 620 250 L 620 268" class="arrow" marker-end="url(#arrow)"></path>
+        <path d="M 1003 204 L 1003 250 L 660 250 L 660 268" class="arrow" marker-end="url(#arrow)"></path>
+
+        <rect x="420" y="270" width="320" height="56" rx="10" class="box-rect box-apply"></rect>
+        <text x="580" y="294" text-anchor="middle" font-size="12" font-weight="600">Apply layer</text>
+        <text x="580" y="312" text-anchor="middle" font-size="10" class="lbl-sub">Graph writes: move / update / trim / delete</text>
+
+        <rect x="780" y="270" width="220" height="56" rx="10" class="box-rect box-scan"></rect>
+        <text x="890" y="294" text-anchor="middle" font-size="12" font-weight="600">Audit log</text>
+        <text x="890" y="312" text-anchor="middle" font-size="10" class="lbl-sub">before / after snapshot</text>
+
+        <line x1="740" y1="298" x2="776" y2="298" class="arrow" marker-end="url(#arrow)"></line>
+      </svg>
+      <figcaption>Fig. 2 — Cost falls out of the ordering: Graph metadata is read for every item; content is downloaded and parsed only for candidates a deterministic pre-filter already flagged; the model is called only for the ambiguous middle of that already-small set.</figcaption>
+    </figure>
+
+    <div class="timeline">
+      <div class="tstep"><div class="tnode"><div class="circle">1</div></div><div class="tcard"><b>Scan.</b> Delta-query (<code class="inline">/drives/{id}/root/delta</code>) pulls changed items since the connection's last cursor — full crawl only on first connect. No LLM cost yet.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">2</div></div><div class="tcard"><b>Detect candidates.</b> Deterministic scanners (§06) run over the listing: hashing for duplicates, age/owner checks for staleness, recursive emptiness, version counts, link resolution.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">3</div></div><div class="tcard"><b><code class="inline">eligibility.check</code> (protected, deterministic).</b> Every candidate is filtered against that site's eligibility rules (§17) — excluded paths, minimum age, excluded file types, retention/legal-hold status queried live. Ineligible candidates are dropped before a reviewer ever sees them.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">4</div></div><div class="tcard"><b>LLM pass (targeted).</b> Only for near-duplicate confidence scoring, naming/metadata suggestions, and human-readable proposal summaries — never for tier assignment or the eligibility gate.</div></div>
+      <div class="tstep human"><div class="tnode"><div class="circle">5</div></div><div class="tcard"><b>Review.</b> Tier-1 high-confidence auto-applies; everything else — all Tier 2, and any low-confidence Tier 1 — files individually into <code class="inline">awaiting_review</code> via <code class="inline">review.create_task</code>.</div></div>
+      <div class="tstep danger"><div class="tnode"><div class="circle">6</div></div><div class="tcard"><b>Apply (approved items only).</b> A live re-check of retention/legal-hold immediately precedes any Tier-2 <code class="inline">graph.delete_item</code>/merge call — approval from minutes or hours ago is never trusted as still valid without this re-check (same "trust nothing but the freshest source" discipline as Sanitization's revalidation pass).</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">7</div></div><div class="tcard"><b>Verify &amp; audit.</b> Before/after snapshot recorded to <code class="inline">cleaning_action_audit</code>; run completes (or <code class="inline">completed_with_issues</code> if anything Graph-side didn't confirm as expected).</div></div>
+    </div>
+
+    <ul class="plain">
+      <li><b>Metadata first, content only on demand.</b> Microsoft Graph returns a file's hash, size, dates, owner, version count, and sharing state as part of the same <code class="inline">/delta</code> listing used to detect changes — none of that requires downloading the file. Content extraction (§08) only runs for the minority of items a deterministic check has already flagged as needing a closer look.</li>
+      <li><b>The model is the last, smallest step.</b> Every table in this document distinguishes "deterministic" work (hashing, date arithmetic, folder traversal — code, not a prompt) from "LLM-assisted" work (judgment calls with no clean formula). The ratio matters: on a typical site scan, well under 10% of candidates ever reach the model.</li>
+    </ul>
+  </section>
+
+  <!-- 13 GUARDRAILS -->
+  <section id="guardrails">
+    <div class="sec-head"><span class="num">13</span><h2>Guardrails — the master list</h2></div>
+    <p class="sec-sub">Structural, not prompted — every rule below is enforced in agent code or infrastructure, never left to a model's discretion. Grouped by what each one actually protects against.</p>
+
+    <div class="checklist">
+      <div class="chead">Access &amp; authentication</div>
+      <ul>
+        <li><b>Sites.Selected, never tenant-wide.</b> Every site is an explicit, separately-granted scope; read and write are separate, sequential elevations.</li>
+        <li><b>Purge permission is never requested, in any phase.</b> SharePoint's native two-stage recycle bin (~93 days total) is the deliberate structural safety net under every delete — an absence of capability, the same pattern as Tagging having no <code class="inline">fs.read_document</code> tool.</li>
+        <li><b>Credentials never touch the masking dictionary, source, or logs.</b> Same discipline as the AWS/Bedrock credentials already in this codebase.</li>
+        <li><b>No Graph scope for changing sharing or permissions is ever requested, in any phase.</b> Oversharing (anyone-links, broken inheritance, external sharing beyond policy) is flagged, never fixed by this agent (§04/§06) — a human corrects it directly in SharePoint.</li>
+        <li><b>Prove it in a sandbox first, never against a real tenant.</b> Every scanner, tier, and review path is exercised against a mocked Graph client, then a disposable Microsoft 365 Developer Program tenant seeded with synthetic ROT fixtures — never real client content — before any real tenant credential is requested. Full walkthrough, including why a TEE doesn't substitute for this, is in §14.</li>
+      </ul>
+    </div>
+    <div class="checklist">
+      <div class="chead">Action &amp; review</div>
+      <ul>
+        <li><b>Tier is decided by action type, never by confidence.</b> Delete, merge, and permission change are always Tier 2 — no exceptions, no bulk approval, one candidate per review item; a reviewer cannot approve "all duplicates" in one action without seeing each one.</li>
+        <li><b>Archive-to-delete is never automatic.</b> The only path from Archived to Deleted still passes through an individually reviewed Tier 2 gate (§11) — archiving buys time, it never spends down to deletion by itself.</li>
+        <li><b>Mandatory dry-run for a newly write-enabled site.</b> The first scans after a site is upgraded to <code class="inline">read_write</code> run with applies force-disabled regardless of approval, so a reviewer can see what the agent <i>would</i> have done before it can do anything.</li>
+        <li><b>Separation of duty, reused, not reinvented.</b> The submitter of a run can never approve its own review items (existing review-layer rule, §07).</li>
+      </ul>
+    </div>
+    <div class="checklist">
+      <div class="chead">Data, retention &amp; reversibility</div>
+      <ul>
+        <li><b>Retention &amp; legal hold are hard, live blocks.</b> Re-verified live, immediately before every Tier-2 apply call — never cached, and the result overrides even an already-approved review decision.</li>
+        <li><b>Quarantine or archive before any delete.</b> A destructive action always lands somewhere recoverable first — the site-local <code class="inline">NaviKnow Cleanup Quarantine</code> folder for duplicates, or the <code class="inline">_Archive</code> library for stale content across its full grace-and-archive lifecycle (§11), well before it ever becomes delete-eligible — a second, NaviKnow-controlled recovery window layered on top of SharePoint's own recycle bin.</li>
+        <li><b>Unsanitized content is handed off, never redacted here.</b> A PII pre-pass hit chains to Sanitization (A-01) via the existing <code class="inline">auto_chain_to</code> marker.</li>
+        <li><b>Before/after snapshot on every write.</b> <code class="inline">cleaning_action_audit</code> records the item's metadata immediately before and after any write, regardless of tier — a manual recovery path even after a quarantine/archive/recycle-bin window lapses.</li>
+        <li><b>Soft delete only — on both sides, never a hard delete.</b> On SharePoint's side, <code class="inline">graph.delete_item</code> only ever lands an item in the native two-stage recycle bin; on NaviKnow's own side, <code class="inline">cleaning_candidates</code>, <code class="inline">cleaning_action_audit</code>, <code class="inline">archive_records</code>, and <code class="inline">eligibility_rules</code> rows are never removed with a SQL <code class="inline">DELETE</code> — a row's lifecycle ends at a status flag (e.g. <code class="inline">superseded</code>/<code class="inline">revoked</code>), not at deletion. Whatever happens to the file, the record that it happened always stays in the system.</li>
+      </ul>
+    </div>
+    <div class="checklist">
+      <div class="chead">Extraction, cost &amp; rate limits</div>
+      <ul>
+        <li><b>Content is downloaded only when a deterministic pre-filter already justifies it.</b> Never a bulk crawl-and-parse of an entire library just to build a fingerprint index (§09).</li>
+        <li><b>The model sees only the ambiguous middle band.</b> Clear matches and clear non-matches never reach an LLM call.</li>
+        <li><b>OCR is opt-in per site, never speculative.</b> Only runs on images already paired with a real document by cheaper signals first.</li>
+        <li><b>Graph rate limits are honored, not raced.</b> <code class="inline">429</code>/<code class="inline">Retry-After</code> responses trigger exponential backoff; batch reads go through <code class="inline">/$batch</code>; large scans run in off-peak windows so a crawl never competes with people actively using the site.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 14 TESTING -->
+  <section id="testing">
+    <div class="sec-head"><span class="num">14</span><h2>Testing in a controlled environment — before real SharePoint access exists</h2></div>
+    <p class="sec-sub">Two different questions hide behind "test it safely." One is what must already be proven true before anyone even asks a tenant for a real credential — a checklist, not a sandbox. The other is what environment the agent actually runs against while proving it — a set of progressively more realistic, progressively more isolated environments, never production and never a real client's content until the last, still fully governed step.</p>
+
+    <h3>A one-time validation gate, not something that re-runs on every scan</h3>
+    <p>Two different rhythms get conflated under "testing," and they need to stay separate. <b>Continuous regression testing</b> — the pipeline's unit/integration suite running against <code class="inline">MockGraphClient</code> — runs on every commit, forever, the same as any other software test suite; that's ordinary engineering hygiene, not a special gate, and it never touches a real tenant. What this section is actually about is different: a <b>one-time, formal validation pass</b> through the full layered sandbox below, done exactly once — before the agent is ever pointed at a real production tenant for the first time — not repeated on every subsequent real scan afterward.</p>
+    <div class="callout green">
+      <p class="ctitle">What runs forever vs. what runs exactly once</p>
+      <p><b>Forever, on every commit:</b> the unit/integration suite against the mock (Layer 0 below) — no tenant involved, no sign-off required, ordinary CI.</p>
+      <p><b>Exactly once, before Phase 1 of the build plan (§25), with a named sign-off:</b> the full Layer 0→3 walkthrough below, ending in a documented go/no-go decision — <code class="inline">km_governance</code>, plus the tenant's security/IT team if they require it — that the agent is safe to point at a real, connected site. Once that gate is passed, ordinary production scans don't repeat this process; they're the agent doing its job under the guardrails this gate already proved out.</p>
+    </div>
+
+    <h3>The one-time gate's checklist — signed off once, before Phase 1</h3>
+    <ul class="plain">
+      <li><b>Full pipeline passes its own test suite against <code class="inline">MockGraphClient</code>.</b> Every scanner, both risk tiers, the eligibility gate, and the review-queue branch exercised end-to-end with zero tenant dependency (§25, Phase 0).</li>
+      <li><b>Destructive Graph calls are structurally unreachable to the model — verified, not assumed.</b> A test asserts <code class="inline">graph.delete_item</code> / <code class="inline">graph.move_item</code> / <code class="inline">graph.trim_versions</code> are never registered as callable tools, the same guarantee §15 relies on.</li>
+      <li><b><code class="inline">eligibility.check</code> and the live retention/legal-hold recheck are unit-tested against mock "under hold" fixtures</b> — including the case where a hold appears in the window between approval and apply, not only the case where it was already there at proposal time.</li>
+      <li><b>Separation of duty is covered by a test, not only documented.</b> Submitter-cannot-approve-own-run is asserted, reusing the existing review-layer guarantee.</li>
+      <li><b>Rate-limit/backoff logic handles a mocked <code class="inline">429</code>/<code class="inline">Retry-After</code> without the run failing or hammering the retry.</li>
+      <li><b>A real, code-level dry-run flag exists</b> (applies force-disabled) — not a TODO, not a config value nobody has wired up yet.</li>
+      <li><b>Credential handling has been reviewed:</b> secret/certificate loaded only from the environment, never logged, never written into <code class="inline">audit_log</code>, never present in a chunk cache or an LLM prompt.</li>
+    </ul>
+
+    <h3>Layered sandboxes — each layer buys more realism, at more blast radius</h3>
+    <div class="phase">
+      <div class="phead"><span class="pnum">0</span><h4>Mock Graph client — no tenant, no network, runs in CI</h4></div>
+      <p><code class="inline">MockGraphClient</code> returns canned sites/drives/items/hold-status from fixtures. Every code path is exercised on every commit at zero cost and zero risk — this is where regressions get caught before anything else runs at all.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">1</span><h4>Microsoft 365 Developer Program sandbox tenant — a real tenant that isn't anyone's</h4></div>
+      <p>Microsoft's free, disposable developer-tenant program provisions a genuine Entra ID + SharePoint Online tenant for exactly this purpose, optionally pre-seeded with a sample-data "content pack" (demo sites, users, files). It behaves exactly like a production tenant to the Graph API — same auth flow, same throttling, same delta-query semantics — with no real person's document ever in it. This is where <code class="inline">msal</code>, the app-registration flow, and a real <code class="inline">Sites.Selected</code> grant get their first genuine exercise.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">2</span><h4>Synthetic ROT fixtures, seeded on purpose</h4></div>
+      <p>A developer tenant's sample data is generic, not messy in the ways a real library is. A small seeding script — itself using the same Graph write calls the agent will use — uploads deliberately duplicated files, creates empty folders, pushes an item through enough versions to trigger bloat, and back-dates modification where the API allows it. The full detection catalogue (§06) gets exercised against realistic mess, not just hand-built JSON.</p>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">3</span><h4>One isolated site, inside the real tenant, read-only first</h4></div>
+      <p>Only after Layers 0–2 pass does this become Phase 1 of the build plan (§25): a single non-production site, <code class="inline">Sites.Selected</code> read-only, applies still force-disabled. Still fully governed by the onboarding flow in §05 — "it's just a test" never skips that.</p>
+      <span class="gate">Gate to Phase 2 (real read-write pilot): a full read-only scan on the sandbox tenant's synthetic ROT matches expectations before a single real site is ever touched</span>
+    </div>
+
+    <div class="callout brass">
+      <p class="ctitle">What a Trusted Execution Environment would — and wouldn't — buy here</p>
+      <p>A TEE (Intel SGX, AMD SEV, AWS Nitro Enclaves) protects secrets and data while a program runs from a compromised host or hypervisor reading its memory. That's real and useful — but it answers "where does the production client secret live so an operator with host access can't read it," not "does the dedup logic or the archive lifecycle behave correctly." An enclave runs the identical code against the identical fake or real data either way; it doesn't make bad logic good, and it catches nothing the mock/sandbox layers above wouldn't already catch.</p>
+      <p>If the tenant's security posture calls for one, put it around the production worker process holding the real Graph credential — keep functional testing entirely in Layers 0–3, which is a separate concern from where the credential is held at runtime.</p>
+    </div>
+
+    <h3>Isolation guardrails for the test environment itself</h3>
+    <ul class="plain">
+      <li><b>A dedicated Entra ID app registration per environment.</b> The sandbox tenant's app registration and credential are never the same ones used against a real client tenant, and never reused across the two.</li>
+      <li><b>Test runs are tagged <code class="inline">environment="sandbox"</code></b> (or an equivalent connection namespace) so they're structurally impossible to confuse with a production run in the review queue, audit export, or cost dashboard.</li>
+      <li><b>Synthetic data only, always.</b> Never copy a real client's documents into the developer tenant "to test with something realistic" — generate look-alike fixtures instead (Layer 2). The developer tenant is disposable and isn't a place to store real client content.</li>
+      <li><b>Sandbox credentials are time-boxed and rotated,</b> same as any other non-production secret — a stale sandbox credential still working six months later is a bigger risk than the sandbox itself.</li>
+      <li><b>Automated test runs' network egress is scoped to the sandbox tenant's Graph endpoint only,</b> so a config mistake can't silently point a test run at a real site.</li>
+    </ul>
+  </section>
+
+  <!-- 15 TOOLS -->
+  <section id="tools">
+    <div class="sec-head"><span class="num">15</span><h2>Tools (MCP) vs. protected calls</h2></div>
+    <div class="board-legend">
+      <span class="lg"><span class="sw tool"></span> MCP tool — the model may call it</span>
+      <span class="lg"><span class="sw prot"></span> Protected call — agent code only, never the model</span>
+    </div>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:220px">Call</th><th style="width:110px">Type</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">graph.list_drive_items</td><td class="center"><span class="pill tool">MCP tool</span></td><td class="small">Read-only listing/metadata fetch for the scan; the only Graph call ever exposed to the model, and only for reading.</td></tr>
+        <tr><td class="anm">graph.resolve_share_link</td><td class="center"><span class="pill prot">Protected</span></td><td class="small"><code class="inline">POST /shares/{encoded-url}/driveItem</code> — resolves a SharePoint sharing link (e.g. from an uploaded spreadsheet, §26) to a real <code class="inline">driveItem</code>. A deterministic lookup with no judgment involved; never exposed to the model.</td></tr>
+        <tr><td class="anm">review.create_task</td><td class="center"><span class="pill tool">MCP tool</span></td><td class="small">Files a candidate for human review. Shared with A-01/A-02.</td></tr>
+        <tr><td class="anm">eligibility.check</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Deterministic rule-engine gate (§17) — excluded paths/labels/file types, live retention/hold check. Agent code, never the model.</td></tr>
+        <tr><td class="anm">tier_of(candidate_type)</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Hardcoded Tier 1/Tier 2 lookup (§07) — not model-influenced, not governance-configurable.</td></tr>
+        <tr><td class="anm">graph.move_item</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Reversible move (quarantine, archive, folder consolidation, organize-by-entity). Agent code only, and only after approval where required.</td></tr>
+        <tr><td class="anm">graph.create_folder</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Creates a named folder under a write-enabled connection — the Quarantine/<code class="inline">_Archive</code> folders, or an entity-organizing target folder (§26). Never arbitrary; always a specific, logged destination.</td></tr>
+        <tr><td class="anm">graph.update_item_metadata</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Applies approved/auto-applied naming or metadata fixes.</td></tr>
+        <tr><td class="anm">graph.trim_versions</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Removes versions beyond policy; current version is never touched.</td></tr>
+        <tr><td class="anm">graph.delete_item</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Tier-2 only, post-approval, preceded by a live <code class="inline">eligibility.check</code> re-run. Never callable pre-approval, never exposed to the model.</td></tr>
+        <tr><td class="anm">auto_chain_to (sanitization)</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Hands off a suspected-unsanitized document to A-01, reusing the Coordinator's existing marker mechanism. Never redacts itself.</td></tr>
+        <tr><td class="anm">audit_log.write</td><td class="center"><span class="pill prot">Protected</span></td><td class="small">Trail of proposal, eligibility outcome, approval, and apply. Shared with A-01/A-02.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout blue">
+      <p class="ctitle">The model never deletes anything, ever</p>
+      <p>Unlike Tagging's validator, this isn't only a hard-reject gate — <code class="inline">graph.delete_item</code>/<code class="inline">graph.move_item</code>/<code class="inline">graph.trim_versions</code> simply aren't registered as callable tools at all. The model's only Graph access is read-only listing; every mutation is agent Python invoked after a deterministic tier check and (where required) a human decision.</p>
+    </div>
+  </section>
+
+  <!-- 16 SKILLS -->
+  <section id="skills">
+    <div class="sec-head"><span class="num">16</span><h2>Skills roster</h2></div>
+    <p class="sec-sub">Split the same way the rest of this platform splits capability: deterministic engineering (code the model never touches) versus judgment (skills the model is actually taught, each scoped tightly enough that it can't drift into a decision that isn't its to make).</p>
+
+    <div class="board-legend">
+      <span class="lg"><span class="sw prot"></span> Deterministic capability — agent code</span>
+      <span class="lg"><span class="sw skill"></span> LLM skill — judgment only</span>
+    </div>
+
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:230px">Capability / skill</th><th style="width:110px">Type</th><th>What it does — and doesn't — decide</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">Graph delta-scan</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="small">Pulls changed items since the connection's last cursor. Never the model's call.</td></tr>
+        <tr><td class="anm">Per-format structural extraction</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="small">Format-specific chunkers (§08). Produces text; makes no judgment about it.</td></tr>
+        <tr><td class="anm">Hash &amp; fingerprint dedup (Tiers A–C)</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="small">Exact-hash and SimHash/MinHash comparison (§09). Sorts pairs into identical / unrelated / ambiguous — only the last band ever reaches a skill.</td></tr>
+        <tr><td class="anm">Staleness, orphan, empty-folder, version-bloat, broken-link scanners</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="small">Date/owner/traversal arithmetic. No LLM involvement at all.</td></tr>
+        <tr><td class="anm">Eligibility engine</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="small">Rule-table lookup (excluded paths, min age, excluded types, live retention/hold). Governance-configurable, never model-configurable.</td></tr>
+        <tr><td class="anm">Quarantine / archive movers</td><td class="center"><span class="pill prot">Deterministic</span></td><td class="small"><code class="inline">graph.move_item</code> calls, invoked by agent code post-approval or post-Tier-1-check — never a callable tool for the model.</td></tr>
+        <tr><td class="anm"><span class="pill skill">sharepoint-hygiene-triage</span></td><td class="center"><span class="pill skill">LLM skill</span></td><td class="small">Near-duplicate confidence from filename/size/date/content-similarity signals; a plain-language reviewer summary; standardized-metadata suggestions from the existing tag vocabulary. Never invents a taxonomy term, never assigns a tier.</td></tr>
+        <tr><td class="anm"><span class="pill skill">stale-content-notice-drafting</span></td><td class="center"><span class="pill skill">LLM skill</span></td><td class="small">Writes the plain-language grace-period notice ("unused since <i>date</i>, moving to archive on <i>date</i> unless kept"). Never decides the threshold or sends the message itself — agent code owns dispatch.</td></tr>
+        <tr><td class="anm"><span class="pill skill">archive-restore-explainer</span></td><td class="center"><span class="pill skill">LLM skill</span></td><td class="small">Explains, on a restore request, exactly what changed (path only) and confirms content/permissions were untouched. Reporting, not a gate.</td></tr>
+        <tr><td class="anm"><span class="pill skill">run-impact-summary</span></td><td class="center"><span class="pill skill">LLM skill</span></td><td class="small">End-of-run plain-language rollup for <code class="inline">km_governance</code> — counts, storage reclaimed, items pending review. Never a substitute for the individual review items themselves.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- 17 ELIGIBILITY -->
+  <section id="eligibility">
+    <div class="sec-head"><span class="num">17</span><h2>Eligibility rules &amp; governance</h2></div>
+    <p class="sec-sub">The RBAC matrix already reserves a <code class="inline">manage_eligibility_rules</code> capability for <code class="inline">km_governance</code>, unused until now — a strong signal this agent was anticipated. A-03 is what makes it real: a governed, per-site rule set that decides what's even eligible to be proposed, independent of and prior to the Tier 1/2 review gate.</p>
+    <ul class="plain">
+      <li><b>Excluded paths.</b> e.g. never touch <code class="inline">/Legal</code> or <code class="inline">/Contracts</code> regardless of what a scan finds there.</li>
+      <li><b>Minimum age thresholds.</b> Per-site override of the default staleness/duplicate-eligible age (a brand-new site shouldn't have "duplicates" flagged from files uploaded an hour apart during initial migration).</li>
+      <li><b>Excluded file types / libraries.</b> e.g. skip a library used as an active drop-zone even if its version counts look high.</li>
+      <li><b>Site-level write enablement.</b> Whether Tier-1 auto-apply and Tier-2 proposals are even active for a site (independent of the read/write Graph grant in §04/§05) — a site can be read-connected and reported-on for a long time before cleanup actions are switched on.</li>
+    </ul>
+    <div class="callout green">
+      <p class="ctitle">Rules are a deterministic table, never an LLM judgment</p>
+      <p>Same reasoning as the Coordinator's deferred <code class="inline">eligibility.check</code> for contract restrictions — this is a rules table + deterministic check, not something the model decides at runtime. <code class="inline">km_governance</code> configures it; the agent only ever reads it.</p>
+    </div>
+  </section>
+
+  <!-- 18 RBAC -->
+  <section id="rbac">
+    <div class="sec-head"><span class="num">18</span><h2>Auth &amp; RBAC mapping</h2></div>
+    <p class="sec-sub">Maps directly onto the existing capability model (backend/app/auth/permissions.py) — one new capability added, the rest already exist and were evidently reserved for this agent.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:230px">Action</th><th style="width:150px">Capability</th><th>Who holds it today</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">Connect / disconnect a site, request scope elevation</td><td class="small"><code class="inline">manage_sharepoint_connections</code></td><td class="small"><span class="pill cat">km_governance</span> — <b>new capability</b>, high blast radius (changes what the app can see/touch), so kept ungrouped from run-of-the-mill review capabilities.</td></tr>
+        <tr><td class="anm">Configure eligibility rules per site</td><td class="small"><code class="inline">manage_eligibility_rules</code></td><td class="small"><span class="pill cat">km_governance</span> — already exists, unused until now.</td></tr>
+        <tr><td class="anm">Approve Tier-2 (destructive) proposals</td><td class="small"><code class="inline">approve_cleanup_actions</code></td><td class="small"><span class="pill cat">km_governance</span> — already exists, unused until now.</td></tr>
+        <tr><td class="anm">Approve Tier-1 (reversible) proposals</td><td class="small"><code class="inline">review_queue_manage</code></td><td class="small"><span class="pill cat">km_governance</span> <span class="pill cat">km_reviewer</span> — the same review queue A-01/A-02 already use.</td></tr>
+        <tr><td class="anm">View cleanup runs &amp; candidates</td><td class="small"><code class="inline">view_all_runs_org_wide</code> / own-run visibility</td><td class="small"><span class="pill cat">km_governance</span> org-wide; other roles see their own submitted scans, matching existing run visibility rules.</td></tr>
+        <tr><td class="anm">Browse the Archive Registry; restore an archived item (§11)</td><td class="small"><code class="inline">manage_archive_registry</code></td><td class="small"><span class="pill cat">km_governance</span> <span class="pill cat">km_reviewer</span> — <b>new capability</b>. Restore is reversible, so it's actionable directly; requesting deletion from the registry still requires <code class="inline">approve_cleanup_actions</code> from a <i>different</i> identity, same as any Tier-2 delete.</td></tr>
+        <tr><td class="anm">Create an organize-by-entity plan, manual or spreadsheet-driven (§26)</td><td class="small"><code class="inline">create_organize_plan</code></td><td class="small"><span class="pill cat">km_governance</span> <span class="pill cat">delivery</span> <span class="pill cat">practice_lead</span> — <b>new capability</b>. Proposing a plan is not applying it; every resulting move is still Tier 2 (§26) and needs a separate approver.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout">
+      <p class="ctitle">Agent-level role gate, on top of capabilities</p>
+      <p>Like every background agent, <code class="inline">allowed_roles</code> additionally restricts who can even submit a scan run: <code class="inline">["admin", "km_governance"]</code> only — narrower than Sanitization/Tagging's roster, since triggering a scan against a live external tenant is a more consequential action than sanitizing an already-uploaded document.</p>
+    </div>
+  </section>
+
+  <!-- 19 COST -->
+  <section id="cost">
+    <div class="sec-head"><span class="num">19</span><h2>Cost — dominated by Graph calls, not tokens</h2></div>
+    <p class="sec-sub">Because detection is mostly deterministic, LLM usage is the cheap part. Model: Claude Sonnet on Bedrock, same client as A-01/A-02.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th>Pass</th><th style="width:120px">Input tok</th><th style="width:120px">Output tok</th><th style="width:90px">Cost</th></tr></thead>
+      <tbody>
+        <tr><td class="small">Delta-query scan + deterministic scanners (hashing, age, emptiness, versions, links, fingerprinting)</td><td class="small">0 (no LLM)</td><td class="small">0</td><td class="small">$0.00</td></tr>
+        <tr><td class="small"><code class="inline">eligibility.check</code></td><td class="small">0 (deterministic)</td><td class="small">0</td><td class="small">$0.00</td></tr>
+        <tr><td class="small">Near-duplicate confidence + naming suggestions + summaries + notices (batched per site scan)</td><td class="small">~4,000–10,000</td><td class="small">~500–1,200</td><td class="small">$0.02–0.05</td></tr>
+        <tr><td class="anm">Total per site scan</td><td class="small">~4,000–10,000</td><td class="small">~500–1,200</td><td class="anm">≈ $0.02–0.05</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted)">The dominant real cost is Graph API call volume against per-tenant throttling limits, not Bedrock spend — hence delta queries (only changed items after the first crawl) and <code class="inline">/$batch</code> requests rather than per-item calls. The fingerprinting funnel (§09) keeps the LLM-eligible slice small on purpose.</p>
+  </section>
+
+  <!-- 20 LIFECYCLE -->
+  <section id="lifecycle">
+    <div class="sec-head"><span class="num">20</span><h2>Run lifecycle</h2></div>
+    <p class="sec-sub">Reuses the existing background-agent state machine unchanged — same worker, same review endpoints.</p>
+    <div class="states">
+      <span class="state">pending</span><span class="arrow">→</span>
+      <span class="state run">scanning</span><span class="arrow">→</span>
+      <span class="state pause">awaiting_review</span><span class="arrow">→</span>
+      <span class="state run">applying</span><span class="arrow">→</span>
+      <span class="state done">completed</span> <span style="color:var(--muted)">/</span> <span class="state bad">completed_with_issues</span>
+    </div>
+    <div class="states">
+      <span class="state pause">awaiting_review</span><span class="arrow">→</span>
+      <span class="state bad">rejected</span>
+      <span style="color:var(--muted);margin-left:14px">· any state <span class="arrow">→</span></span>
+      <span class="state bad">failed</span>
+    </div>
+    <ul class="plain">
+      <li><b>scanning</b> — delta-query + deterministic scanners + eligibility filter + targeted LLM pass; heartbeats during long crawls so the stale-run reaper doesn't kill a legitimately slow tenant sync.</li>
+      <li><b>awaiting_review</b> — every Tier-2 candidate and any low-confidence Tier-1 candidate parks here, each as its own reviewable item.</li>
+      <li><b>applying</b> — live re-check of retention/hold immediately precedes each Tier-2 apply call; a blocking flag here (e.g. Graph reports the item now under hold) flips the run to <code class="inline">completed_with_issues</code> rather than silently skipping it.</li>
+    </ul>
+  </section>
+
+  <!-- 21 FLOW -->
+  <section id="flow">
+    <div class="sec-head"><span class="num">21</span><h2>End-to-end flow — a duplicate-cleanup walkthrough</h2></div>
+    <div class="timeline">
+      <div class="tstep"><div class="tnode"><div class="circle">1</div></div><div class="tcard">km_governance submits <code class="inline">POST /runs {agent_id:"sharepoint_cleaning", input:{connection_id}}</code> → <code class="inline">pending</code>, returns immediately.</div></div>
+      <div class="tstep milestone"><div class="tnode"><div class="circle">2</div></div><div class="tcard"><b>Worker</b> picks it up → <code class="inline">scanning</code>. Delta-query lists changed items; Graph's own content hash finds two identical PPTX files in different folders — zero downloads yet.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">3</div></div><div class="tcard"><code class="inline">eligibility.check</code> confirms neither path is excluded and neither item is under retention/hold. Candidate proceeds; <code class="inline">tier_of("duplicate") = 2</code>.</div></div>
+      <div class="tstep human"><div class="tnode"><div class="circle">4</div></div><div class="tcard"><code class="inline">review.create_task</code> files the candidate individually → <code class="inline">awaiting_review</code>. A km_reviewer sees both file paths, dates, and the LLM's plain-language summary; approves keeping the newer copy.</div></div>
+      <div class="tstep danger"><div class="tnode"><div class="circle">5</div></div><div class="tcard">Apply phase re-runs <code class="inline">eligibility.check</code> live (nothing changed) → <code class="inline">graph.move_item</code> moves the older copy to <code class="inline">NaviKnow Cleanup Quarantine</code> (not a direct delete). Before/after snapshot recorded.</div></div>
+      <div class="tstep"><div class="tnode"><div class="circle">6</div></div><div class="tcard">Run <code class="inline">completed</code>. <code class="inline">audit_log.write</code> records the whole chain: found → eligible → reviewed by X → applied → quarantined at <i>path</i>, restorable on request.</div></div>
+    </div>
+  </section>
+
+  <!-- 22 STACK -->
+  <section id="stack">
+    <div class="sec-head"><span class="num">22</span><h2>Architecture &amp; technical stack</h2></div>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:170px">Layer</th><th style="width:220px">Technology</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">API &amp; worker</td><td class="small">FastAPI + the existing DB-polling worker</td><td class="small"><span class="pill keep">Reused</span> — same run lifecycle, no new process model.</td></tr>
+        <tr><td class="anm">Datastore</td><td class="small">PostgreSQL 16</td><td class="small"><span class="pill keep">Reused</span> for everything except embeddings.</td></tr>
+        <tr><td class="anm">Vector store (v2 only)</td><td class="small"><code class="inline">pgvector</code> extension</td><td class="small"><span class="pill skill">New, deferred</span> — an extension on the existing Postgres, not a new system.</td></tr>
+        <tr><td class="anm">Graph access</td><td class="small"><code class="inline">msal</code> + REST/Graph SDK</td><td class="small"><span class="pill skill">New</span> — the one Graph-specific dependency.</td></tr>
+        <tr><td class="anm">Document extraction</td><td class="small"><code class="inline">pdfplumber</code>, <code class="inline">python-docx</code>, <code class="inline">python-pptx</code>, <code class="inline">openpyxl</code></td><td class="small"><span class="pill keep">Reused</span> directly from Sanitization's <code class="inline">extract.py</code>.</td></tr>
+        <tr><td class="anm">Extended extraction</td><td class="small"><code class="inline">Pillow</code>, <code class="inline">pytesseract</code> (optional), <code class="inline">extract-msg</code></td><td class="small"><span class="pill skill">New</span> — images and email exports.</td></tr>
+        <tr><td class="anm">Fingerprinting</td><td class="small">Hand-rolled SimHash/MinHash over chunk shingles</td><td class="small"><span class="pill skill">New</span>, pure Python — deliberately not a new dependency.</td></tr>
+        <tr><td class="anm">LLM</td><td class="small">Claude via Amazon Bedrock (Converse API)</td><td class="small"><span class="pill keep">Reused</span> — same client as Sanitization/Tagging.</td></tr>
+        <tr><td class="anm">Review &amp; audit</td><td class="small">Existing <code class="inline">review_items</code> / <code class="inline">audit_log</code> tables and endpoints</td><td class="small"><span class="pill keep">Reused</span> unchanged.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout brass">
+      <p class="ctitle">The only new infrastructure this design asks for is optional</p>
+      <p><code class="inline">msal</code> is the one hard new dependency (needed the moment real Graph access exists at all). Everything else — fingerprinting, OCR, email parsing, <code class="inline">pgvector</code> — is additive, deferrable, and gated behind an explicit "does this site actually need it" decision rather than shipped by default.</p>
+    </div>
+  </section>
+
+  <!-- 23 DATA MODEL -->
+  <section id="data">
+    <div class="sec-head"><span class="num">23</span><h2>Data model additions</h2></div>
+    <p class="sec-sub">Everything below is either new for this agent or reused unchanged from Sanitization/Tagging.</p>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:200px">Table</th><th>Key columns</th><th style="width:100px">Status</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">sharepoint_connections</td><td class="small">id, site_id, site_url, drive_id, display_name, status (pending_approval / active / revoked), permission_scope (read / read_write), connected_by, connected_at, last_scanned_at, last_delta_token</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">cleaning_candidates</td><td class="small">id, run_id, connection_id, item_ref, action_type (duplicate / stale / empty_folder / version_bloat / naming_metadata / broken_link / oversharing / sensitivity_gap), risk_tier (1 / 2), proposed_action, confidence, status (proposed / approved / rejected / applied), evidence_json</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">cleaning_action_audit</td><td class="small">id, candidate_id, actor_id, action_taken, graph_request_id, before_snapshot_json, after_snapshot_json, performed_at — enables manual reversal even after quarantine/archive/recycle-bin windows lapse</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">eligibility_rules</td><td class="small">id, connection_id, rule_type (excluded_path / min_age / excluded_extension / write_enabled), config_json, created_by, created_at, status</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">content_chunks</td><td class="small">id, candidate_item_ref, chunk_kind, chunk_label, text_excerpt, content_fingerprint, extracted_at, expires_at — short retention (default 30 days); a cache, not a record of truth (§09)</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">archive_records</td><td class="small">id, connection_id, item_ref, original_path, archived_path, archived_at, archived_reason, owner_notified_at, grace_period_days, restored_at (nullable), delete_eligible_at, delete_requested_at (nullable), delete_requested_by (nullable) (§11)</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">organize_plans</td><td class="small">id, connection_id, source (manual / spreadsheet), entity_label, target_folder_path, spreadsheet_upload_ref (nullable), created_by, created_at, status (draft / awaiting_review / approved / rejected / applied) (§26)</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">organize_items</td><td class="small">id, plan_id, source_link (nullable, raw spreadsheet cell), resolved_item_ref (nullable), resolution_status (resolved / unresolvable_site_not_connected / stale_link), target_path, risk_tier (always 2), status (proposed / approved / rejected / applied), applied_at (§26)</td><td class="center"><span class="pill skill">New</span></td></tr>
+        <tr><td class="anm">agent_runs / run_steps / run_flags</td><td class="small">Reused unchanged — a scan run's <code class="inline">input_json</code> holds <code class="inline">{connection_id}</code>; lifecycle states reuse the shared machine</td><td class="center"><span class="pill keep">Reused</span></td></tr>
+        <tr><td class="anm">review_items / audit_log</td><td class="small">Reused — same review queue and audit trail as A-01/A-02</td><td class="center"><span class="pill keep">Reused</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="callout danger">
+      <p class="ctitle">Soft delete, everywhere — no table in this list is ever hard-deleted</p>
+      <p>Every table above uses a status column (<code class="inline">status</code>, <code class="inline">revoked</code>, <code class="inline">superseded</code>) to represent an ended lifecycle, never an SQL <code class="inline">DELETE</code> of the row itself. This is a deliberate, blanket rule (§13) — even after a SharePoint-side item is deleted (soft, into its own recycle bin) or an archive/organize record is fully resolved, NaviKnow's own record of what happened stays in the system permanently, independent of retention or purge decisions made on the SharePoint side.</p>
+    </div>
+  </section>
+
+  <!-- 24 FILE LAYOUT -->
+  <section id="files">
+    <div class="sec-head"><span class="num">24</span><h2>File layout</h2></div>
+    <div class="filetree">naviknow/<br>
+&nbsp;&nbsp;backend/app/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="shared">worker.py</span> <span class="comment"># SHARED - DB-polling worker runs this agent too</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="shared">review/</span> <span class="comment"># SHARED - POST /runs/{id}/review + queue endpoints</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="shared">llm/bedrock_client.py</span> <span class="comment"># SHARED - Converse + prompt caching</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="shared">auth/permissions.py</span> <span class="comment"># SHARED - add manage_sharepoint_connections capability</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="shared">documents/extract.py</span> <span class="comment"># SHARED - Sanitization's structural chunker, reused for §08/§09</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">documents/extract_extended.py</span> <span class="comment"># NEW - images (EXIF/OCR), CSV/text, email export parsing</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">integrations/graph/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">client.py</span> <span class="comment"># GraphClient interface - MSAL app-only auth, delta query, batch</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">mock_client.py</span> <span class="comment"># MockGraphClient - fixture-backed, no tenant needed (see PHASE 0, §14)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">agents/sharepoint_cleaning/</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">agent.py</span> <span class="comment"># orchestrates scan -> eligibility -> propose -> review -> apply</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">scanners/duplicates.py</span> <span class="comment"># hash-dup + fingerprint near-dup + LLM confidence</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">scanners/fingerprint.py</span> <span class="comment"># SimHash/MinHash over structural chunks (§09, Tier C)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">scanners/staleness.py</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">scanners/empty_folders.py</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">scanners/version_bloat.py</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">scanners/naming_metadata.py</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">scanners/broken_links.py</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">eligibility.py</span> <span class="comment"># protected rule-engine gate + live retention/hold check</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">quarantine.py</span> <span class="comment"># move-to-quarantine + restore</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">archive.py</span> <span class="comment"># move-to-archive + notice/grace-period + restore (§11)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">activity_analytics.py</span> <span class="comment"># last-accessed confirmation via itemAnalytics, cached (§11)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">organize/organizer.py</span> <span class="comment"># entity-folder plan -> Tier-2 candidates (§26)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">organize/share_link_resolver.py</span> <span class="comment"># spreadsheet link -> driveItem via graph.resolve_share_link (§26)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">routers_sharepoint.py</span> <span class="comment"># NEW - connection management, eligibility rule CRUD</span><br>
+&nbsp;&nbsp;frontend/src/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">sharepoint/ConnectedSourcesPage.jsx</span> <span class="comment"># NEW - manage connections/scopes, trigger scans</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">sharepoint/ArchiveRegistryPage.jsx</span> <span class="comment"># NEW - browse/restore/request-delete (§11)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="new">sharepoint/OrganizePlanPage.jsx</span> <span class="comment"># NEW - manual entity form or spreadsheet upload (§26)</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="shared">review/ReviewDetailPage.jsx</span> <span class="comment"># add agent_id==="sharepoint_cleaning" branch</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="shared">agents/AgentCataloguePage.jsx</span> <span class="comment"># add CTA + icon for this agent</span></div>
+  </section>
+
+  <!-- 25 BUILD PLAN -->
+  <section id="plan">
+    <div class="sec-head"><span class="num">25</span><h2>Build plan — mock-first, so IT's timeline never blocks engineering's</h2></div>
+    <p class="sec-sub">The one hard external dependency (§03) sits with the tenant's IT/security team. Every phase up to real write access can proceed in parallel with that request — and §14 already lays out how each phase is proven safe before it starts.</p>
+
+    <div class="phase">
+      <div class="phead"><span class="pnum">0</span><h4>Design &amp; mock — no Graph access required</h4></div>
+      <p>Build the full agent skeleton (<code class="inline">BackgroundAgent</code> subclass), data model (§23), extraction (§08), the fingerprinting funnel (§09), risk-tiering, the eligibility engine, and review UI against a <code class="inline">MockGraphClient</code> returning canned sites/drives/items. Every scanner, the review queue branch, and the audit trail can be exercised end-to-end with zero tenant dependency.</p>
+      <span class="gate">Gate to next phase: agent passes its own test suite against the mock</span>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">1</span><h4>Sandbox Graph integration — read-only, one test site</h4></div>
+      <p>Once the app registration + admin consent land, connect one non-production test site with <code class="inline">Sites.Selected</code> read only — the Microsoft 365 Developer Program sandbox tenant of §14, seeded with synthetic ROT fixtures. Validate a real end-to-end scan (duplicates, staleness, empty folders) against real data. Applies remain force-disabled — this phase is detection-only.</p>
+      <span class="gate">Gate to next phase: a full read-only scan on real data matches expectations; km_governance reviews sample candidates</span>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">2</span><h4>Read-write pilot — one real site, Tier 1 only</h4></div>
+      <p>km_governance explicitly elevates one pilot site to <code class="inline">read_write</code>. Enable Tier-1 actions only (empty folders, version trim, metadata fixes, archive moves) with mandatory review even where auto-apply would otherwise be eligible, for the first cycle. Tier-2 code paths stay feature-flagged off entirely, independent of Graph scope.</p>
+      <span class="gate">Gate to next phase: several Tier-1 review cycles complete cleanly; no unexpected Graph errors or throttling</span>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">3</span><h4>Enable Tier 2 — destructive actions, still per-site opt-in</h4></div>
+      <p>Turn on duplicate/stale-content proposals for the pilot site. Every single one routes through mandatory review (§07) and the live retention/hold re-check (§13) — no auto-apply exists for Tier 2 in any phase. Quarantine- and archive-before-delete are active from day one of this phase.</p>
+      <span class="gate">Gate to next phase: a full quarter of Tier-2 approvals with zero incidents; review-decision precision looks acceptable</span>
+    </div>
+    <div class="phase">
+      <div class="phead"><span class="pnum">4</span><h4>Scale out</h4></div>
+      <p>Onboard additional sites one at a time, each independently governance-gated (§05). Add scheduled recurring scans (delta-query keeps re-scans cheap). Tune staleness/duplicate thresholds using a review-deltas pattern borrowed from Sanitization — reviewer overrides feed back into per-site eligibility defaults, not into a global confidence knob.</p>
+    </div>
+  </section>
+
+  <!-- 26 ORGANIZE -->
+  <section id="organize">
+    <div class="sec-head"><span class="num">26</span><h2>Organize by entity — an opt-in foldering capability</h2></div>
+    <p class="sec-sub">Everything in §01–§25 is about ROT — content nobody wants. This is a different job: taking content people <i>do</i> want and putting it where it belongs — "there's a client, xyz — make a folder and put their files in it." It reuses this agent's connection, extraction, and review infrastructure, but it is opt-in, feature-flagged per site independent of cleanup, and off by default — moving active, currently-used content is a materially different risk than cleaning up already-identified garbage.</p>
+
+    <h3>Two ways a plan gets created</h3>
+    <div class="grid2">
+      <div class="box for">
+        <span class="tag">Mode 1 — manual</span>
+        <h4>An explicit rule, entered directly</h4>
+        <p>An authorized user (<code class="inline">create_organize_plan</code>, §18) names an entity (e.g. "xyz"), a matching rule (e.g. "filename or path contains 'xyz'"), and a target folder path. The agent lists matching items via <code class="inline">graph.list_drive_items</code> and proposes moving each into the target — deterministic string matching, no LLM guessing involved.</p>
+      </div>
+      <div class="box warn">
+        <span class="tag">Mode 2 — spreadsheet-driven</span>
+        <h4>An uploaded Excel file with links + explicit destinations</h4>
+        <p>The user uploads an <code class="inline">.xlsx</code> file where each row is a SharePoint link plus an explicit target-folder or entity-name column. The existing XLSX extractor (§08) reads the raw cell values; each link is resolved to a real <code class="inline">driveItem</code> via <code class="inline">graph.resolve_share_link</code> (§15); the plan is one proposed move per resolved row.</p>
+      </div>
+    </div>
+
+    <h3>Feasibility of the spreadsheet-driven mode — an honest assessment</h3>
+    <div class="wrap-x">
+    <table class="board">
+      <thead><tr><th style="width:260px">Step</th><th>Feasibility</th></tr></thead>
+      <tbody>
+        <tr><td class="anm">Reading the Excel file and pulling out raw link/URL cell values</td><td class="small"><span class="pill keep">High</span> — reuses the existing XLSX extractor unchanged; no new parsing capability needed.</td></tr>
+        <tr><td class="anm">Resolving a SharePoint link to a real <code class="inline">driveItem</code> via Graph</td><td class="small"><span class="pill cat">Medium–high, conditional</span> — Graph's shares API is a standard, documented capability, <b>but it only resolves items on sites this app registration already has <code class="inline">Sites.Selected</code> access to (§05)</b>. A link into an unconnected site returns an access error, not a silent skip — it must be surfaced to the uploader as "can't reach this one," not swallowed.</td></tr>
+        <tr><td class="anm">Deciding <i>which</i> folder a file belongs in, from the spreadsheet alone</td><td class="small"><span class="pill no">Not recommended without an explicit column</span> — inferring the destination (e.g. guessing "xyz" from the file's content or name) is exactly the kind of judgment call this whole design keeps out of the model's hands for anything consequential. In a multi-client environment, a wrong guess isn't just clutter — it's potentially filing one client's content under another's folder. The spreadsheet must carry an explicit target-folder or entity-name column; the agent never infers one.</td></tr>
+        <tr><td class="anm">Moving many files across a live, actively-used library based on an uploaded file</td><td class="small"><span class="pill no">High blast radius — Tier 2, always reviewed</span> — unlike duplicate/stale cleanup, this acts on content people are actively using right now; a bad row in the spreadsheet moves something someone needed exactly where it was.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Review model — a reviewed plan, not itemized one-by-one</h3>
+    <p>Every organize move is Tier 2 (§07) — never auto-applied — but reviewing it doesn't work like the accidental-duplicate queue, where each candidate is unrelated to the next. An organize plan is one intentional, human-directed batch: the reviewer sees the <i>whole</i> proposed mapping table (source → resolved item → target) in one screen, can edit or exclude individual rows, and approves the plan as a whole — while each resulting move is still logged and audited per item (§13), and still re-checked against eligibility and retention/hold live at apply time, exactly like everything else. Batch review is a concession to how the work is actually initiated, not an exception to individual accountability.</p>
+
+    <h3>Guardrails specific to this feature</h3>
+    <ul class="plain">
+      <li><b>No LLM-guessed destinations, ever.</b> The target folder or entity label is always an explicit input — a manual rule or a spreadsheet column — never inferred from file content or name.</li>
+      <li><b>Live re-resolution at apply time.</b> A link resolved when the spreadsheet was uploaded is re-resolved immediately before the move executes — the target item may have moved, been deleted, or changed permissions since upload.</li>
+      <li><b>Eligibility rules still apply.</b> Excluded paths, retention/legal-hold status (§17) gate organize moves exactly as they gate any other action — an item in <code class="inline">/Legal</code> doesn't become movable just because someone's spreadsheet says so.</li>
+      <li><b>Folder creation only under an existing write grant.</b> <code class="inline">graph.create_folder</code> (§15) needs the same per-site write elevation as quarantine/archive — no new access is created for this feature.</li>
+      <li><b>Opt-in per site, independent of cleanup.</b> A site can have duplicate/stale cleanup active without organize-by-entity being enabled, and vice versa — this is a separate switch in <code class="inline">eligibility_rules</code> (§17).</li>
+    </ul>
+  </section>
+
+  <!-- 27 DECISIONS -->
+  <section id="decisions">
+    <div class="sec-head"><span class="num">27</span><h2>Decisions log</h2></div>
+    <table class="decisionlog">
+      <tbody>
+        <tr><td>Scope</td><td class="small">Content/library hygiene only (duplicates, staleness, empty folders, version bloat, naming/metadata, broken links). Not a DLP, permissions-admin, e-discovery, or migration tool — those stay with SharePoint/Purview admins.</td></tr>
+        <tr><td>Auth model</td><td class="small">App-only (client-credentials) via a dedicated Entra ID app registration — the worker has no interactive user. <code class="inline">Sites.Selected</code>, never tenant-wide <code class="inline">Sites.ReadWrite.All</code>; per-site grants only, requested and elevated separately for read vs. write.</td></tr>
+        <tr><td>Human-in-the-loop rule</td><td class="small"><b>Deterministic by action type, not confidence.</b> Delete, permanent remove, deduplicate/merge, overwrite, archive-to-delete, and any permission change are Tier 2 — always reviewed, individually, no bulk-approve, no exceptions. Only Tier 1 (reversible: empty folders, version trim, metadata fixes, archive moves) may auto-apply, and only when high-confidence.</td></tr>
+        <tr><td>Purge permission</td><td class="small">Never requested, in any phase. SharePoint's own two-stage recycle bin (~93 days) is the structural safety net for every delete.</td></tr>
+        <tr><td>Retention &amp; legal hold</td><td class="small">Always queried live immediately before a Tier-2 apply call, never cached — an already-approved decision is still blocked if the item's hold status changed since approval.</td></tr>
+        <tr><td>Oversharing</td><td class="small">Flag-only. This agent never modifies permissions itself — a human fixes it directly in SharePoint.</td></tr>
+        <tr><td>Unsanitized content found off-place</td><td class="small">Flagged and handed to Sanitization (A-01) via the existing <code class="inline">auto_chain_to</code> mechanism. Never redacted by this agent.</td></tr>
+        <tr><td>Tool surface</td><td class="small">The model gets exactly one Graph tool: read-only <code class="inline">graph.list_drive_items</code>. Every mutating Graph call is protected agent code, never a callable tool — deletion isn't gated by a prompt, it's structurally unreachable to the model.</td></tr>
+        <tr><td>Eligibility rules</td><td class="small">A governed, per-site, deterministic rule table (<code class="inline">manage_eligibility_rules</code> capability, previously unused) — excluded paths, minimum age, excluded file types, per-site write enablement. Never an LLM judgment call.</td></tr>
+        <tr><td>New capability</td><td class="small"><code class="inline">manage_sharepoint_connections</code> added to <code class="inline">km_governance</code> — connecting/elevating a site is a higher blast-radius action than approving a run, so it's kept distinct from <code class="inline">review_queue_manage</code>/<code class="inline">approve_cleanup_actions</code>.</td></tr>
+        <tr><td>Build order</td><td class="small">Mock-first (§25, Phase 0) — the entire pipeline is buildable and testable today, independent of the tenant app-registration dependency, exactly as the platform roadmap anticipated.</td></tr>
+        <tr><td>Extraction</td><td class="small">Two tracks — universal Graph metadata (every item, zero download) and selective content extraction (only for candidates a deterministic check already flagged). Reuses Sanitization's structural chunker for PDF/DOCX/PPTX/XLSX; adds images, CSV/text, and email exports; anything unparseable still gets full metadata coverage.</td></tr>
+        <tr><td>Chunking / dedup</td><td class="small">A four-tier funnel — exact Graph-native hash, cheap metadata pairing, structural SimHash/MinHash fingerprint, and only then a targeted LLM judgment on the ambiguous middle band. Embeddings via <code class="inline">pgvector</code> deferred to v2, only if paraphrase-level duplicates prove to matter in practice.</td></tr>
+        <tr><td>Duplicates</td><td class="small">Loser copies are quarantined, never deleted directly. Every candidate reviewed individually — no bulk "remove all duplicates."</td></tr>
+        <tr><td>Archive tier</td><td class="small">A new, reversible middle tier between active and delete for stale content. Auto-eligible (Tier 1) as a move, but always preceded by a plain-language notice and grace period. The only path onward to deletion still requires individual Tier 2 human review — archiving never escalates itself into deletion.</td></tr>
+        <tr><td>Archive storage</td><td class="small">Phase 1: an in-SharePoint <code class="inline">_Archive</code> library, reusing the existing write grant and one-click <code class="inline">graph.move_item</code> restore. Phase 2 (opt-in, cost-driven): export to Blob cool/archive tier, gated behind content already having sat cold in Phase 1 for a long time.</td></tr>
+        <tr><td>Skills</td><td class="small">Four LLM skills, each scoped to judgment only: hygiene-triage, stale-content notice drafting, archive-restore explanation, and run-impact summarization. None assigns a tier, decides eligibility, or triggers a write.</td></tr>
+        <tr><td>Cost discipline</td><td class="small">Ordering does the work a budget otherwise would — metadata before content, deterministic before LLM, and OCR/embeddings opt-in rather than default.</td></tr>
+        <tr><td>Testing &amp; sandbox</td><td class="small">Layered, never live-first: mock Graph client → disposable Microsoft 365 Developer Program tenant seeded with synthetic ROT fixtures → one isolated real-tenant site, read-only. A TEE protects the production credential at runtime; it doesn't substitute for functional testing in these layers. The layered walkthrough is a <b>one-time validation gate</b> with a named sign-off before Phase 1 (§25) — not something repeated on every subsequent production scan; only the unit/integration suite against the mock runs continuously, on every commit.</td></tr>
+        <tr><td>Last-accessed tracking</td><td class="small">Modified-date is the free, always-available signal; real "was this opened" confirmation is a separate, deliberately spent call to Graph's per-item <code class="inline">itemAnalytics</code>/<code class="inline">itemActivityStats</code>, run only against candidates the cheap filter already flagged, cached rather than re-queried every scan. Where app-only access to analytics isn't available for a drive, the candidate falls back to modified-date alone with a lower-confidence flag — never hidden.</td></tr>
+        <tr><td>Archive registry</td><td class="small">A NaviKnow-side admin view over <code class="inline">archive_records</code> — browse, search, and restore directly (reversible, low-risk). Requesting permanent deletion from the registry still files a normal Tier-2 candidate; it is never a shortcut around review or separation of duty, even for an admin.</td></tr>
+        <tr><td>Soft delete, everywhere</td><td class="small">SharePoint-side deletes are always the native recycle bin, never a purge (unchanged). NaviKnow's own tables (<code class="inline">cleaning_candidates</code>, <code class="inline">cleaning_action_audit</code>, <code class="inline">archive_records</code>, <code class="inline">eligibility_rules</code>, <code class="inline">organize_plans</code>/<code class="inline">organize_items</code>) are never SQL-deleted either — a status flag ends a row's lifecycle, the record itself always stays.</td></tr>
+        <tr><td>Organize by entity</td><td class="small">A new, opt-in, feature-flagged capability distinct from cleanup — manual rule or spreadsheet-of-links driven, always Tier 2 (moves active content), never an LLM-guessed destination, reviewed as one batch plan rather than itemized one-by-one. Spreadsheet links that resolve to an unconnected site are surfaced as unresolvable, never silently skipped.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>NaviKnow · SharePoint Cleanup Agent (A-03) — Master Design</span>
+    <span>Resolved: human-in-the-loop is deterministic by action type, not confidence — and archive is a reversible middle tier that earns its way to deletion through that same individual review, never automatically.</span>
+  </div>
+</footer>
+
+</body>
+</html>

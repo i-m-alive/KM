@@ -104,8 +104,18 @@ CREATE TABLE IF NOT EXISTS masking_entities (
   client_account_id UUID REFERENCES client_accounts(id),
   status TEXT NOT NULL DEFAULT 'pending_approval',
   created_by_run_id UUID REFERENCES agent_runs(id),
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  -- Reviewer-chosen replacement string (e.g. "Acme Pharma") used instead of
+  -- mask_token when set. Global scope, same as mask_token - reused across
+  -- every future document for this entity. See app.models.MaskingEntity.
+  custom_replacement TEXT
 );
+
+-- CREATE TABLE IF NOT EXISTS is a no-op against an already-existing table,
+-- so on a database created before custom_replacement existed, the column
+-- above never actually gets added - this is the ALTER equivalent of that,
+-- safe to re-run.
+ALTER TABLE masking_entities ADD COLUMN IF NOT EXISTS custom_replacement TEXT;
 
 CREATE TABLE IF NOT EXISTS masking_aliases (
   id SERIAL PRIMARY KEY,
@@ -119,7 +129,30 @@ CREATE TABLE IF NOT EXISTS logo_references (
   mask_entity_id UUID REFERENCES masking_entities(id) ON DELETE CASCADE NOT NULL,
   phash TEXT NOT NULL,
   source_run_id UUID REFERENCES agent_runs(id),
+  thumbnail_path TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Additive - safe to re-run against an existing database that already has logo_references.
+ALTER TABLE logo_references ADD COLUMN IF NOT EXISTS thumbnail_path TEXT;
+
+-- Memoizes the raw vision-model verdict for one image's content, scoped to a
+-- single run - detect() (worker process) and apply()'s verify (API process)
+-- are genuinely different processes, so this is what lets the SAME run ask
+-- the SAME question about the SAME image bytes once, not twice with a
+-- possibly-different answer. Only the model's own judgment is cached; the
+-- deterministic OCR/own-firm/logo-hash overrides in image_scan.py always
+-- re-run fresh. See app.models.VisionVerdictCache.
+CREATE TABLE IF NOT EXISTS vision_verdict_cache (
+  id SERIAL PRIMARY KEY,
+  run_id UUID REFERENCES agent_runs(id) ON DELETE CASCADE NOT NULL,
+  content_key TEXT NOT NULL,
+  contains_client_identity BOOLEAN NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  confidence REAL NOT NULL,
+  ocr_text JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (run_id, content_key)
 );
 
 CREATE TABLE IF NOT EXISTS masking_occurrences (

@@ -14,7 +14,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.agents.base import AgentFlag, AgentResult, AgentStep, BackgroundAgent, ReviewProposal
-from app.agents.sanitization import detector, summarizer
+from app.agents.sanitization import alias_validate, detector, precision_check, reidentify, revalidate, review_deltas, summarizer
 from app.agents.sanitization.apply_masks import apply_masks
 from app.agents.sanitization.image_scan import (
     MAX_IMAGES_SCANNED,
@@ -22,8 +22,11 @@ from app.agents.sanitization.image_scan import (
     residual_image_messages,
     scan_document_images,
 )
-from app.agents.sanitization.ner_prepass import extract_candidates, presidio_available
+from app.agents.sanitization.ner_prepass import extract_candidates, presidio_available, regex_candidates_for_text
 from app.config import get_settings
+from app.documents.alttext_scan import extract_alt_text
+from app.documents.alttext_scrub import scrub_alt_text
+from app.documents.channel_coverage import audit_channel_coverage
 from app.documents.comment_scan import find_residual_comments
 from app.documents.comment_scrub import scrub_comments
 from app.documents.extract import extract_chunks
@@ -38,6 +41,7 @@ from app.documents.verify import find_residual_surfaces
 from app.masking import dictionary, registry
 from app.masking.dictionary import is_own_firm
 from app.masking.logo_reference import MATCH_THRESHOLD, store_reference
+from app.masking.pattern import surface_pattern
 from app.masking.style import resolve_style
 from app.models import AgentRun, DocumentMetadata, MaskingEntity, MaskingOccurrence, ReviewItem, UploadedDocument
 from app.storage.local_store import save_masked_document, save_run_output
@@ -46,7 +50,12 @@ settings = get_settings()
 
 
 def _count_occurrences(surface: str, chunks) -> int:
-    pat = re.compile(re.escape(surface), re.IGNORECASE)
+    # Must use the SAME pattern apply_masks() actually masks with (word
+    # boundaries + \s+ for wrapped whitespace) - a bare re.escape() literal
+    # undercounts real occurrences whenever the surface is line-wrapped in
+    # extracted text, which desyncs the reviewer-visible count from what
+    # actually gets masked.
+    pat = re.compile(surface_pattern(surface), re.IGNORECASE)
     return sum(len(pat.findall(c.text)) for c in chunks)
 
 
@@ -77,8 +86,13 @@ class SanitizationAgent(BackgroundAgent):
         t = time.monotonic()
         chunks = extract_chunks(doc.stored_path, doc.content_type, doc.filename)
         candidates = extract_candidates(chunks)
+        # Alt-text (descr/title on cNvPr/docPr) sits in a seam between body
+        # text and image pixels - extracted here, once, so it feeds BOTH the
+        # dictionary full-text sweep below (known entities) and the
+        # alt-text-specific merge after image scanning (brand-new ones).
+        alt_texts = extract_alt_text(doc.stored_path, doc.content_type, doc.filename)
         steps.append(AgentStep(order=1, name="pre-pass", tool="presidio" if presidio_available() else "regex",
-                               detail=f"{len(chunks)} chunks; {len(candidates)} distinct candidate strings",
+                               detail=f"{len(chunks)} chunks; {len(candidates)} distinct candidate strings; {len(alt_texts)} image alt-text value(s)",
                                duration_ms=int((time.monotonic() - t) * 1000)))
 
         # A scanned PDF (no text layer) makes the ENTIRE text channel blind -
@@ -121,7 +135,7 @@ class SanitizationAgent(BackgroundAgent):
         # only checks proposed surfaces. Once an entity is approved in the
         # global dictionary, its masking must never again depend on any
         # per-run model behavior.
-        full_text = "\n".join(c.text for c in chunks)
+        full_text = "\n".join(c.text for c in chunks) + ("\n" + "\n".join(alt_texts) if alt_texts else "")
         swept = 0
         already = {e.mask_token for e in known.values()}
         for entity, matched_surface in dictionary.find_in_text(db, full_text):
@@ -135,9 +149,14 @@ class SanitizationAgent(BackgroundAgent):
                                       f"({swept} via full-text dictionary sweep, beyond the candidate pass)",
                                duration_ms=int((time.monotonic() - t) * 1000)))
 
-        # Step 3: LLM Detector via MCP tool-use loop.
+        # Step 3: LLM Detector via MCP tool-use loop. alt_texts passed as
+        # context (not fs_read_document content) - see detector.py's
+        # docstring for why: a name embedded in a messy alt-text phrase
+        # (e.g. "GMR Group | Delhi") needs the model's real judgment, not
+        # just the regex/dictionary substring checks in the merge below,
+        # which can't reliably extract a clean proper noun from prose.
         t = time.monotonic()
-        resp = await detector.detect_entities(str(document_id), len(chunks), candidates)
+        resp = await detector.detect_entities(str(document_id), len(chunks), candidates, alt_texts=alt_texts)
         llm_entities = (resp.parsed or {}).get("entities", [])
         steps.append(AgentStep(order=3, name="detect (LLM + MCP)", tool="bedrock",
                                detail=f"{len(llm_entities)} client entities proposed; {resp.input_tokens}+{resp.output_tokens} tok",
@@ -178,7 +197,7 @@ class SanitizationAgent(BackgroundAgent):
         # where OCR/logo-match can surface a client name that appears NOWHERE
         # in text at all (the confirmed bug this closes): a wordmark logo.
         t = time.monotonic()
-        image_groups, img_in, img_out, img_cost, skipped = await scan_document_images(doc.stored_path, doc.content_type, doc.filename, db)
+        image_groups, img_in, img_out, img_cost, skipped = await scan_document_images(doc.stored_path, doc.content_type, doc.filename, db, run_id=run.id)
         flagged_groups = [g for g in image_groups if g.contains_client_identity]
         needs_judgment_groups = [g for g in image_groups if g.needs_human_judgment]
         total_images = sum(len(g.all_indices) for g in image_groups) + skipped
@@ -208,14 +227,26 @@ class SanitizationAgent(BackgroundAgent):
         # SAME entity pipeline as text - so a name read off a logo gets a
         # proper mask token, reviewer sign-off, and (via apply()) a logo
         # reference for future icon-only matches, exactly like any other entity.
+        #
+        # Also track how many times each such surface's SOURCE IMAGE recurs
+        # (image_occurrences_by_key) - _count_occurrences below only ever
+        # counts regex hits in extracted body TEXT, which is structurally
+        # blind to pixel content. A name that's read off a logo and appears
+        # nowhere in body text isn't a 0-occurrence entity, it's an
+        # N-occurrence entity where the count lives in the image channel
+        # instead of the text channel; reporting 0 there misleads the
+        # reviewer into thinking nothing was actually found.
+        image_occurrences_by_key: dict[str, int] = {}
         for g in image_groups:
             if not (g.contains_client_identity or g.needs_human_judgment):
                 continue
+            group_keys: set[str] = set()
             for s in g.ocr_text:
                 s = s.strip()
                 if len(s) < 2 or s.isdigit() or is_own_firm(s) or dictionary.is_skipped(db, s):
                     continue
                 key = dictionary.normalize(s)
+                group_keys.add(key)
                 if key in merged:
                     continue
                 # A logo-OCR'd fragment shorter than MIN_OCR_ENTITY_LENGTH is
@@ -225,7 +256,8 @@ class SanitizationAgent(BackgroundAgent):
                 # low-confidence bar so it can't be silently pre-approved.
                 confidence = g.confidence
                 if len(s) < settings.MIN_OCR_ENTITY_LENGTH:
-                    confidence = min(confidence, settings.SANITIZATION_CONFIDENCE_THRESHOLD - 0.01)
+                    # OCR-derived candidates are always typed CLIENT_NAME (line ~249 below).
+                    confidence = min(confidence, settings.SANITIZATION_CONFIDENCE_THRESHOLDS.get("CLIENT_NAME", 0.6) - 0.01)
                 merged[key] = {
                     "surface_text": s,
                     "entity_type": "CLIENT_NAME",
@@ -234,28 +266,114 @@ class SanitizationAgent(BackgroundAgent):
                     "mask_token": None,
                     "source": "image_ocr",
                 }
+            # Every distinct surface OCR'd off THIS image counts this image's
+            # own occurrence total once - not once per OCR fragment, so three
+            # strings read off the same picture don't triple-count it - and
+            # accumulates across separate image groups that name the same
+            # entity (the same client's logo appearing in two visually
+            # different renditions elsewhere in the document).
+            for key in group_keys:
+                image_occurrences_by_key[key] = image_occurrences_by_key.get(key, 0) + len(g.all_indices)
 
-        # Below-threshold candidates are excluded from the proposal entirely
-        # rather than surfaced as a per-term warning - without this, the same
-        # borderline OCR fragments (short acronyms, common-word collisions)
-        # resurface on every single run of the same document forever. A
-        # reviewer can still add one back manually via "add entity" if it
-        # genuinely matters; this only changes the default.
+        # Alt-text (descr/title on cNvPr/docPr) - the same seam as image OCR,
+        # but for text a producer TYPED rather than pixels a model transcribes.
+        # Known/approved entities are already caught by the dictionary
+        # full-text sweep above (full_text includes alt_texts); this
+        # additionally surfaces brand-new, alt-text-ONLY strings using the
+        # same deterministic regex/dictionary checks OCR text gets, PLUS a
+        # dedicated LLM detector pass below (alt-text is often a messy
+        # descriptive phrase like "GMR Group | Delhi" or "Bandhan Bank Vector
+        # Logo Free Download", not a clean entity name - no zero-cost
+        # deterministic method reliably extracts a proper noun out of that,
+        # which is exactly why real names silently survived here before).
+        #
+        # find_in_text (substring sweep), NOT lookup (exact match): an
+        # earlier version used lookup(db, s) - an EXACT match against the
+        # WHOLE alt-text string - which was never going to fire for a known
+        # entity embedded in a longer phrase ("NextCare" inside
+        # "Nextcare_logo") the same way an exact dictionary lookup on a full
+        # sentence never matches a name inside it.
+        alt_text_occurrences_by_key: dict[str, int] = {}
+        for s in alt_texts:
+            s = s.strip()
+            if len(s) < 2 or is_own_firm(s) or dictionary.is_skipped(db, s):
+                continue
+            key = dictionary.normalize(s)
+            alt_text_occurrences_by_key[key] = alt_text_occurrences_by_key.get(key, 0) + 1
+            if key in merged:
+                continue
+            known_hits = dictionary.find_in_text(db, s)
+            if known_hits:
+                for entity, matched_surface in known_hits:
+                    ekey = dictionary.normalize(matched_surface)
+                    if ekey in merged:
+                        continue
+                    merged[ekey] = {
+                        "surface_text": matched_surface, "entity_type": entity.entity_type, "confidence": 1.0,
+                        "known": True, "mask_token": entity.mask_token,
+                    }
+                continue
+            regex_hits = regex_candidates_for_text(s)
+            if regex_hits:
+                surface, etype = regex_hits[0]
+                if etype == "CLIENT_EMAIL_DOMAIN" and is_own_firm(surface):
+                    continue
+                rkey = dictionary.normalize(surface)
+                if rkey not in merged:
+                    merged[rkey] = {
+                        "surface_text": surface, "entity_type": etype, "confidence": 0.9,
+                        "known": False, "mask_token": None, "source": "alt_text",
+                    }
+                continue
+            # No deterministic signal at all - surface the raw value, capped
+            # just below the auto-include bar (same collision-avoidance
+            # reasoning as MIN_OCR_ENTITY_LENGTH: an arbitrary descriptive
+            # phrase is too noisy to auto-trust at full confidence, but must
+            # still be VISIBLE rather than dropped). alt_text_llm_hits below
+            # (when enabled) supersedes this with a real judgment call.
+            merged[key] = {
+                "surface_text": s, "entity_type": "CLIENT_NAME",
+                "confidence": min(0.5, settings.SANITIZATION_CONFIDENCE_THRESHOLDS.get("CLIENT_NAME", 0.6) - 0.01),
+                "known": False, "mask_token": None, "source": "alt_text",
+            }
+
+        # Below-threshold candidates are excluded from the auto-included
+        # proposal, but NOT dropped entirely - they're still returned as
+        # structured "excluded_entities" data so the reviewer can see and
+        # include them with one click, rather than the previous behavior of
+        # naming them only in a flag's free text and requiring the reviewer
+        # to retype the exact surface string via "add entity" to recover one
+        # (the actual cause of low-occurrence companies effectively vanishing
+        # in practice - reviewers don't retype names from a paragraph of flag
+        # text). This only changes the DEFAULT (excluded unless opted in);
+        # a borderline OCR fragment still won't auto-pollute the mask list.
         entities = []
         skipped_low_confidence = []
-        for ent in merged.values():
-            ent["occurrences"] = _count_occurrences(ent["surface_text"], chunks)
-            if not ent["known"] and ent["confidence"] < settings.SANITIZATION_CONFIDENCE_THRESHOLD:
-                skipped_low_confidence.append(ent["surface_text"])
+        for key, ent in merged.items():
+            ent["occurrences"] = (
+                _count_occurrences(ent["surface_text"], chunks)
+                + image_occurrences_by_key.get(key, 0)
+                + alt_text_occurrences_by_key.get(key, 0)
+            )
+            # Surfaced for the reviewer/frontend even though nothing sets it
+            # yet - default null reproduces today's [CLIENT_N] behavior
+            # exactly; a reviewer can set edits.entity_aliases at review time.
+            ent.setdefault("custom_replacement", None)
+            entity_threshold = settings.SANITIZATION_CONFIDENCE_THRESHOLDS.get(ent["entity_type"], 0.6)
+            if not ent["known"] and ent["confidence"] < entity_threshold:
+                skipped_low_confidence.append(ent)
                 continue
             entities.append(ent)
         if skipped_low_confidence:
+            names = [e["surface_text"] for e in skipped_low_confidence]
+            thresholds_used = sorted({settings.SANITIZATION_CONFIDENCE_THRESHOLDS.get(e["entity_type"], 0.6) for e in skipped_low_confidence})
+            threshold_desc = f"{thresholds_used[0]:.0%}" if len(thresholds_used) == 1 else "its entity type's"
             flags.append(AgentFlag(
                 message=(
                     f"{len(skipped_low_confidence)} low-confidence candidate(s) excluded from the proposal "
-                    f"(below {settings.SANITIZATION_CONFIDENCE_THRESHOLD:.0%} confidence): "
-                    f"{', '.join(skipped_low_confidence[:10])}{'…' if len(skipped_low_confidence) > 10 else ''}. "
-                    "Add manually via 'add entity' if any of these should be masked."
+                    f"(below {threshold_desc} confidence): "
+                    f"{', '.join(names[:10])}{'…' if len(names) > 10 else ''}. "
+                    "See 'Excluded candidates' below to include any that matter."
                 ),
                 severity="info",
             ))
@@ -318,6 +436,7 @@ class SanitizationAgent(BackgroundAgent):
             proposal={
                 "document_id": str(document_id), "filename": doc.filename, "total_chunks": len(chunks),
                 "entities": entities, "images": images_proposal, "images_skipped": skipped,
+                "excluded_entities": skipped_low_confidence,
             },
             steps=steps,
             flags=flags,
@@ -340,23 +459,23 @@ class SanitizationAgent(BackgroundAgent):
 
         entities = [e for e in proposal.get("entities", []) if e["surface_text"].lower() not in removed]
 
+        # Reviewer-edit deltas as precision/recall signal (Task 3) - see
+        # review_deltas.py. Purely additive instrumentation: does not change
+        # what apply() actually does with the edits.
+        precision_miss_by_type = review_deltas.precision_miss_by_type(proposal.get("entities", []), removed)
+
         # Reviewer-added entities the agent missed entirely (e.g. a name only
         # visible in an image, or a genuine miss). Merged in before masking so
         # they go through the exact same dictionary + mask + occurrence path
         # as anything the agent proposed itself.
         existing_keys = {dictionary.normalize(e["surface_text"]) for e in entities}
         added_entities = edits.get("added_entities", [])
-        for added in added_entities:
-            surface = (added.get("surface_text") or "").strip()
-            if not surface:
-                continue
-            key = dictionary.normalize(surface)
-            if key in existing_keys:
-                continue
-            existing_keys.add(key)
+        new_added, recall_miss_by_type = review_deltas.resolve_added_entities(added_entities, existing_keys)
+        for added in new_added:
+            surface = added["surface_text"]
             entities.append({
                 "surface_text": surface,
-                "entity_type": added.get("entity_type") or "CLIENT_NAME",
+                "entity_type": added["entity_type"],
                 "confidence": 1.0,
                 "known": False,
                 "mask_token": None,
@@ -366,6 +485,12 @@ class SanitizationAgent(BackgroundAgent):
         if added_entities:
             steps.append(AgentStep(order=1, name="reviewer additions", tool=None,
                                    detail=f"{len(added_entities)} entit{'y' if len(added_entities) == 1 else 'ies'} added by reviewer"))
+        if recall_miss_by_type or precision_miss_by_type:
+            steps.append(AgentStep(
+                order=1, name="review deltas", tool=None,
+                detail=f"recall misses (model missed, reviewer added): {recall_miss_by_type or '{}'}; "
+                       f"precision misses (model over-flagged, reviewer removed): {precision_miss_by_type or '{}'}",
+            ))
 
         # Resolve/allocate global mask tokens; approve on reviewer sign-off.
         # Client-account linkage is a SEPARATE, explicit reviewer choice below -
@@ -373,17 +498,110 @@ class SanitizationAgent(BackgroundAgent):
         # be found first. A document naming its client will usually also name
         # other companies (competitors, portfolio holdings, vendors); those
         # are not "the account" just because they got masked too.
+        #
+        # Reviewer-chosen aliases (Task C): edits.entity_aliases maps a
+        # proposal surface_text to a replacement string the reviewer wants
+        # used everywhere INSTEAD of the [CLIENT_N] token, for the entity
+        # that surface resolves to - validated (deterministic dictionary
+        # collision checks + an LLM "is this a real org" check) before being
+        # persisted, since an alias itself can create a NEW leak (aliasing a
+        # masked client to another real company's name) rather than hiding
+        # the original one. A rejected alias falls back to the ordinary
+        # token - it never silently ships unvalidated, and never blocks the
+        # run (see the "warning" severity below, not "blocking").
+        # Cross-surface entity merging: edits.entity_merges maps a proposal
+        # surface_text to ANOTHER surface_text the reviewer has recognized as
+        # the SAME real-world entity (e.g. "J&J" -> "Johnson & Johnson") -
+        # the detector proposes each distinct string it finds as its OWN
+        # entity, with no automatic linking, so two spellings of one client
+        # would otherwise get two different [CLIENT_N] tokens (and two
+        # different aliases, if Task C's alias were only set on one of them).
+        # Merge SOURCES are resolved AFTER every other entity (including the
+        # merge TARGET), so the canonical entity always already exists in
+        # surface_to_entity by the time a source needs to look it up.
+        entity_merges = edits.get("entity_merges") or {}
+        merge_source_surfaces = {
+            e["surface_text"] for e in entities
+            if e["surface_text"] in entity_merges and (entity_merges[e["surface_text"]] or "").strip()
+        }
+        ordered_entities = (
+            [e for e in entities if e["surface_text"] not in merge_source_surfaces]
+            + [e for e in entities if e["surface_text"] in merge_source_surfaces]
+        )
+
+        entity_aliases = edits.get("entity_aliases") or {}
+        alias_flags_raised = 0
+        alias_validation_in = alias_validation_out = 0
+        alias_validation_cost = 0.0
         surface_to_token: dict[str, str] = {}
         surface_to_entity: dict[str, object] = {}
         t = time.monotonic()
-        for ent in entities:
+        for ent in ordered_entities:
             surface = ent["surface_text"]
+
+            if surface in merge_source_surfaces:
+                canonical_surface = entity_merges[surface].strip()
+                canonical_entity = surface_to_entity.get(canonical_surface.lower())
+                if canonical_entity is not None:
+                    # Link permanently in the global dictionary (same as any
+                    # other alias) so future documents also recognize this
+                    # surface as the same entity, not just this run.
+                    dictionary.add_alias(db, canonical_entity, surface)
+                    surface_to_token[surface] = dictionary.resolved_replacement(canonical_entity)
+                    surface_to_entity[surface.lower()] = canonical_entity
+                    continue
+                # Canonical surface wasn't among this run's resolved entities
+                # (e.g. a typo, or it was itself removed by the reviewer) -
+                # flag it and fall through to ordinary resolution so this
+                # surface still gets masked on its own rather than silently
+                # vanishing from surface_to_token entirely.
+                flags.append(AgentFlag(
+                    message=(
+                        f"Could not merge '{surface}' into '{canonical_surface}' - the canonical surface wasn't "
+                        f"found among this run's resolved entities. '{surface}' was masked as its own separate "
+                        "entity instead."
+                    ),
+                    severity="warning",
+                ))
+
             entity = dictionary.get_or_create(db, surface, ent["entity_type"], run.id, approved=True)
             dictionary.approve(db, entity)
-            surface_to_token[surface] = entity.mask_token
+
+            requested_alias = (entity_aliases.get(surface) or "").strip()
+            if requested_alias:
+                problems = dictionary.validate_custom_replacement(db, entity, requested_alias)
+                if not problems and settings.SANITIZATION_ALIAS_VALIDATION_ENABLED:
+                    try:
+                        alias_resp = await alias_validate.validate_alias(requested_alias)
+                        alias_validation_in += alias_resp.input_tokens
+                        alias_validation_out += alias_resp.output_tokens
+                        alias_validation_cost += alias_resp.estimated_cost_usd
+                        alias_parsed = alias_resp.parsed or {}
+                        if alias_parsed.get("is_real_organization"):
+                            problems.append(
+                                f"'{requested_alias}' appears to itself name a real organization: "
+                                f"{alias_parsed.get('reason', '(no reason given)')}"
+                            )
+                    except Exception as exc:
+                        problems.append(f"could not validate against the LLM real-organization check: {exc}")
+                if problems:
+                    alias_flags_raised += 1
+                    flags.append(AgentFlag(
+                        message=(
+                            f"Alias '{requested_alias}' for {entity.mask_token} was rejected - falling back to the "
+                            f"token instead: {'; '.join(problems)}"
+                        ),
+                        severity="warning",
+                    ))
+                else:
+                    dictionary.set_custom_replacement(db, entity, requested_alias)
+
+            surface_to_token[surface] = dictionary.resolved_replacement(entity)
             surface_to_entity[surface.lower()] = entity
         steps.append(AgentStep(order=2, name="resolve masks", tool="masking_dictionary",
-                               detail=f"{len(surface_to_token)} entities → global tokens", duration_ms=int((time.monotonic() - t) * 1000)))
+                               detail=f"{len(surface_to_token)} entities → global tokens"
+                                      + (f"; {alias_flags_raised} alias(es) rejected" if alias_flags_raised else ""),
+                               duration_ms=int((time.monotonic() - t) * 1000)))
         surface_to_entity_id = {s: e.id for s, e in surface_to_entity.items()}
 
         # Link ONLY the single entity the reviewer explicitly designated as
@@ -427,6 +645,60 @@ class SanitizationAgent(BackgroundAgent):
                                detail=f"metadata for Tagging; {summ.input_tokens}+{summ.output_tokens} tok",
                                duration_ms=int((time.monotonic() - t) * 1000)))
 
+        # Precision QA (advisory, opt-in): verification above only checks that
+        # a FLAGGED surface disappeared - it is structurally blind to whether
+        # a masked token should have been flagged at all (the observed
+        # "[CLIENT_18] Allocation" from "Capital Allocation" failure). This is
+        # the other half: a read over the masked text itself, never mutating
+        # anything, never blocking - a reviewer decides what to do with it.
+        precision_resp = None
+        if settings.SANITIZATION_PRECISION_CHECK_ENABLED and surface_to_token:
+            t = time.monotonic()
+            precision_resp = await precision_check.check_precision(masked_text, list(surface_to_token.values()))
+            precision_flags = (precision_resp.parsed or {}).get("flags", []) if precision_resp else []
+            for pf in precision_flags:
+                flags.append(AgentFlag(
+                    message=(
+                        f"Possible over-redaction: {pf.get('mask_token')} in \"{pf.get('surrounding_text')}\" — "
+                        f"{pf.get('reason')} (confidence {float(pf.get('confidence', 0)):.0%})."
+                    ),
+                    severity="advisory",
+                ))
+            steps.append(AgentStep(
+                order=4, name="precision check", tool="bedrock",
+                detail=f"{len(precision_flags)} possible over-redaction(s) flagged"
+                       + (f"; {precision_resp.input_tokens}+{precision_resp.output_tokens} tok" if precision_resp else ""),
+                duration_ms=int((time.monotonic() - t) * 1000),
+            ))
+
+        # Mosaic re-identification QA (advisory, opt-in): every detector above
+        # reasons about SURFACE STRINGS - none of them can catch a client
+        # still being identifiable through co-occurring facts left in the
+        # clear (an acquisition, an AUM figure, a partnership date) after the
+        # name itself was masked. Adversarial: the model is explicitly told
+        # to try to unmask the document, not to judge it charitably.
+        reidentify_resp = None
+        if settings.SANITIZATION_REIDENTIFY_ENABLED and surface_to_token:
+            t = time.monotonic()
+            reidentify_resp = await reidentify.reidentify(masked_text, list(surface_to_token.values()))
+            guesses = (reidentify_resp.parsed or {}).get("guesses", []) if reidentify_resp else []
+            reid_flags = [g for g in guesses if float(g.get("confidence", 0)) >= settings.SANITIZATION_REIDENTIFY_THRESHOLD]
+            for g in reid_flags:
+                phrases = ", ".join(g.get("leaking_phrases") or [])
+                flags.append(AgentFlag(
+                    message=(
+                        f"Possible re-identification risk: {g.get('mask_token')} may be inferable as "
+                        f"'{g.get('candidate_org')}' (confidence {float(g.get('confidence', 0)):.0%}) from: {phrases}."
+                    ),
+                    severity="advisory",
+                ))
+            steps.append(AgentStep(
+                order=4, name="re-identification check", tool="bedrock",
+                detail=f"{len(reid_flags)} of {len(guesses)} token(s) at/above {settings.SANITIZATION_REIDENTIFY_THRESHOLD:.0%} re-identification confidence"
+                       + (f"; {reidentify_resp.input_tokens}+{reidentify_resp.output_tokens} tok" if reidentify_resp else ""),
+                duration_ms=int((time.monotonic() - t) * 1000),
+            ))
+
         run_id = str(run.id)
 
         # Resolve which images the reviewer approved for redaction BEFORE
@@ -468,6 +740,20 @@ class SanitizationAgent(BackgroundAgent):
                 if sample_bytes is not None and ref.image_bytes == sample_bytes:
                     approved_refs.append(ref)
 
+        # Reviewer-chosen aliases (Task C), image side: an approved group's
+        # ocr_matched_surface (or the designated "client" surface, for a
+        # logo-hash-only match with no OCR text) resolves to the SAME entity
+        # object already built above - if THAT entity has a custom
+        # replacement, every occurrence in the group gets it as the
+        # placeholder's label instead of the default "REDACTED".
+        image_labels: dict[int, str] = {}
+        for g in approved_groups:
+            ocr_matched = (g.get("ocr_matched_surface") or "").strip().lower()
+            linked_entity = surface_to_entity.get(ocr_matched) or surface_to_entity.get(client_entity_surface)
+            if linked_entity and linked_entity.custom_replacement:
+                for idx in (g.get("all_indices") or []):
+                    image_labels[idx] = linked_entity.custom_replacement
+
         # Diagnostic (not cosmetic): makes "did the reviewer actually approve
         # this image, or was it never flagged in the first place" answerable
         # from the Step Timeline instead of requiring a guess after the fact -
@@ -491,7 +777,7 @@ class SanitizationAgent(BackgroundAgent):
         try:
             masked_doc_path, xlsx_images_redacted = render_masked_document(
                 run_id, doc.stored_path, doc.content_type, doc.filename, surface_to_token,
-                style=masking_style, approved_image_refs=approved_refs,
+                style=masking_style, approved_image_refs=approved_refs, image_labels=image_labels,
             )
         except Exception as exc:
             rendered_natively = False
@@ -506,7 +792,9 @@ class SanitizationAgent(BackgroundAgent):
         images_redacted = xlsx_images_redacted
         images_unlocated = 0
         if rendered_natively and approved_refs and not is_xlsx:
-            images_redacted, images_unlocated = redact_images(masked_doc_path, doc.content_type, doc.filename, approved_refs)
+            images_redacted, images_unlocated = redact_images(
+                masked_doc_path, doc.content_type, doc.filename, approved_refs, labels=image_labels,
+            )
         if rendered_natively and images_redacted:
             steps.append(AgentStep(order=7, name="redact images", tool=None, detail=f"{images_redacted} image(s) blacked out"))
         if images_unlocated:
@@ -514,6 +802,17 @@ class SanitizationAgent(BackgroundAgent):
                 message=f"{images_unlocated} approved image redaction(s) could not be located on the rendered page (a rare PDF pattern-fill case) and were NOT redacted — check manually.",
                 severity="blocking",
             ))
+
+        # Scrub image alt-text (descr/title/name on cNvPr/docPr) - redacting
+        # a logo's PIXELS above does nothing to its alt-text, a completely
+        # separate element; this closed a real leak (21 client names read
+        # straight off descr="..." attributes on logos whose pixels were
+        # already fully redacted).
+        alt_text_scrubbed = 0
+        if rendered_natively:
+            alt_text_scrubbed = scrub_alt_text(masked_doc_path, doc.content_type, doc.filename, surface_to_token, masking_style)
+            if alt_text_scrubbed:
+                steps.append(AgentStep(order=7, name="scrub image alt-text", tool=None, detail=f"{alt_text_scrubbed} descr/title/name attribute(s) rewritten"))
 
         # Scrub document metadata (core/app/custom properties) - a client name
         # can sit in "Company" or a custom property with zero occurrences in
@@ -550,7 +849,7 @@ class SanitizationAgent(BackgroundAgent):
             t = time.monotonic()
             residual_text = find_residual_surfaces(masked_doc_path, doc.content_type, doc.filename, surfaces)
             residual_image_groups, residual_images_skipped, _, _, _ = await find_residual_image_groups(
-                masked_doc_path, doc.content_type, doc.filename, db
+                masked_doc_path, doc.content_type, doc.filename, db, run_id=run.id
             )
             residual_images = residual_image_messages(residual_image_groups, residual_images_skipped)
             residual_metadata = find_residual_metadata(masked_doc_path, doc.content_type, doc.filename, surfaces)
@@ -579,17 +878,107 @@ class SanitizationAgent(BackgroundAgent):
                 duration_ms=int((time.monotonic() - t) * 1000),
             ))
 
+            # Structural safety net (item 1c), not a masking-correctness check:
+            # does every zip part that LOOKS identity-bearing have SOME
+            # scrubber claiming it? This is exactly the question that would
+            # have caught ppt/authors.xml sitting completely outside every
+            # channel's scope before it ever shipped. Advisory only - a hit
+            # here means "a new/unexpected part exists, go look", not "this
+            # run leaked" (the five channels above already answer that).
+            coverage_warnings = audit_channel_coverage(masked_doc_path, doc.content_type, doc.filename)
+            for warning in coverage_warnings:
+                flags.append(AgentFlag(message=f"Channel-coverage audit: {warning}", severity="warning"))
+
+        # Revalidation: a second, independent pass over the RENDERED output
+        # that catches what the dictionary-based verification just above
+        # structurally cannot - it only confirms a KNOWN surface disappeared,
+        # never whether an entity was detected in the first place. Automatic
+        # on every completed run (not opt-in like precision/reidentify above)
+        # - the whole point is to catch what nobody already knew to look for,
+        # and gating it behind manual opt-in would defeat that. Two real
+        # leaks found this way in production motivated this: "Arvind
+        # Fashions" (a total detection miss sitting in plain body text next
+        # to a correctly-masked token) and "[CLIENT_25] Turbine Ltd." (a
+        # partial-name fragment left next to its own mask token) - see
+        # revalidate.py's docstring for the full story.
+        revalidation = None
+        redetect_resp = None
+        if rendered_natively and settings.SANITIZATION_REVALIDATION_ENABLED:
+            t = time.monotonic()
+            rendered_chunks = extract_chunks(masked_doc_path, doc.content_type, doc.filename)
+            rendered_alt_texts = extract_alt_text(masked_doc_path, doc.content_type, doc.filename, include_name=True)
+            rendered_full_text = "\n".join(c.text for c in rendered_chunks) + (
+                "\n" + "\n".join(rendered_alt_texts) if rendered_alt_texts else ""
+            )
+            tokens_used = list(surface_to_token.values())
+
+            boundary_hits = revalidate.find_boundary_leaks(rendered_full_text, tokens_used)
+
+            fresh_hits = []
+            if tokens_used:
+                redetect_resp = await revalidate.fresh_redetect(rendered_full_text)
+                fresh_hits = revalidate.parse_fresh_redetect_hits(redetect_resp)
+
+            residuals = boundary_hits + fresh_hits
+            score = revalidate.compute_completeness(len(surface_to_token), len(residuals))
+            revalidation = {"version": "v1", "score": score, "residuals": residuals}
+
+            if residuals:
+                preview = "; ".join(f"{r['leaked_text']} ({r['lens']}, {r['confidence']:.0%})" for r in residuals[:5])
+                flags.append(AgentFlag(
+                    message=(
+                        f"Revalidation found {len(residuals)} possible residual leak(s) not caught by dictionary-based "
+                        f"verification (estimated completeness {score}%): {preview}"
+                        f"{'…' if len(residuals) > 5 else ''}. Review and approve via the revalidation panel to re-sanitize."
+                    ),
+                    severity="blocking",
+                ))
+            steps.append(AgentStep(
+                order=10, name="revalidate (fresh-eyes re-detection)", tool="bedrock" if redetect_resp else None,
+                detail=(
+                    f"{len(boundary_hits)} boundary leak(s), {len(fresh_hits)} fresh-detect leak(s); "
+                    f"estimated completeness {score}%"
+                    + (f"; {redetect_resp.input_tokens}+{redetect_resp.output_tokens} tok" if redetect_resp else "")
+                ),
+                duration_ms=int((time.monotonic() - t) * 1000),
+            ))
+
         # Auto-build the logo reference set from this run's approved image
         # redactions - global, reused across future documents, same pattern
         # as text mask tokens (no manual curation - see app.masking.logo_reference).
+        #
+        # Deliberately NOT falling back to client_entity_surface here (unlike
+        # image_labels above): that fallback attributes ANY approved image
+        # with no OCR-derivable text to "the designated client", even when
+        # the image is an unrelated chart/screenshot with no logo in it at
+        # all. Low-stakes for a display label; wrong for a PERSISTENT,
+        # CROSS-DOCUMENT phash signal - a bad attribution here doesn't just
+        # look wrong once, it makes future documents' unrelated images start
+        # false-positive matching against this client's "logo". Observed
+        # real consequence: one entity accumulated 35+ phash rows (all
+        # distinct hashes, so not simple dupes - most were miscellaneous
+        # approved images from repeated re-runs of the same deck, not logos)
+        # after only ~7 runs, which also broke the admin panel's Logos
+        # column layout. Only two attributions are trustworthy enough to
+        # persist globally: this image's own OCR text names a real entity,
+        # or it already perceptually matched a KNOWN prior logo reference
+        # for a specific entity (logo_match_token) - both are evidence about
+        # THIS image, not a guess based on who else is in the document.
         for g in approved_groups:
             phash = g.get("phash")
             if not phash:
                 continue
             ocr_matched = (g.get("ocr_matched_surface") or "").strip().lower()
-            linked_entity = surface_to_entity.get(ocr_matched) or surface_to_entity.get(client_entity_surface)
+            logo_match_entity = None
+            if g.get("logo_match_token"):
+                logo_match_entity = db.query(MaskingEntity).filter(MaskingEntity.mask_token == g["logo_match_token"]).first()
+            linked_entity = surface_to_entity.get(ocr_matched) or logo_match_entity
             if linked_entity:
-                store_reference(db, linked_entity.id, phash, run.id)
+                sample_ref = by_index.get(g.get("sample_index"))
+                store_reference(
+                    db, linked_entity.id, phash, run.id,
+                    image_bytes=sample_ref.image_bytes if sample_ref else None,
+                )
 
         output = {
             "document_id": document_id,
@@ -611,8 +1000,17 @@ class SanitizationAgent(BackgroundAgent):
                 for g in residual_image_groups
             ],
             "entities_masked": [{"mask_token": t_, "entity_type": next((e["entity_type"] for e in entities if e["surface_text"] == s), None)} for s, t_ in surface_to_token.items()],
+            # Reviewer-edit deltas, tagged by entity_type - the cheapest real
+            # precision/recall signal this system has, sitting unused before
+            # Task 3. Queryable across runs (JSONB) to inform Task 4's
+            # per-entity-type threshold tuning instead of guessing.
+            "review_deltas": {
+                "recall_miss_by_type": recall_miss_by_type,
+                "precision_miss_by_type": precision_miss_by_type,
+            },
             "occurrence_count": len(occurrences),
             "images_redacted": images_redacted,
+            "revalidation": revalidation,
             "sanitized_summary": parsed.get("sanitized_summary"),
             "metadata": parsed.get("metadata", {}),
             "masked_chunks": masked_chunks,
@@ -621,6 +1019,22 @@ class SanitizationAgent(BackgroundAgent):
 
         total_in = summ.input_tokens
         total_out = summ.output_tokens
+        total_cost = summ.estimated_cost_usd
+        if precision_resp is not None:
+            total_in += precision_resp.input_tokens
+            total_out += precision_resp.output_tokens
+            total_cost += precision_resp.estimated_cost_usd
+        if reidentify_resp is not None:
+            total_in += reidentify_resp.input_tokens
+            total_out += reidentify_resp.output_tokens
+            total_cost += reidentify_resp.estimated_cost_usd
+        if redetect_resp is not None:
+            total_in += redetect_resp.input_tokens
+            total_out += redetect_resp.output_tokens
+            total_cost += redetect_resp.estimated_cost_usd
+        total_in += alias_validation_in
+        total_out += alias_validation_out
+        total_cost += alias_validation_cost
         return AgentResult(
             agent_id=self.agent_id,
             output={k: v for k, v in output.items() if k != "masked_chunks"} | {"masked_preview": masked_text[:1500]},
@@ -629,6 +1043,6 @@ class SanitizationAgent(BackgroundAgent):
             steps=steps,
             input_tokens=total_in,
             output_tokens=total_out,
-            estimated_cost_usd=summ.estimated_cost_usd,
+            estimated_cost_usd=total_cost,
             output_file_path=output_file,
         )

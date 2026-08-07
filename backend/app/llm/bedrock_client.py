@@ -62,11 +62,37 @@ def _repair_trailing_object(candidate: str, exc: json.JSONDecodeError) -> dict[s
 
 
 def _extract_json(text: str) -> dict[str, Any]:
-    """Best-effort extraction of a JSON object from model output, tolerating markdown fences."""
+    """Best-effort extraction of a JSON object from model output, tolerating markdown fences.
+
+    Same echoed-schema behavior _repair_trailing_object documents, but in a
+    second shape: instead of gluing two objects together with a stray comma,
+    the model emits two SEPARATE ```json fenced blocks - the echoed schema
+    first, the real answer second. A single greedy fence regex spanning
+    "first ``` to last ```" swallowed both blocks as one malformed JSON blob
+    (valid schema object, followed by literal ` ``` `/```json``` noise, which
+    json.loads correctly rejected as "Extra data" - the comma-glued repair
+    doesn't match here since there's no leading comma, just fence text).
+    Splitting on fences and preferring the LAST block that parses on its own
+    handles both today's fenced-pair case and tomorrow's variant the same
+    way, without depending on a specific glue character.
+    """
     candidate = text.strip()
-    fence_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", candidate, re.DOTALL)
-    if fence_match:
-        candidate = fence_match.group(1)
+
+    fence_blocks = re.findall(r"```(?:json)?\s*(.*?)```", candidate, re.DOTALL)
+    if fence_blocks:
+        parsed_blocks = []
+        for block in fence_blocks:
+            try:
+                obj = json.loads(block.strip())
+            except json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict):
+                parsed_blocks.append(obj)
+        if parsed_blocks:
+            return parsed_blocks[-1]
+        # Nothing fenced parsed on its own (e.g. a single object oddly split) -
+        # fall through to a whole-text attempt using the last fenced span.
+        candidate = fence_blocks[-1].strip()
     else:
         brace_match = re.search(r"\{.*\}", candidate, re.DOTALL)
         if brace_match:
