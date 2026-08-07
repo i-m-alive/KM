@@ -17,6 +17,17 @@ ENTITY_TYPES = [
     "CLIENT_EMAIL_DOMAIN",
     "CLIENT_SYSTEM_NAME",
     "CLIENT_CONTRACT_ID",
+    # Generic PII types (Phase 1) - distinct from the CLIENT_* types above:
+    # these cover identifying information that is NOT specifically about who
+    # the client is (a third party's name, a personal contact phone number, a
+    # postal address) but should still be masked. The LLM chooses between a
+    # CLIENT_* type and its generic counterpart using context, exactly as it
+    # already disambiguates any other ambiguous surface string.
+    "PERSON",
+    "ORGANIZATION",
+    "EMAIL",
+    "PHONE",
+    "ADDRESS",
 ]
 
 DETECT_SCHEMA = {
@@ -44,6 +55,15 @@ SYSTEM_PROMPT = (
     "reveals WHICH client this work was for: the client company name and its aliases, names of people "
     "who work at the client, the client's offices/locations, the client's email domains, the client's "
     "proprietary system/product names, and client contract/account identifiers.\n\n"
+    "You must ALSO find generic personally-identifying information (PII) that is NOT specifically "
+    "about who the client is, but is still identifying and should be masked: a person's name that "
+    "isn't a client stakeholder or one of our own consultants (e.g. a quoted third party, a vendor "
+    "contact), an organization name that isn't the client itself (e.g. a named subcontractor, partner, "
+    "or competitor), a full email address, a phone number, or a postal/mailing address. Use the "
+    "generic types PERSON, ORGANIZATION, EMAIL, PHONE, and ADDRESS for these - reserve the CLIENT_* "
+    "types strictly for information that identifies the client. If you're genuinely unsure whether a "
+    "name belongs to the client or a third party, prefer the CLIENT_* type (a missed client identifier "
+    "is a worse failure than an over-cautious mask).\n\n"
     "Do NOT mask: our own consultants' names, generic industry or technology terms (retail, AWS, "
     "Kafka...), public email domains (gmail.com), or dollar amounts.\n\n"
     "You may call fs_read_document(document_id, start_chunk, end_chunk) to read the document in "

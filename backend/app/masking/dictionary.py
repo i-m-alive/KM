@@ -24,6 +24,14 @@ _TOKEN_PREFIX = {
     "CLIENT_EMAIL_DOMAIN": "CLIENT_DOMAIN",
     "CLIENT_SYSTEM_NAME": "CLIENT_SYSTEM",
     "CLIENT_CONTRACT_ID": "CLIENT_CONTRACT",
+    # Generic PII (Phase 1) - own prefixes so a masked token reads as
+    # [PERSON_1]/[ORG_1]/etc. rather than falling back to the generic
+    # "CLIENT" prefix, which would misleadingly imply client identity.
+    "PERSON": "PERSON",
+    "ORGANIZATION": "ORG",
+    "EMAIL": "EMAIL",
+    "PHONE": "PHONE",
+    "ADDRESS": "ADDRESS",
 }
 
 

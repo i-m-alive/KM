@@ -17,6 +17,25 @@ _EMAIL_RE = re.compile(r"\b[\w.+-]+@([A-Za-z0-9-]+\.[A-Za-z0-9.-]+)\b")
 _URL_RE = re.compile(r"\bhttps?://([A-Za-z0-9.-]+\.[A-Za-z]{2,})")
 _PHONE_RE = re.compile(r"\b(?:\+?\d[\d\s().-]{7,}\d)\b")
 _ACCOUNT_RE = re.compile(r"\b(?:[A-Z]{2,}-?\d{4,}|\d{6,})\b")
+# Full email address, distinct from _EMAIL_RE above which only ever surfaces
+# the DOMAIN (for CLIENT_EMAIL_DOMAIN). This is a separate candidate under a
+# separate surface string (the whole address vs. just the domain), so it
+# cannot collide with or change the existing domain-only detection.
+_FULL_EMAIL_RE = re.compile(r"\b[\w.+-]+@[A-Za-z0-9-]+\.[A-Za-z0-9.-]+\b")
+# Best-effort postal/mailing address heuristic (Phase 1: generic PII, no
+# address detection existed before this). Two independent shapes, since a
+# single regex can't reasonably cover both: a US-style street line (number +
+# street name + common suffix), or a "City, ST 12345" locality line. Neither
+# is exhaustive - this is a free, deterministic SIGNAL for the LLM Detector
+# to confirm/reject, not a claim of complete address recall.
+_STREET_ADDRESS_RE = re.compile(
+    r"\b\d{1,6}\s+[A-Za-z0-9.'-]+(?:\s+[A-Za-z0-9.'-]+){0,4}\s+"
+    r"(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way|Place|Pl|"
+    r"Circle|Cir|Highway|Hwy|Parkway|Pkwy|Terrace|Ter|Trail|Trl|Square|Sq|Loop|Crescent|Cres|Row|Path)\b\.?"
+    r"(?:,?\s+(?:Suite|Ste|Apt|Unit|#)\s*[A-Za-z0-9-]+)?",
+    re.IGNORECASE,
+)
+_CITY_STATE_ZIP_RE = re.compile(r"\b[A-Za-z][A-Za-z .'-]{1,40},\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?\b")
 
 # Common public email/domain suffixes we should NOT treat as client identifiers.
 _PUBLIC_DOMAINS = {"gmail.com", "outlook.com", "hotmail.com", "yahoo.com", "example.com"}
@@ -65,6 +84,15 @@ def _regex_candidates(text: str) -> list[tuple[str, str]]:
         found.append((m.group(0).strip(), "CLIENT_CONTRACT_ID"))
     for m in _ACCOUNT_RE.finditer(text):
         found.append((m.group(0).strip(), "CLIENT_CONTRACT_ID"))
+    # Generic PII (Phase 1) - additive, distinct surface strings from the
+    # CLIENT_* candidates above so neither list's dedupe key collides with
+    # the other's.
+    for m in _FULL_EMAIL_RE.finditer(text):
+        found.append((m.group(0).strip(), "EMAIL"))
+    for m in _STREET_ADDRESS_RE.finditer(text):
+        found.append((m.group(0).strip(), "ADDRESS"))
+    for m in _CITY_STATE_ZIP_RE.finditer(text):
+        found.append((m.group(0).strip(), "ADDRESS"))
     return found
 
 

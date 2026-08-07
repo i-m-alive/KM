@@ -48,6 +48,12 @@ export default function ReviewDetailPage() {
     "CLIENT_EMAIL_DOMAIN",
     "CLIENT_SYSTEM_NAME",
     "CLIENT_CONTRACT_ID",
+    // Generic PII (Phase 1) - alongside the CLIENT_* types above.
+    "PERSON",
+    "ORGANIZATION",
+    "EMAIL",
+    "PHONE",
+    "ADDRESS",
   ];
 
   useEffect(() => {

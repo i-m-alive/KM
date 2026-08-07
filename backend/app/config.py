@@ -73,6 +73,15 @@ class Settings(BaseSettings):
         "CLIENT_EMAIL_DOMAIN": 0.6,
         "CLIENT_SYSTEM_NAME": 0.6,
         "CLIENT_CONTRACT_ID": 0.6,
+        # Generic PII (Phase 1) - same untuned 0.6 default as every CLIENT_*
+        # type above; a type missing here would fall back to 0.6 anyway
+        # (see the .get(..., 0.6) call sites), listed explicitly so these are
+        # as visible/tunable as the rest of the taxonomy.
+        "PERSON": 0.6,
+        "ORGANIZATION": 0.6,
+        "EMAIL": 0.6,
+        "PHONE": 0.6,
+        "ADDRESS": 0.6,
     }
 
     # Precision QA: an extra Bedrock pass over the MASKED text that flags mask
